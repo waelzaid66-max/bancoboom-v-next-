@@ -8,6 +8,13 @@
       "when": 1785574052921,
       "tag": "0000_fantastic_warbird",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785603125895,
+      "tag": "0001_minor_stingray",
+      "breakpoints": true
     }
   ]
 }

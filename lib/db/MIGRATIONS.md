@@ -32,6 +32,21 @@ Generate a migration after changing `src/schema/index.ts`:
 pnpm --filter @workspace/db run generate
 ```
 
+**If that hangs with no output, it is waiting for an answer you cannot see.**
+`drizzle-kit generate` asks interactively whether a new column is genuinely new
+or a rename of an existing one, and with no TTY the prompt never resolves — the
+same failure mode recorded for `push` in `.agents/memory/post-merge-drizzle-push.md`.
+It produced nothing across two ten-minute runs here. Feed it newlines to accept
+the default ("create column"):
+
+```bash
+yes '' | pnpm --filter @workspace/db run generate
+```
+
+Piping a single `printf '\n'` is not enough — stdin closes and drizzle-kit exits
+0 having written nothing, which looks like success. Check that a new `.sql`
+actually appeared before believing it.
+
 Apply pending migrations to whatever `DATABASE_URL` points at:
 
 ```bash
