@@ -1708,6 +1708,46 @@ const CHECKS = [
     },
     why: "A slow cluster response must never repaint the map for a viewport the user has already left",
   })),
+  // The owner's first rule, and nothing asserted it: publishing must never be
+  // blocked. BANCO is an advertising platform before it is a taxonomy — any
+  // fixed asset, a plane or a launch as readily as a car, has to be listable
+  // with whatever the seller actually has. Verified end to end: the server
+  // floor for `car` is `condition` alone, MIN_PHOTOS is 1, the brand is free
+  // text, and the publish button is disabled only while a submit is in flight.
+  // A Cessna with one photo publishes today.
+  //
+  // That property is one edit away from being lost. Someone adding "just one
+  // required field" to the button's disabled expression would silently
+  // reintroduce the gate, and no test would notice.
+  {
+    id: "P-publish-never-gated-by-fields",
+    file: "artifacts/banco-mobile/app/listings/create.tsx",
+    test: (s) => {
+      const code = s
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      // Exactly `submitting` — a double-publish guard, not a validation gate.
+      // Any `&&`, `||` or `!` folded in is a field requirement in disguise.
+      return /const publishDisabled = submitting;/.test(code);
+    },
+    why: "The publish button may only be disabled by an in-flight submit — never by a missing field. A seller with an unusual asset must always be able to publish and get actionable feedback instead of a frozen button",
+  },
+  {
+    id: "P-publish-floor-stays-minimal",
+    file: "artifacts/api-server/src/services/ListingService.ts",
+    test: (s) => {
+      const m = s.match(/const required: Record<string, string\[\]> = \{[\s\S]*?\};/);
+      if (!m) return false;
+      // `car` carries every movable asset — plane, boat, launch, bike. Demanding
+      // mileage or fuel type there is a car assumption, not a universal truth:
+      // aircraft count flight hours and marine fuel is not in the app's list.
+      const car = m[0].match(/car:\s*\[([^\]]*)\]/);
+      if (!car) return false;
+      const keys = car[1].split(",").map((k) => k.trim()).filter(Boolean);
+      return keys.length === 1 && /["']condition["']/.test(keys[0]);
+    },
+    why: "The car floor must stay `condition` alone — it is the section every movable asset publishes under, and mileage/fuel/year are car assumptions that block a plane or a boat outright",
+  },
   {
     id: "P-bank-plan-audience-seeded",
     file: "artifacts/api-server/src/seed.ts",
