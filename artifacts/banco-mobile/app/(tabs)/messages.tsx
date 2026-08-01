@@ -10,6 +10,7 @@ import {
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import React, { useCallback } from "react";
 import {
   Alert,
@@ -57,11 +58,24 @@ export default function MessagesScreen() {
   const topPad = Math.max(insets.top, Platform.OS === "web" ? 12 : 0);
   const rowDir = isRTL ? "row-reverse" : "row";
 
+  // Poll fast only while this list is actually on screen.
+  //
+  // Tab screens stay mounted after their first visit, so an unconditional
+  // interval here kept polling conversations every 8s for the rest of the
+  // session — from the home feed, from search, from anywhere. The tab-bar
+  // unread badge in (tabs)/_layout.tsx already keeps the SAME query key fresh
+  // on its own 15s timer for exactly that case, so nothing goes stale when this
+  // one pauses: the badge still counts, and a new message still arrives by push
+  // (createNotification → sendPushToUser).
+  //
+  // `false` rather than a slower number, so there is one owner of the
+  // background cadence instead of two timers racing on one cache entry.
+  const isFocused = useIsFocused();
   const query = useListConversations({
     query: {
       queryKey: getListConversationsQueryKey(),
       enabled: !!isSignedIn,
-      refetchInterval: 8000,
+      refetchInterval: isFocused ? 8000 : false,
       refetchOnWindowFocus: true,
     },
   });

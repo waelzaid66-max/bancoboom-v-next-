@@ -1653,6 +1653,35 @@ const CHECKS = [
     why: "Banks must see and be able to buy their own plan tier; listing and subscribe must agree, or a visible plan is refused at checkout",
   },
   {
+    // Tab screens stay mounted after their first visit, so an ungated
+    // refetchInterval on the conversations list polled every 8s for the whole
+    // session from anywhere in the app. The badge in (tabs)/_layout.tsx already
+    // owns the background cadence for the SAME query key on its own timer.
+    id: "P-messages-poll-focus-gated",
+    file: "artifacts/banco-mobile/app/(tabs)/messages.tsx",
+    test: (s) => {
+      const code = s
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      // The off branch must be `false`, not another number. A guard that only
+      // checked for the ternary shape would pass `isFocused ? 8000 : 8000`,
+      // which reads as gated and polls exactly as hard as before. Dropping the
+      // import alone is not worth guarding — that is a compile error, caught a
+      // layer earlier than this gate.
+      return (
+        /refetchInterval:\s*isFocused\s*\?\s*\d+\s*:\s*false/.test(code) &&
+        !/refetchInterval:\s*\d+\s*,/.test(code)
+      );
+    },
+    why: "The conversations list must only poll fast while on screen — the tab badge keeps the same query fresh otherwise, and new messages arrive by push",
+  },
+  {
+    id: "P-messages-badge-owns-background-poll",
+    file: "artifacts/banco-mobile/app/(tabs)/_layout.tsx",
+    test: (s) => /useListConversations\([\s\S]{0,300}?refetchInterval:\s*\d+/.test(s),
+    why: "The tab badge must keep its own interval — it is what stops the unread count going stale once the list screen pauses",
+  },
+  {
     id: "P-bank-plan-audience-seeded",
     file: "artifacts/api-server/src/seed.ts",
     test: (s) => /slug: "bank_featured"[\s\S]{0,200}audience: "financial_institution"/.test(s),
