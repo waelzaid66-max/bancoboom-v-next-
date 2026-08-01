@@ -95,7 +95,12 @@ services:
       - banco_net
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-banco}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-banco}
-    command: ["pnpm", "--filter", "@workspace/db", "run", "push", "--", "--force"]
+    # Applies committed migrations in order, once each. Was `push -- --force`,
+    # which diffed the schema file against the live database and suppressed the
+    # prompt that catches a rename — first row of the adoption table in
+    # lib/db/MIGRATIONS.md. An existing database must be stamped once first:
+    #     DATABASE_URL=... pnpm --filter @workspace/db run baseline
+    command: ["pnpm", "--filter", "@workspace/db", "run", "migrate"]
 
   # ── API server ───────────────────────────────────────────────────────────────
   api:

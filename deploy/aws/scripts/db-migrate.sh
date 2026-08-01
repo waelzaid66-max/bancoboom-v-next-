@@ -20,8 +20,17 @@ else
   echo "   (psql not found locally; the app also ensures the extension at boot)"
 fi
 
-echo "==> Pushing Drizzle schema"
-pnpm --filter @workspace/db run push-force
+echo "==> Applying Drizzle migrations"
+# Was `push-force`. This caller is NOT in the adoption table in
+# lib/db/MIGRATIONS.md — that table lists three, this is a fourth, found by
+# sweeping every runtime file. Same risk as the others: `push` diffs the schema
+# file against the live database and `--force` suppresses the prompt that
+# catches a rename, so a renamed column leaves with its data and no log line.
+#
+# ONE-TIME PREREQUISITE for an existing database, or this dies on the first
+# CREATE TABLE — loudly, writing nothing:
+#     DATABASE_URL=... pnpm --filter @workspace/db run baseline
+pnpm --filter @workspace/db run migrate
 
 echo "==> (First deploy only) Seeding baseline data — NOT demo inventory"
 echo "   SAFE on production (reference / brands / admin only):"

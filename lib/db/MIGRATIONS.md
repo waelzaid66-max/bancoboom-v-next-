@@ -112,13 +112,21 @@ Until step 1 above has produced real migration files, **the callers below must
 stay on `push`**. Switching them first would point them at an empty migrations
 folder and break a flow that currently works.
 
-Three places invoke the schema tooling today:
+Three places invoke the schema tooling. **All three have now been switched** —
+the precondition above is met: `0000_fantastic_warbird.sql` (293 `CREATE`s, zero
+`DROP`s) and `0001_minor_stingray.sql` exist and are journalled.
 
-| Where | Currently | After adoption |
+| Where | Was | Now |
 | --- | --- | --- |
-| `docker-compose.coolify.yml` → `migrate` service | `push -- --force` | `run migrate` |
-| `docker-compose.prod.yml` → `migrate` service | `push -- --force` | `run migrate` |
-| `scripts/post-merge.sh` | `push-force` | `run migrate` |
+| `docker-compose.coolify.yml` → `migrate` service | `push -- --force` | `run migrate` ✅ |
+| `docker-compose.prod.yml` → `migrate` service | `push -- --force` | `run migrate` ✅ |
+| `scripts/post-merge.sh` | `push-force` | `run migrate` ✅ |
+
+> **Step 3 above must be run once against every existing database before the
+> next merge lands.** `migrate` on an un-stamped database dies on its first
+> `CREATE TABLE`, because that table is already there. The failure is loud and
+> safe — nothing is written, nothing is lost — but it will stop a deploy until
+> the baseline is taken. A brand-new empty database needs no stamp.
 
 Note on blast radius, since it was mis-stated in the Phase 0 audit and corrected
 here: the Coolify `migrate` service is gated behind `profiles: ["migrate"]` and

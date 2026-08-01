@@ -16,7 +16,25 @@ WHERE a.user_id = b.user_id
 SQL
 fi
 
-pnpm --filter db push-force
+# Apply committed migrations, in order, once each.
+#
+# This used to be `pnpm --filter db push-force`. `push` diffs the schema file
+# against the live database and applies whatever it computes; `--force` exists
+# to suppress the prompt that would otherwise catch a rename, so a renamed
+# column took its data with it silently — and this ran after EVERY merge. It
+# was the only automatic schema path in the repository.
+#
+# The switch is the third row of the adoption table in lib/db/MIGRATIONS.md,
+# and its precondition is now met: migrations/0000_fantastic_warbird.sql
+# (293 CREATEs, zero DROPs) and 0001_minor_stingray.sql exist and are
+# journalled.
+#
+# ONE-TIME PREREQUISITE, per existing database: it must be stamped before
+# migrate can run against it, or it dies on the first CREATE TABLE because
+# that table is already there:
+#     DATABASE_URL=... pnpm --filter @workspace/db run baseline
+# A brand-new empty database needs no stamp — migrate builds it from 0000.
+pnpm --filter @workspace/db run migrate
 
 # After the schema (incl. saves_count) exists, reconcile the denormalized
 # counter to the true number of saves so the resurface ranking signal is honest
