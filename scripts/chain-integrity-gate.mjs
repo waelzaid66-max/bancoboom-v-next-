@@ -1708,6 +1708,47 @@ const CHECKS = [
     },
     why: "A slow cluster response must never repaint the map for a viewport the user has already left",
   })),
+  // Every admin route is permission-gated today — 43 in admin.ts, 8 more in
+  // import-orders.ts, plus a router-level requireAdminRole. Nothing stopped the
+  // next one being added without a guard, and an unguarded admin route is not a
+  // subtle bug: it is the staff surface open to any signed-in account.
+  //
+  // Counted structurally rather than listed, so it holds for routes that do not
+  // exist yet. A named-route list would go stale the day someone adds one.
+  ...[
+    ["admin", "artifacts/api-server/src/routes/v1/admin.ts"],
+    ["import-orders", "artifacts/api-server/src/routes/v1/import-orders.ts"],
+  ].map(([name, file]) => ({
+    id: `P-admin-routes-all-permission-gated-${name}`,
+    file,
+    test: (s) => {
+      const lines = s
+        .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+        .split("\n");
+      let routes = 0;
+      let guarded = 0;
+      lines.forEach((line, i) => {
+        if (/^\s*\/\//.test(line)) return;
+        if (!/router\.(get|post|patch|put|delete)\(/.test(line)) return;
+        routes += 1;
+        // Bounded by the NEXT route, not a fixed line count. A five-line window
+        // bled into the following route's guard, so a one-line ungated route
+        // slipped through the negative test — it borrowed its neighbour's
+        // requirePermission. The middleware chain of one route ends where the
+        // next router.* call begins.
+        let end = i + 1;
+        while (end < lines.length && !/router\.(get|post|patch|put|delete|use)\(/.test(lines[end])) {
+          end += 1;
+        }
+        const window = lines.slice(i, end).join(" ");
+        if (/requirePermission|requireAdminRole|requireStaff|requireAuth/.test(window)) {
+          guarded += 1;
+        }
+      });
+      return routes > 0 && guarded === routes;
+    },
+    why: "Every route on a staff surface must carry a permission guard — an ungated one is the admin panel open to any signed-in account",
+  })),
   // The owner's first rule, and nothing asserted it: publishing must never be
   // blocked. BANCO is an advertising platform before it is a taxonomy — any
   // fixed asset, a plane or a launch as readily as a car, has to be listable
