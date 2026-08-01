@@ -5,7 +5,7 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
-import { router, type Href } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import {
   getGetMeQueryKey,
   getGetMyListingsQueryKey,
@@ -842,6 +842,31 @@ export default function ProfileScreen() {
     pendingFirstNameRef.current = "";
     pendingLastNameRef.current = "";
   };
+
+  // Lets /sign-in and /sign-up open this screen already on the right tab.
+  //
+  // Account creation has never had a route of its own: it is a mode inside the
+  // Profile tab, and every "you need to sign in" path in the app sends you to
+  // /(tabs)/profile. Arriving on a screen whose default mode is "signin" when
+  // you asked to register reads as the register page failing to open, because
+  // there was no page — and nothing could deep-link to it, which also left
+  // email-verification returns and the web routes with nowhere to land.
+  //
+  // Reading a param rather than lifting this 900-line flow into new screens is
+  // deliberate: the flow itself is complete and correct (password, MFA across
+  // four strategies, reset, verification, SSO) and duplicating it would put the
+  // app's most critical journey at risk to solve a routing problem.
+  const { authMode } = useLocalSearchParams<{ authMode?: string }>();
+  useEffect(() => {
+    if (authMode !== "signin" && authMode !== "signup") return;
+    // switchMode, not setMode: it also clears any half-finished form so a link
+    // to /sign-up never inherits an abandoned sign-in attempt's email or a
+    // pending signup intent's consent, phone and business routing.
+    switchMode(authMode);
+    // Intentionally keyed on the param alone. Re-running when switchMode's
+    // identity changes would wipe whatever the user has typed on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authMode]);
 
   const inputStyle = [
     styles.input,
