@@ -1,6 +1,20 @@
 import { defineConfig } from "drizzle-kit";
 
-if (!process.env.DATABASE_URL) {
+/**
+ * Only the drizzle-kit commands that actually open a connection may demand a
+ * DATABASE_URL.
+ *
+ * This file used to throw unconditionally at import time, which was correct
+ * while `push` was the only command in use — but it silently blocks `generate`,
+ * which reads the schema file and writes SQL without ever touching a database.
+ * The practical effect was that you could not author a migration without first
+ * pointing at a live database, which is exactly backwards: writing the SQL is
+ * the step that should be reviewable offline, before anything is connected to.
+ */
+const CONNECTING_COMMANDS = new Set(["push", "pull", "introspect", "studio"]);
+const isConnecting = process.argv.some((arg) => CONNECTING_COMMANDS.has(arg));
+
+if (isConnecting && !process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL, ensure the database is provisioned");
 }
 
@@ -20,6 +34,8 @@ export default defineConfig({
   out: "./migrations",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL,
+    // Empty only on the offline commands guarded above; anything that connects
+    // has already failed loudly by the time execution reaches here.
+    url: process.env.DATABASE_URL ?? "",
   },
 });
