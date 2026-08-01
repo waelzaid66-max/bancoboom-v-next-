@@ -1681,6 +1681,33 @@ const CHECKS = [
     test: (s) => /useListConversations\([\s\S]{0,300}?refetchInterval:\s*\d+/.test(s),
     why: "The tab badge must keep its own interval — it is what stops the unread count going stale once the list screen pauses",
   },
+  // The subtlest correctness property in the map, and the only one nothing
+  // asserted. Panning fires a cluster request per viewport; without a monotonic
+  // sequence check, a slow response for an old viewport lands after a fast one
+  // for the new and repaints the map with pins from where the user used to be.
+  // It fails silently — no error, no empty state, just plausible pins from the
+  // wrong place — which is exactly the kind of invariant a later refactor drops
+  // because nothing appears to break.
+  ...[
+    ["native", "artifacts/banco-mobile/components/search/SearchResultsMap.tsx"],
+    ["web", "artifacts/banco-mobile/components/search/SearchResultsMap.web.tsx"],
+  ].map(([variant, file]) => ({
+    id: `P-map-viewport-monotonic-${variant}`,
+    file,
+    test: (s) => {
+      const code = s
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      // Both halves matter: claiming a sequence before the await orders nothing
+      // on its own, and comparing against a counter that is never incremented
+      // always passes.
+      return (
+        /const\s+seq\s*=\s*\+\+vpSeqRef\.current/.test(code) &&
+        /if\s*\(\s*seq\s*!==\s*vpSeqRef\.current\s*\)\s*return/.test(code)
+      );
+    },
+    why: "A slow cluster response must never repaint the map for a viewport the user has already left",
+  })),
   {
     id: "P-bank-plan-audience-seeded",
     file: "artifacts/api-server/src/seed.ts",
