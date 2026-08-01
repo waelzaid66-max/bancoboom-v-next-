@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "framework": null,
+  "git": {
+    "deploymentEnabled": false
+  },
+  "installCommand": "cd ../.. && corepack enable && pnpm install --frozen-lockfile",
+  "functions": {
+    "api/handler.ts": {
+      "maxDuration": 10
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/handler"
+    }
+  ]
+}

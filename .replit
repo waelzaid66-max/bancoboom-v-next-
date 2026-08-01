@@ -1,0 +1,213 @@
+modules = ["nodejs-20", "python-3.12", "web", "postgresql-16"]
+
+[deployment]
+router = "application"
+deploymentTarget = "autoscale"
+run = ["bash", "scripts/replit-prod-start.sh"]
+build = ["bash", "scripts/replit-prod-build.sh"]
+
+[deployment.postBuild]
+args = ["pnpm", "store", "prune"]
+env = { "CI" = "true" }
+
+[workflows]
+runButton = "Project"
+
+# ── Project: starts the main dev surfaces in parallel ────────────────────────
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Web App"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Mobile Serve"
+
+# ── banco-website Next.js consumer web (:5000 → external :80) ────────────────
+[[workflows.workflow]]
+name = "Web App"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/banco-website exec -- next dev --hostname 0.0.0.0 --port 5000"
+waitForPort = 5000
+
+# ── Mobile serve.js (:3000 → external :6800) ──────────────────────────────────
+# Shows static-build/web/ (real Expo web app) if built,
+# otherwise serves the Expo Go QR landing page.
+# To build the web surface: pnpm --filter @workspace/banco-mobile run build:web
+[[workflows.workflow]]
+name = "Mobile Serve"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=3000 BASE_PATH=/banco-mobile node artifacts/banco-mobile/server/serve.js"
+waitForPort = 3000
+
+# ── Dealer-os market SPA (:5002) ──────────────────────────────────────────────
+[[workflows.workflow]]
+name = "Dealer OS Dev"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=5002 BASE_PATH=/market/ pnpm --filter @workspace/dealer-os run dev"
+waitForPort = 5002
+
+# ── Admin-os SPA (:5003) ─────────────────────────────────────────────────────
+[[workflows.workflow]]
+name = "Admin OS Dev"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=5003 BASE_PATH=/admin/ pnpm --filter @workspace/admin-os run dev"
+waitForPort = 5003
+
+# ── Expo dev server (Metro bundler, for native app development) ──────────────
+[[workflows.workflow]]
+name = "artifacts/banco-mobile: expo"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/banco-mobile run dev"
+
+[agent]
+stack = "BEST_EFFORT_FALLBACK"
+expertMode = true
+integrations = ["javascript_openai_ai_integrations:2.0.0", "javascript_object_storage:2.0.0"]
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 600000
+
+[[ports]]
+localPort = 3000
+externalPort = 6800
+
+[[ports]]
+localPort = 3001
+externalPort = 3001
+
+[[ports]]
+localPort = 3002
+externalPort = 3002
+
+[[ports]]
+localPort = 3003
+externalPort = 3003
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[[ports]]
+localPort = 8081
+externalPort = 8081
+
+[[ports]]
+localPort = 8082
+externalPort = 8082
+
+[[ports]]
+localPort = 8083
+externalPort = 5173
+
+[[ports]]
+localPort = 8084
+externalPort = 6000
+
+[[ports]]
+localPort = 18150
+externalPort = 4200
+
+[[ports]]
+localPort = 21539
+externalPort = 3000
+
+[[ports]]
+localPort = 22357
+externalPort = 8008
+
+[[ports]]
+localPort = 23351
+externalPort = 8000
+
+[nix]
+channel = "stable-25_05"
+packages = ["psmisc", "nginx"]
+
+[objectStorage]
+defaultBucketID = "replit-objstore-41fc812e-9f5e-42cb-93cc-f15445fe1efa"
+
+[userenv]
+
+[userenv.shared]
+ADMIN_EMAILS = "bancotoday@gmail.com,wael_zeed@yahoo.com"
+PAYMOB_MODE = "live"
+NEXT_PUBLIC_API_URL = "http://localhost:8080"
+NEXT_PUBLIC_SEARCH_ENABLED = "true"
+NEXT_PUBLIC_WEB_SEARCH_LIVE = "true"
+NEXT_PUBLIC_WEB_SEARCH_MAP = "false"
+NEXT_PUBLIC_SEARCH_ANALYTICS_MODE = "off"
+CORS_ALLOWED_ORIGINS = "https://banco.today,https://banco.deals,https://banco.autos"
+PUBLIC_APP_URL = "https://banco.today"
+PUBLIC_API_BASE_URL = "https://banco.today/"
+EXPO_PUBLIC_PUBLIC_APP_URL = "https://banco.today"
+OPENAI_MODEL = "gpt-4o-mini"
+OPENAI_MAX_COMPLETION_TOKENS = "4096"
+CLERK_TELEMETRY_DISABLED = "true"
+PUBLIC_OBJECT_SEARCH_PATHS = "/public"
+PRIVATE_OBJECT_DIR = "/private"
+OBJECT_STORAGE_PROVIDER = "s3"
+OPENAI_API_KEY = "_DUMMY_API_KEY_"
+VITE_ADMIN_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/admin/"
+VITE_MARKET_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/market/"
+VITE_WEB_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev"
+NEXT_PUBLIC_ADMIN_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/admin/"
+NEXT_PUBLIC_MARKET_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/market/"
+NEXT_PUBLIC_SITE_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev"
+NEXT_PUBLIC_SITE_URL_EN = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/en"
+WEB_PLUG_ENABLED = "false"
+# PAYMENT_CONFIG_ENCRYPTION_KEY  <- REMOVED from source control.
+# It is a real AES-256 key: it MUST come from Replit Secrets / Coolify env only.
+# Committing it here also OVERRODE the encrypted secret (userenv wins over Secrets).
+# Rotation: existing payment ciphertext is keyed to it -- re-save payment configs after rotating.
+
+# SEC-01/02: secrets MUST live in Replit Secrets / Coolify — never commit.
+# Required in Secrets: PAYMENT_CONFIG_ENCRYPTION_KEY, CLERK_SECRET_KEY,
+# matching CLERK_PUBLISHABLE_KEY (pk_test for dev / pk_live only on true prod).
+[userenv.development]
+CLERK_PUBLISHABLE_KEY = "pk_test_ZXZvbHZpbmctbWFncGllLTQzLmNsZXJrLmFjY291bnRzLmRldiQ"
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_ZXZvbHZpbmctbWFncGllLTQzLmNsZXJrLmFjY291bnRzLmRldiQ"
+VITE_CLERK_PUBLISHABLE_KEY = "pk_test_ZXZvbHZpbmctbWFncGllLTQzLmNsZXJrLmFjY291bnRzLmRldiQ"
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_ZXZvbHZpbmctbWFncGllLTQzLmNsZXJrLmFjY291bnRzLmRldiQ"
+
+[userenv.production]
+# Publishable + secret keys: set via Secrets UI (do not commit pk_live / sk_*).

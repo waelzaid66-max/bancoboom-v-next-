@@ -1,0 +1,13 @@
+# Cloudflare Workers Builds stub.
+# Coolify SoT repo: waelzaid66-max/banco-with-wael (NOT sister bancoo).
+# Production host remains Coolify — see deploy/coolify + docker-compose.coolify.yml
+# + COOLIFY_DEPLOY_NOW.md. Worker name "bancoo" is historical CI project id only —
+# do NOT treat it as product SoT or attach production domains.
+# Unblocks GitHub "Workers Builds" when that check is connected to a clone.
+
+name = "bancoo"
+main = "deploy/cloudflare/stub-worker.ts"
+compatibility_date = "2025-07-01"
+workers_dev = true
+
+# No routes / custom domains — stub must not capture banco production hostnames.

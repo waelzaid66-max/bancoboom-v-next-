@@ -1,0 +1,21 @@
+# MOB-E-01 — Business banks hub
+
+- Tip SHA: `3a234ef267efa142bdcd730002814e2089f76d05`
+- Route: `/business/banks` · `artifacts/banco-mobile/app/business/banks.tsx`
+- Primary CTAs (testID → destination / effect):
+  - `banks-back` → `router.back()` · `:450-453`
+  - Brochure examples list `banks-examples-list` (static PRODUCTS — **not** directory) · `:496-515`
+  - `banks-register-cta` → onboarding FI path (Join) when `showJoinCta` · `:656-702`
+  - `banks-awaiting-link` / `banks-link-account-id-copy` / `banks-awaiting-verify` → copy account id / `/business/verification` · `:571-640`
+  - `banks-inbox` / `banks-inbox-*` / branch chips / contacted/close → FI member inbox mutations · `:208+`
+  - `banks-inbox-error` / `banks-inbox-retry` → non-403 load errors (F-UX-03) · `:148-170`
+- Auth gate: inbox query `enabled: !!isSignedIn`; 401/403 = not member (hide inbox); FI role + !member → awaiting-admin (not Join again) · `:411-422`
+- Empty / loading / error: inbox empty copy; loading via query; error+retry for non-membership failures.
+- Connections: `useGetInstitutionInbox`, `useGetMe`; D-11 brochure forever — **do not reopen as directory defect**.
+- Status: **HEALTHY** (honesty + gates intact vs prior AUD-26 / D-11)
+- Severity: n/a (AUD-FI-02 link ops remains OPS/Admin backlog — not tip mobile wiring defect)
+- Server backstop? **YES** (inbox 403 for non-members)
+- Evidence: `banks.tsx:79-170`, `:411-422`, `:496-702`; COUNCIL-DECISIONS D-11
+- Recommended owner: none for tip wiring
+- Repair shape: none
+- Visual: **UNVERIFIED_VISUAL**

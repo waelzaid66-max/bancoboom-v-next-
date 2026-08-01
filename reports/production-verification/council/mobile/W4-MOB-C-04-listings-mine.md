@@ -1,0 +1,22 @@
+# MOB-C-04 — My listings (mine)
+
+- Tip SHA: `3a234ef267efa142bdcd730002814e2089f76d05`
+- Route: `/listings/mine` · `artifacts/banco-mobile/app/listings/mine.tsx`
+- Primary CTAs (testID → destination):
+  - `my-listings-back` → `router.back()` · `:297-303`
+  - `my-listings-requests` → `/business/requests` · `:309-314`
+  - `my-listings-create` / `my-listings-empty-create` → `/listings/create` · `:317-322`, `:373-380`
+  - `my-listings-retry` → reload managed list · `:341-350`
+  - `edit-listing-${id}` → `/listings/edit/${id}` · `:488-496`
+  - `renew-listing-*` / `sold-*` / `archive-*` / `reactivate-*` / `delete-*` → bump/status/delete APIs · `:509-629`
+- Auth gate: no dedicated guest chrome; list uses `getMyManagedListings` → server `requireAuth` on `/me/listings/manage`. Unsigned → error/empty via API failure path.
+- Empty / loading / error: all three present · `:328-386`; pull-to-refresh · `:390+`
+- Connections: owner-managed list; mutations invalidate mine + detail caches. **No** card press → `/listing/{id}` (manage surface routes to edit/actions only — intentional manage UX, not dead wiring).
+- Status: **HEALTHY**
+- Severity: n/a
+- Optional note: API supports status/sort filters unused by UI — **not** a defect without product mandate (anti-reckless: no invented requirements).
+- Server backstop? **YES**
+- Evidence: `mine.tsx:111-118`, `:297-386`, `:488-629`; `routes/v1/me.ts:45`; `ListingService.ts:1016-1035`
+- Recommended owner: none
+- Repair shape: none (optional future detail open is product polish)
+- Visual: **UNVERIFIED_VISUAL**

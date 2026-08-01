@@ -1,0 +1,108 @@
+name: CI Website Docker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "artifacts/banco-web/**"
+      - "artifacts/banco-website/**"
+      - "lib/design-tokens/**"
+      - "lib/search-contract/**"
+      - "deploy/aws/Dockerfile.banco-web"
+      - "deploy/coolify/Dockerfile.api"
+      - "deploy/coolify/Dockerfile.web"
+      - "deploy/coolify/Dockerfile.banco-website"
+      - "deploy/coolify/Dockerfile.banco-web"
+      - "deploy/coolify/nginx.conf"
+      - "docker-compose.coolify.yml"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - ".github/workflows/ci-website-docker.yml"
+  pull_request:
+    paths:
+      - "artifacts/banco-web/**"
+      - "artifacts/banco-website/**"
+      - "lib/design-tokens/**"
+      - "lib/search-contract/**"
+      - "deploy/aws/Dockerfile.banco-web"
+      - "deploy/coolify/Dockerfile.api"
+      - "deploy/coolify/Dockerfile.web"
+      - "deploy/coolify/Dockerfile.banco-website"
+      - "deploy/coolify/Dockerfile.banco-web"
+      - "deploy/coolify/nginx.conf"
+      - "docker-compose.coolify.yml"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - ".github/workflows/ci-website-docker.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-website-docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-banco-web:
+    name: Docker build (banco-web AWS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build consumer web image (AWS Dockerfile)
+        run: |
+          docker build -f deploy/aws/Dockerfile.banco-web \
+            --build-arg NEXT_PUBLIC_API_URL=http://localhost:5000 \
+            --build-arg NEXT_PUBLIC_SITE_URL=http://localhost:3000 \
+            -t banco-consumer-web:ci .
+
+  docker-banco-web-coolify:
+    name: Docker build (banco-web Coolify SoT)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Coolify banco-web image (legacy profile twin)
+        run: |
+          docker build -f deploy/coolify/Dockerfile.banco-web \
+            --build-arg NEXT_PUBLIC_API_URL=http://api:8080 \
+            --build-arg NEXT_PUBLIC_SITE_URL=http://localhost:3000 \
+            --build-arg NEXT_PUBLIC_MARKET_URL=/market/ \
+            --build-arg NEXT_PUBLIC_ADMIN_URL=/admin/ \
+            -t banco-web:ci .
+
+  docker-banco-website-coolify:
+    name: Docker build (banco-website Coolify SoT)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build canonical Coolify website image
+        run: |
+          docker build -f deploy/coolify/Dockerfile.banco-website \
+            --build-arg NEXT_PUBLIC_API_URL=http://api:8080 \
+            --build-arg NEXT_PUBLIC_SITE_URL=http://localhost:3001 \
+            --build-arg NEXT_PUBLIC_MARKET_URL=/market/ \
+            --build-arg NEXT_PUBLIC_ADMIN_URL=/admin/ \
+            -t banco-website:ci .
+
+  docker-api-coolify:
+    name: Docker build (api Coolify SoT)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Coolify API image
+        run: |
+          docker build -f deploy/coolify/Dockerfile.api \
+            --build-arg GIT_SHA=ci \
+            --build-arg BUILD_ID=ci \
+            -t banco-api:ci .
+
+  docker-web-coolify:
+    name: Docker build (web/nginx Coolify SoT)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Coolify nginx + Vite SPAs image
+        run: |
+          docker build -f deploy/coolify/Dockerfile.web \
+            --build-arg VITE_API_BASE_URL=/api \
+            --build-arg VITE_MARKET_URL=/market/ \
+            --build-arg VITE_ADMIN_URL=/admin/ \
+            --build-arg VITE_WEB_URL=https://banco.today \
+            -t banco-web-static:ci .
