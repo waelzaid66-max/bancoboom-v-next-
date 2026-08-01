@@ -7,6 +7,7 @@ import {
 } from "@workspace/db/schema";
 import { and, eq, desc } from "drizzle-orm";
 import { createNotification } from "./NotificationService";
+import { getOrCreateUser } from "./UserService";
 import {
   assertCallerMayUseUpload,
   consumeUploadClaim,
@@ -32,12 +33,15 @@ export interface CreateImportOrderInput {
   note?: string;
 }
 
+/**
+ * Resolve the DB user id for the CALLING Clerk principal, creating it on first
+ * touch — see the note in GlobalSupplyService. `requireAuth` does not create the
+ * row, so a brand-new signed-in user was refused their first import order with
+ * UNAUTHORIZED purely because they had not opened a screen that happened to
+ * create it. Soft-deleted accounts still fail, as ACCOUNT_DELETED.
+ */
 async function resolveUserId(clerkId: string): Promise<string> {
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.clerkId, clerkId))
-    .limit(1);
+  const user = await getOrCreateUser(clerkId);
   if (!user)
     throw Object.assign(new Error("User not found"), { code: "UNAUTHORIZED" });
   return user.id;

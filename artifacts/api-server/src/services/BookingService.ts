@@ -10,9 +10,10 @@
  */
 import { db } from "@workspace/db";
 import { bookings, listings, listingAttributes, users } from "@workspace/db/schema";
-import { and, eq, inArray, lt, gt, desc, sql, isNull } from "drizzle-orm";
+import { and, eq, inArray, lt, gt, desc, sql } from "drizzle-orm";
 import { createNotification } from "./NotificationService";
 import { publicVisibilityConditions } from "../lib/feedVisibility";
+import { getOrCreateUser } from "./UserService";
 
 function codedError(code: string, message: string): Error {
   return Object.assign(new Error(message), { code });
@@ -78,17 +79,29 @@ export interface CreateBookingInput {
   note?: string | null;
 }
 
+/**
+ * Resolve the DB user id for the CALLING Clerk principal, creating it on first
+ * touch — see the note in GlobalSupplyService.
+ *
+ * The same lookup was written out three times in this file (create, list,
+ * update). One helper means the first-touch behaviour cannot be fixed in two of
+ * them and forgotten in the third, which is how a guest ended up able to browse
+ * stays but not book one.
+ *
+ * Soft-deleted accounts still fail, as ACCOUNT_DELETED from getOrCreateUser.
+ */
+async function resolveUserId(clerkId: string): Promise<string> {
+  const user = await getOrCreateUser(clerkId);
+  if (!user) throw codedError("UNAUTHORIZED", "User not found");
+  return user.id;
+}
+
 export async function createBooking(
   clerkId: string,
   listingId: string,
   input: CreateBookingInput,
 ): Promise<BookingDTO> {
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.clerkId, clerkId), isNull(users.deletedAt)))
-    .limit(1);
-  if (!user) throw codedError("UNAUTHORIZED", "User not found");
+  const userId = await resolveUserId(clerkId);
 
   // Soft-deleted / flagged / shadow-banned hosts must not receive bookings
   // even when the listing row is still status=active.
@@ -126,7 +139,7 @@ export async function createBooking(
   if (row.category !== "real_estate" || term !== "furnished_daily") {
     throw codedError("INVALID_DATA", "This listing is not a daily/furnished rental");
   }
-  if (row.ownerId === user.id) {
+  if (row.ownerId === userId) {
     throw codedError("FORBIDDEN", "You can't book your own listing");
   }
 
@@ -177,7 +190,7 @@ export async function createBooking(
     if (locked.category !== "real_estate" || lockedTerm !== "furnished_daily") {
       throw codedError("INVALID_DATA", "This listing is not a daily/furnished rental");
     }
-    if (locked.ownerId === user.id) {
+    if (locked.ownerId === userId) {
       throw codedError("FORBIDDEN", "You can't book your own listing");
     }
 
@@ -203,7 +216,7 @@ export async function createBooking(
       .insert(bookings)
       .values({
         listingId,
-        guestId: user.id,
+        guestId: userId,
         checkIn,
         checkOut,
         nights,
@@ -255,12 +268,7 @@ export async function listBookings(
   clerkId: string,
   role: "guest" | "host",
 ): Promise<BookingListItem[]> {
-  const [me] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.clerkId, clerkId), isNull(users.deletedAt)))
-    .limit(1);
-  if (!me) throw codedError("UNAUTHORIZED", "User not found");
+  const meId = await resolveUserId(clerkId);
 
   const rows = await db
     .select({
@@ -272,7 +280,7 @@ export async function listBookings(
     .from(bookings)
     .innerJoin(listings, eq(listings.id, bookings.listingId))
     .leftJoin(users, eq(users.id, bookings.guestId))
-    .where(role === "host" ? eq(listings.userId, me.id) : eq(bookings.guestId, me.id))
+    .where(role === "host" ? eq(listings.userId, meId) : eq(bookings.guestId, meId))
     .orderBy(desc(bookings.createdAt));
 
   // For the host view the counterparty is the guest (already joined). For the
@@ -324,12 +332,7 @@ export async function updateBookingStatus(
   bookingId: string,
   action: "confirm" | "reject" | "cancel",
 ): Promise<BookingDTO> {
-  const [me] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.clerkId, clerkId), isNull(users.deletedAt)))
-    .limit(1);
-  if (!me) throw codedError("UNAUTHORIZED", "User not found");
+  const meId = await resolveUserId(clerkId);
 
   const [row] = await db
     .select({
@@ -349,8 +352,8 @@ export async function updateBookingStatus(
   // Authorisation: host actions require ownership; the cancel action requires
   // being the guest who made the booking.
   if (isHostAction) {
-    if (row.ownerId !== me.id) throw codedError("FORBIDDEN", "Only the host can do that");
-  } else if (row.booking.guestId !== me.id) {
+    if (row.ownerId !== meId) throw codedError("FORBIDDEN", "Only the host can do that");
+  } else if (row.booking.guestId !== meId) {
     throw codedError("FORBIDDEN", "Only the guest can cancel this booking");
   }
 

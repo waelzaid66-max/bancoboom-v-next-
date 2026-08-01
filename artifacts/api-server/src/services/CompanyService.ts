@@ -9,7 +9,7 @@ import {
 import { and, eq, sql, desc, ilike, isNull } from "drizzle-orm";
 import { enrichListings } from "./SearchService";
 import { transformFeedItems } from "./BffService";
-import { getDbUser } from "./UserService";
+import { getDbUser, getOrCreateUser } from "./UserService";
 import { publicVisibilityConditions } from "../lib/feedVisibility";
 import { createNotification } from "./NotificationService";
 import { getObjectStorageService } from "../lib/objectStorageProvider";
@@ -343,11 +343,12 @@ export async function upsertMyCompanyProfile(
   clerkId: string,
   input: UpsertCompanyProfileInput
 ): Promise<{ updated: boolean }> {
-  const [user] = await db
-    .select({ id: users.id, role: users.role })
-    .from(users)
-    .where(and(eq(users.clerkId, clerkId), isNull(users.deletedAt)))
-    .limit(1);
+  // Create the caller's row on first touch — see the note in GlobalSupplyService.
+  // The role check below is unaffected: a freshly created row is `individual`, so
+  // a brand-new user is told a business account is required (FORBIDDEN, which is
+  // true and actionable) instead of UNAUTHORIZED, which claimed they were not
+  // signed in when they were.
+  const user = await getOrCreateUser(clerkId);
 
   if (!user) {
     throw Object.assign(new Error("User not found"), { code: "UNAUTHORIZED" });

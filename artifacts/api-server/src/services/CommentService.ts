@@ -4,6 +4,7 @@ import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { createNotification } from "./NotificationService";
 import { checkCommentRate } from "./AbuseService";
 import { publicVisibilityConditions } from "../lib/feedVisibility";
+import { getOrCreateUser } from "./UserService";
 
 type CodedError = Error & { code?: string };
 function codedError(code: string, message: string): CodedError {
@@ -21,12 +22,15 @@ export interface CommentDTO {
   created_at: string;
 }
 
+/**
+ * Resolve the DB user id for the CALLING Clerk principal, creating it on first
+ * touch — see the note in GlobalSupplyService. Commenting is often the very
+ * first thing a new user does, so this path refused precisely the people it
+ * should have been welcoming. Soft-deleted accounts still fail, as
+ * ACCOUNT_DELETED.
+ */
 async function getUserId(clerkId: string): Promise<string> {
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.clerkId, clerkId), isNull(users.deletedAt)))
-    .limit(1);
+  const user = await getOrCreateUser(clerkId);
   if (!user) throw codedError("UNAUTHORIZED", "User not found");
   return user.id;
 }

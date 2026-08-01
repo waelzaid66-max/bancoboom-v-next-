@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { investmentOpportunities, investmentInterests, users } from "@workspace/db/schema";
 import { and, eq, desc, sql, inArray, isNull } from "drizzle-orm";
 import { createNotification } from "./NotificationService";
+import { getOrCreateUser } from "./UserService";
 import type { InvestmentSummary, InvestmentDetail } from "../validators/schemas";
 
 type InvestmentType =
@@ -153,12 +154,13 @@ function toSummary(row: InvestmentRow): InvestmentSummary {
   };
 }
 
+/**
+ * Resolve the DB user id for the CALLING Clerk principal, creating it on first
+ * touch — see the note in GlobalSupplyService. Soft-deleted accounts still fail,
+ * as ACCOUNT_DELETED.
+ */
 async function resolveUserId(clerkId: string): Promise<string> {
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.clerkId, clerkId), isNull(users.deletedAt)))
-    .limit(1);
+  const user = await getOrCreateUser(clerkId);
   if (!user) throw Object.assign(new Error("User not found"), { code: "UNAUTHORIZED" });
   return user.id;
 }
@@ -297,11 +299,10 @@ export async function createInvestment(
   clerkId: string,
   input: CreateInvestmentInput,
 ): Promise<{ id: string }> {
-  const [user] = await db
-    .select({ id: users.id, role: users.role })
-    .from(users)
-    .where(and(eq(users.clerkId, clerkId), isNull(users.deletedAt)))
-    .limit(1);
+  // Create the caller's row on first touch — see the note in GlobalSupplyService.
+  // The role gate below still stands: a new row is `individual`, so the answer
+  // becomes "only business accounts can post" rather than "you are not signed in".
+  const user = await getOrCreateUser(clerkId);
   if (!user) throw Object.assign(new Error("User not found"), { code: "UNAUTHORIZED" });
   if (!BUSINESS_ROLES.includes(user.role)) {
     throw Object.assign(

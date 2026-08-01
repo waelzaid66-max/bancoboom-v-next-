@@ -7,6 +7,7 @@ import {
 } from "@workspace/db/schema";
 import { and, eq, desc, sql, or, isNull } from "drizzle-orm";
 import { createNotification } from "./NotificationService";
+import { getOrCreateUser } from "./UserService";
 import type {
   GlobalSupplyRequestDTO,
   GlobalSupplyResponseDTO,
@@ -113,12 +114,21 @@ function toRequestDto(row: RequestRow, responseCount: number): GlobalSupplyReque
   };
 }
 
+/**
+ * Resolve the DB user id for the CALLING Clerk principal, creating the row on
+ * first touch.
+ *
+ * `requireAuth` deliberately does not create it ("missing DB rows are allowed"),
+ * so a legitimately signed-in brand-new user reached this helper with no row and
+ * was told UNAUTHORIZED — which reads as "your account does not work" on their
+ * very first action. Whether they have a row is an artefact of which screen they
+ * happened to open first, not of whether they are allowed to be here.
+ *
+ * Soft-deleted accounts still fail, as ACCOUNT_DELETED from getOrCreateUser —
+ * the accurate code, and the same behaviour ConversationService already relies on.
+ */
 async function resolveUserId(clerkId: string): Promise<string> {
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.clerkId, clerkId), isNull(users.deletedAt)))
-    .limit(1);
+  const user = await getOrCreateUser(clerkId);
   if (!user) throw Object.assign(new Error("User not found"), { code: "UNAUTHORIZED" });
   return user.id;
 }

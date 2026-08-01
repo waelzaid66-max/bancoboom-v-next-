@@ -798,17 +798,31 @@ const CHECKS = [
   {
     id: "P-booking-reject-tombstone",
     file: "artifacts/api-server/src/services/BookingService.ts",
+    // The tombstone check MOVED, it did not disappear. It used to be an inline
+    // `isNull(users.deletedAt)` repeated in all three functions; it now lives in
+    // the shared resolveUserId → getOrCreateUser, which throws ACCOUNT_DELETED —
+    // a more specific answer than the UNAUTHORIZED the inline version gave.
+    //
+    // So this asserts the behaviour where it now lives rather than the old
+    // marker: every booking mutation must route the caller through the one
+    // helper, and that helper must be the tombstone-rejecting one. Checking the
+    // literal string in three places would now fail on correct code while still
+    // passing if someone hand-rolled a fourth lookup that skipped the check.
     test: (s) => {
-      const create = s.slice(s.indexOf("export async function createBooking"));
-      const list = s.slice(s.indexOf("export async function listBookings"));
-      const update = s.slice(s.indexOf("export async function updateBookingStatus"));
-      return (
-        /isNull\(users\.deletedAt\)/.test(create) &&
-        /isNull\(users\.deletedAt\)/.test(list) &&
-        /isNull\(users\.deletedAt\)/.test(update)
+      const fnBody = (name) => {
+        const start = s.indexOf(`export async function ${name}`);
+        if (start === -1) return "";
+        const next = s.indexOf("\nexport ", start + 1);
+        return s.slice(start, next === -1 ? s.length : next);
+      };
+      const routed = ["createBooking", "listBookings", "updateBookingStatus"].every(
+        (n) => /resolveUserId\(clerkId\)/.test(fnBody(n)),
       );
+      const helperRejectsTombstones = /async function resolveUserId[\s\S]*?getOrCreateUser\(/.test(s);
+      const noStrayLookup = !/eq\(users\.clerkId/.test(s);
+      return routed && helperRejectsTombstones && noStrayLookup;
     },
-    why: "Booking mutations must reject soft-deleted clerk sessions",
+    why: "Booking mutations must reject soft-deleted clerk sessions — via the shared resolveUserId/getOrCreateUser path, with no hand-rolled lookup bypassing it",
   },
   {
     id: "P-optional-auth-tombstone",
@@ -1569,6 +1583,51 @@ const CHECKS = [
     test: (s) =>
       (s.match(/condition: service_healthy/g) || []).length >= 3,
     why: "Prod compose frontends must wait for API readyz health like Coolify",
+  },
+  // A brand-new Clerk user has no row in `users`: requireAuth explicitly does
+  // not create one ("missing DB rows are allowed"). Any service that resolves
+  // the CALLER with a bare SELECT and throws UNAUTHORIZED therefore refuses a
+  // legitimately signed-in person on their first action — the account reads as
+  // broken. Replit fixed exactly this for chat (672bbae) and only for chat.
+  // These lock the remaining caller paths to getOrCreateUser.
+  //
+  // Scoped to the caller. `resolveUserIdOpt` and LeadService's buyerClerkId
+  // resolve SOMEONE ELSE and must never auto-create — inventing an account as a
+  // side effect of another user's request would fabricate rows.
+  ...[
+    ["booking", "artifacts/api-server/src/services/BookingService.ts"],
+    ["comment", "artifacts/api-server/src/services/CommentService.ts"],
+    ["globalsupply", "artifacts/api-server/src/services/GlobalSupplyService.ts"],
+    ["importorder", "artifacts/api-server/src/services/ImportOrderService.ts"],
+    ["investment", "artifacts/api-server/src/services/InvestmentService.ts"],
+    ["company", "artifacts/api-server/src/services/CompanyService.ts"],
+  ].map(([name, file]) => ({
+    id: `P-first-touch-user-${name}`,
+    file,
+    test: (s) => {
+      // Comments stripped: this gate's own prose names every symbol it checks.
+      const code = s
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      if (!/getOrCreateUser\s*\(/.test(code)) return false;
+      // The optional resolver legitimately keeps a bare SELECT, so drop it
+      // before looking for the forbidden shape.
+      const withoutOpt = code.replace(
+        /async function resolveUserIdOpt[\s\S]*?\n\}/g,
+        "",
+      );
+      // Forbidden: a clerkId SELECT still followed by an UNAUTHORIZED throw.
+      const idx = withoutOpt.indexOf("eq(users.clerkId");
+      if (idx === -1) return true;
+      return !/UNAUTHORIZED/.test(withoutOpt.slice(idx, idx + 400));
+    },
+    why: "Caller resolution must create the row on first touch, or a brand-new signed-in user is told UNAUTHORIZED on their first action",
+  })),
+  {
+    id: "P-first-touch-not-for-other-users",
+    file: "artifacts/api-server/src/services/LeadService.ts",
+    test: (s) => !/getOrCreateUser/.test(s),
+    why: "LeadService resolves the BUYER's clerkId, not the caller's — auto-creating there would fabricate accounts from someone else's request",
   },
 ];
 
