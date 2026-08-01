@@ -93,8 +93,14 @@ export async function createImportOrder(
   await createNotification({
     userId,
     type: "car_import",
-    title: "Import request received",
-    body: "We received your car-import request and started reviewing it.",
+    // `عربي · English` in one string, the shape every other notification in the
+    // app already uses. Car import was the only service still sending
+    // English-only text, and it is the one a buyer in Egypt or the Gulf follows
+    // for weeks — the whole point of the tracking screen is watching these
+    // arrive. A notification row is written once and read later, so the language
+    // has to be in the row itself; there is no re-render to translate it.
+    title: "تم استلام طلب الاستيراد · Import request received",
+    body: "استلمنا طلب استيراد سيارتك وبدأنا مراجعته · We received your car-import request and started reviewing it",
     // Deep-link target: the mobile app opens /import/order/<id> directly.
     data: { import_order_id: created.id },
   });
@@ -189,19 +195,24 @@ export async function updateImportOrderStage(
     });
   }
 
+  // Bilingual, same `عربي · English` shape as every other notification. These
+  // six are the entire import journey a buyer watches, so an English-only run
+  // meant the one flow with the longest wait was also the least readable.
   const stageMessages: Record<string, string> = {
-    review: "Your import order is under review.",
-    confirm: "Your import order has been confirmed!",
-    shipping: "Your vehicle is now shipping.",
-    customs: "Your vehicle is in customs clearance.",
-    delivered: "Your vehicle has been delivered!",
-    cancelled: "Your import order has been cancelled.",
+    review: "طلب الاستيراد قيد المراجعة · Your import order is under review",
+    confirm: "تم تأكيد طلب الاستيراد · Your import order has been confirmed",
+    shipping: "سيارتك في الشحن الآن · Your vehicle is now shipping",
+    customs: "سيارتك في التخليص الجمركي · Your vehicle is in customs clearance",
+    delivered: "تم تسليم سيارتك · Your vehicle has been delivered",
+    cancelled: "أُلغي طلب الاستيراد · Your import order has been cancelled",
   };
   await createNotification({
     userId: updated.userId,
     type: "car_import",
-    title: "Import order update",
-    body: stageMessages[newStage] ?? `Order moved to ${newStage}.`,
+    title: "تحديث على طلب الاستيراد · Import order update",
+    // The fallback stays bilingual too: a stage added to STAGE_TRANSITIONS
+    // without a message here must not silently drop back to English.
+    body: stageMessages[newStage] ?? `انتقل الطلب إلى ${newStage} · Order moved to ${newStage}`,
     data: { import_order_id: updated.id },
   });
 

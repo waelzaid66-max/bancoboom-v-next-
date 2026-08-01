@@ -1658,6 +1658,114 @@ const CHECKS = [
     test: (s) => /slug: "bank_featured"[\s\S]{0,200}audience: "financial_institution"/.test(s),
     why: "The bank plan must stay targeted at financial_institution — pointing it at company is what originally hid it from banks (audit S5)",
   },
+  // A notification row is written once and read later — there is no re-render
+  // that could translate it, so the language has to be in the row. The app's
+  // answer is one bilingual string, `عربي · English`. Twenty-one of twenty-two
+  // call sites already did that; car import was the exception, and it is the
+  // flow a buyer follows for weeks. These lock every service that notifies.
+  ...[
+    "AlertService",
+    "BillingNotificationService",
+    "BookingService",
+    "CommentService",
+    "CompanyService",
+    "ConversationService",
+    "FinancingService",
+    "GlobalSupplyService",
+    "ImportOrderService",
+    "InvestmentService",
+    "LeadService",
+    "ReviewService",
+    "RfqService",
+    "SaveService",
+  ].map((svc) => ({
+    id: `P-notif-bilingual-${svc.replace(/Service$/, "").toLowerCase()}`,
+    file: `artifacts/api-server/src/services/${svc}.ts`,
+    test: (s) => {
+      const code = s
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      if (!/createNotification\(/.test(code)) return true;
+
+      // Judge ONLY the copy that reaches a user: the title/body of a
+      // createNotification call, plus any message map feeding one. A first
+      // version scanned everything after the first call site and failed all
+      // fourteen services on correct code — it was reading error messages, log
+      // lines and SQL as if they were notification text.
+      const spans = [];
+      const call = /createNotification\(\{/g;
+      let m;
+      while ((m = call.exec(code))) {
+        // Balance braces from the opening `{` so the span is the real argument,
+        // not a fixed window that stops mid-string or swallows the next call.
+        let depth = 0;
+        let i = m.index + m[0].length - 1;
+        for (; i < code.length; i += 1) {
+          if (code[i] === "{") depth += 1;
+          else if (code[i] === "}") {
+            depth -= 1;
+            if (depth === 0) break;
+          }
+        }
+        spans.push(code.slice(m.index, i + 1));
+      }
+      // Copy one level removed from the call. BookingService builds its strings
+      // in a `const notify = isHostAction ? {...} : {...}` and passes
+      // `title: notify.title`, so scanning only the call site left a whole
+      // service unguarded — the negative test caught that, which is the entire
+      // reason to run one.
+      //
+      // Extracted as a real statement (walk to the `;` at depth zero, skipping
+      // string bodies) rather than a character window. A first attempt used
+      // `[\s\S]{0,900}` and swallowed neighbouring code, which made
+      // BillingNotificationService fail on correct source: the window reached
+      // past the payload into ledger labels like "Wallet top-up", which are
+      // accounting text, not notification copy.
+      const decl = /\bconst\s+\w+\s*=/g;
+      let d;
+      while ((d = decl.exec(code))) {
+        let depth = 0;
+        let quote = null;
+        let j = d.index + d[0].length;
+        for (; j < code.length; j += 1) {
+          const c = code[j];
+          if (quote) {
+            if (c === "\\") j += 1;
+            else if (c === quote) quote = null;
+            continue;
+          }
+          if (c === '"' || c === "'" || c === "`") quote = c;
+          else if (c === "{" || c === "(" || c === "[") depth += 1;
+          else if (c === "}" || c === ")" || c === "]") depth -= 1;
+          else if (c === ";" && depth === 0) break;
+        }
+        const stmt = code.slice(d.index, j);
+        // A statement holding BOTH a title and a body IS a notification payload,
+        // wherever it is written. Anything else is not judged here.
+        if (/\btitle:/.test(stmt) && /\bbody:/.test(stmt)) spans.push(stmt);
+      }
+      const mapBlock = code.match(/(?:stageMessages|MESSAGES)[^=]*=\s*\{[\s\S]*?\n {2}\};/);
+      if (mapBlock) spans.push(mapBlock[0]);
+
+      const AR = /[؀-ۿ]/;
+      for (const span of spans) {
+        // Every literal inside the span, not `key: "literal"` pairs. The span is
+        // already precisely a notification payload, so the precision comes from
+        // it — matching on the key missed BookingService entirely, where the
+        // title is a multi-line ternary and no literal sits next to `title:`.
+        const literals = span.match(/"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g) ?? [];
+        for (const lit of literals) {
+          const bare = lit.replace(/\$\{[^}]*\}/g, "");
+          // A real English phrase — two words — with no Arabic anywhere is the
+          // failure. Single tokens (ids, keys, enum values) and pure
+          // interpolation are caller data, not copy.
+          if (/[A-Za-z]{3,}\s+[A-Za-z]{3,}/.test(bare) && !AR.test(lit)) return false;
+        }
+      }
+      return true;
+    },
+    why: "Notification copy is stored, not re-rendered — every user-facing string must be bilingual `عربي · English` or Arabic speakers get English-only alerts",
+  })),
 ];
 
 function main() {
