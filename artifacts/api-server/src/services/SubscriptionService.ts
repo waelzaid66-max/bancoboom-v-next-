@@ -153,6 +153,31 @@ async function findSubscriptionByChargeKey(
  * business plans, individuals see individual plans. Free baselines are included
  * so the UI can show the current tier.
  */
+/**
+ * Which plans an account type may see and buy.
+ *
+ * BUSINESS_ROLES is dealer/company/enterprise — it does NOT include
+ * financial_institution, which is a distinct fourth account type with its own
+ * pricing. The previous rule was a two-way split: business roles saw business
+ * plans, and *everyone else* was shown `audience === "individual"`. A bank fell
+ * into "everyone else", so the seeded `bank_featured` plan — 14,999/month,
+ * audience financial_institution — was filtered out of the only account type
+ * that can buy it, and banks were offered the individual plan instead.
+ *
+ * Audit S5 had already corrected that plan's audience from `company` to
+ * `financial_institution` (see the comment in seed.ts). That half of the fix
+ * moved the plan further out of reach, because this filter never had a branch
+ * for it.
+ *
+ * Behaviour for the existing roles is unchanged: individual still matches
+ * individual, and the three business roles still match each other.
+ */
+function planMatchesRole(role: UserRole, audience: UserRole): boolean {
+  if (BUSINESS_ROLES.includes(role)) return BUSINESS_ROLES.includes(audience);
+  // Individual and financial_institution each see exactly their own tier.
+  return audience === role;
+}
+
 export async function listPlans(role: UserRole) {
   const all = await db
     .select()
@@ -160,13 +185,8 @@ export async function listPlans(role: UserRole) {
     .where(eq(plans.isActive, true))
     .orderBy(asc(plans.sortOrder));
 
-  const businessUser = BUSINESS_ROLES.includes(role);
   return all
-    .filter((p) =>
-      businessUser
-        ? BUSINESS_ROLES.includes(p.audience as UserRole)
-        : p.audience === "individual"
-    )
+    .filter((p) => planMatchesRole(role, p.audience as UserRole))
     .map(mapPlan);
 }
 
@@ -195,10 +215,12 @@ export async function startSubscription(input: StartSubscriptionInput) {
   if (plan.isBaseline) {
     throw invalidData("The free baseline plan requires no subscription");
   }
-  if (
-    !BUSINESS_ROLES.includes(input.role) ||
-    !BUSINESS_ROLES.includes(plan.audience as UserRole)
-  ) {
+  // Same rule the listing uses, so a plan a caller can SEE is a plan they can
+  // BUY. The old gate demanded a business role on both sides, which rejected a
+  // bank buying the bank plan even if it somehow obtained the id — the second
+  // half of the same defect. Individuals are unaffected: their only plan is the
+  // free baseline, already rejected above.
+  if (!planMatchesRole(input.role, plan.audience as UserRole)) {
     throw invalidData("This plan isn't available for your account type");
   }
 

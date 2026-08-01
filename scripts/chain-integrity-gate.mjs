@@ -1629,6 +1629,35 @@ const CHECKS = [
     test: (s) => !/getOrCreateUser/.test(s),
     why: "LeadService resolves the BUYER's clerkId, not the caller's — auto-creating there would fabricate accounts from someone else's request",
   },
+  {
+    // financial_institution is the fourth account type and is NOT in
+    // BUSINESS_ROLES. The old two-way split (business plans vs "everyone else
+    // gets individual") therefore hid the seeded bank_featured plan from banks
+    // and offered them the individual plan instead — an unsellable product.
+    // Both the listing and the subscribe gate must use the same rule, or a
+    // caller can see a plan they are then refused at checkout.
+    id: "P-plan-audience-covers-fi",
+    file: "artifacts/api-server/src/services/SubscriptionService.ts",
+    test: (s) => {
+      const code = s
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      const helper = /function planMatchesRole\([\s\S]*?audience === role/.test(code);
+      // Neither path may keep the old hardcoded individual fallback, and both
+      // must route through the one helper.
+      const noHardcodedIndividual = !/audience === "individual"/.test(code);
+      const listUses = /\.filter\(\(p\) => planMatchesRole\(role,/.test(code);
+      const subscribeUses = /!planMatchesRole\(input\.role,/.test(code);
+      return helper && noHardcodedIndividual && listUses && subscribeUses;
+    },
+    why: "Banks must see and be able to buy their own plan tier; listing and subscribe must agree, or a visible plan is refused at checkout",
+  },
+  {
+    id: "P-bank-plan-audience-seeded",
+    file: "artifacts/api-server/src/seed.ts",
+    test: (s) => /slug: "bank_featured"[\s\S]{0,200}audience: "financial_institution"/.test(s),
+    why: "The bank plan must stay targeted at financial_institution — pointing it at company is what originally hid it from banks (audit S5)",
+  },
 ];
 
 function main() {
