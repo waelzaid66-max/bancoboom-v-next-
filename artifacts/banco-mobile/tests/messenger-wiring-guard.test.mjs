@@ -20,6 +20,9 @@ const company = fs.readFileSync(
 );
 const inbox = fs.readFileSync(path.join(root, "app/(tabs)/messages.tsx"), "utf8");
 const thread = fs.readFileSync(path.join(root, "app/messages/[id].tsx"), "utf8");
+// The tabs layout carries the unread badge, which polls the same query key as
+// the inbox — it is what keeps the count live once the inbox pauses off-screen.
+const layout = fs.readFileSync(path.join(root, "app/(tabs)/_layout.tsx"), "utf8");
 const assistant = fs.readFileSync(path.join(root, "app/assistant.tsx"), "utf8");
 
 function pushParamsWindow(src, marker) {
@@ -92,10 +95,24 @@ test("mobile chat stays poll-only (G47 — no WebSocket client)", () => {
     /refetchInterval:\s*3000/,
     "thread poll interval contract",
   );
+  // The inbox still polls at 8s — but only while it is on screen. Tab screens
+  // stay mounted after their first visit, so an ungated interval kept firing
+  // from every other screen in the app for the rest of the session. The badge
+  // in (tabs)/_layout.tsx owns the background cadence for the same query key.
+  //
+  // Asserting the gated form, not the bare number: the contract this guard
+  // exists to protect is "poll-only at 8s", and that is intact. The off branch
+  // must be exactly `false` — `isFocused ? 8000 : 8000` would read as gated and
+  // poll just as hard.
   assert.match(
     inbox,
-    /refetchInterval:\s*8000/,
-    "inbox poll interval contract",
+    /refetchInterval:\s*isFocused\s*\?\s*8000\s*:\s*false/,
+    "inbox poll interval contract (8s while focused, paused otherwise)",
+  );
+  assert.match(
+    layout,
+    /refetchInterval:\s*\d+/,
+    "the tab badge must keep its own interval — it is what stops the unread count going stale once the inbox pauses",
   );
 });
 
