@@ -248,6 +248,12 @@ export async function updateUserProfile(
     patch.companyDetails = mergeBusinessCompanyDetails(user.companyDetails, input.business);
   }
 
+  // Preferred language for server-written content — emails today. Set on its
+  // own, outside the business/account-type branches above, because changing the
+  // app's language is not an account change: an individual toggling to English
+  // must not be swept into the role logic.
+  if (input.language) patch.language = input.language;
+
   // Empty patch (no-op) — return the current row without an empty UPDATE.
   if (Object.keys(patch).length === 0) return user;
 

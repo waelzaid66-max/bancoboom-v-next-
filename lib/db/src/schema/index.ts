@@ -488,6 +488,19 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
+  // Preferred language for anything the server WRITES to this person: emails
+  // today, and any future channel that is composed once and read later.
+  //
+  // The app has had a full bilingual email system all along — subject and body,
+  // seven to twelve branches per template, RTL handled — and no way to reach the
+  // English half, because the language lived only in the device's AsyncStorage
+  // and was never sent anywhere. Every email in every market went out in Arabic.
+  //
+  // Nullable on purpose: absent means "not told yet", which resolves to Arabic
+  // exactly as before, so no existing account changes behaviour on deploy.
+  // 'ar' | 'en' — kept as text rather than an enum so adding a market's language
+  // is a seed change, not a migration.
+  language: text("language"),
   role: userRoleEnum("role").notNull().default("individual"),
   // Admin Control Center access. Orthogonal to `role`: an admin may also be a
   // dealer/individual. Server-side admin guard gates every admin endpoint on

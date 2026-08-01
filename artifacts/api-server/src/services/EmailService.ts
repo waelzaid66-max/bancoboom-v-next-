@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { notificationPreferences } from "@workspace/db/schema";
+import { notificationPreferences, users } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { getResolvedConfig } from "./EmailConfigService";
@@ -20,6 +20,45 @@ import { getResolvedConfig } from "./EmailConfigService";
  */
 
 export type EmailLang = "ar" | "en";
+
+/**
+ * The language to write this email in.
+ *
+ * Every template here has always been fully bilingual — subject and body, RTL
+ * handled — and every one of them shipped in Arabic to every recipient in every
+ * market, because none of the ten call sites passed a language and the fallback
+ * was `?? "ar"`. The English half could not be reached at all. The preference
+ * existed only in the device's AsyncStorage and was never sent to the server.
+ *
+ * Resolved here rather than at each call site: one place, and every sender is
+ * fixed at once instead of ten edits that can drift.
+ *
+ * Looked up by recipient address because `to` is the only thing all ten senders
+ * have in common. `users.email` is nullable and not unique, so this is
+ * best-effort by design — two accounts sharing an address could resolve to
+ * either one's preference, which at worst sends the right content in the other
+ * language to the same inbox. An explicit `lang` argument always wins, and an
+ * unknown or unset preference falls back to Arabic, which is exactly what every
+ * email does today. Nothing changes for an existing account until it tells us.
+ */
+async function resolveRecipientLang(
+  to: string,
+  explicit?: EmailLang,
+): Promise<EmailLang> {
+  if (explicit) return explicit;
+  try {
+    const [row] = await db
+      .select({ language: users.language })
+      .from(users)
+      .where(eq(users.email, to))
+      .limit(1);
+    return row?.language === "en" ? "en" : "ar";
+  } catch {
+    // A lookup failure must never stop an email going out — the whole point of
+    // this service is that a notification reaches the person.
+    return "ar";
+  }
+}
 
 export type NotificationCategory =
   | "message"
@@ -253,7 +292,7 @@ export async function sendLeadNotificationEmail(args: {
   actionLabel: string;
   listingId?: string;
 }): Promise<void> {
-  const lang: EmailLang = args.lang ?? "ar";
+  const lang: EmailLang = await resolveRecipientLang(args.to, args.lang);
   const ar = lang === "ar";
   const { transport, appUrl } = await resolveEmailRuntime();
   const cta = args.listingId ? appUrl(`/listing/${args.listingId}`) : undefined;
@@ -293,7 +332,7 @@ export async function sendWelcomeEmail(args: {
   lang?: EmailLang;
   name: string;
 }): Promise<void> {
-  const lang: EmailLang = args.lang ?? "ar";
+  const lang: EmailLang = await resolveRecipientLang(args.to, args.lang);
   const ar = lang === "ar";
   const { transport, appUrl } = await resolveEmailRuntime();
   const cta = appUrl("/");
@@ -342,7 +381,7 @@ export async function sendWeeklyReportEmail(args: {
   activeListings: number;
   weeklyLeads: number;
 }): Promise<void> {
-  const lang: EmailLang = args.lang ?? "ar";
+  const lang: EmailLang = await resolveRecipientLang(args.to, args.lang);
   const ar = lang === "ar";
   const { transport, appUrl } = await resolveEmailRuntime();
   const cta = appUrl("/");
@@ -404,7 +443,7 @@ export async function sendBillingReceiptEmail(args: {
   invoiceNumber?: string | null;
   planName?: string;
 }): Promise<void> {
-  const lang: EmailLang = args.lang ?? "ar";
+  const lang: EmailLang = await resolveRecipientLang(args.to, args.lang);
   const ar = lang === "ar";
   const { transport, appUrl } = await resolveEmailRuntime();
   const cta = appUrl("/billing");
@@ -456,7 +495,7 @@ export async function sendBillingFailedEmail(args: {
   method: string;
   purpose: "wallet_topup" | "subscription";
 }): Promise<void> {
-  const lang: EmailLang = args.lang ?? "ar";
+  const lang: EmailLang = await resolveRecipientLang(args.to, args.lang);
   const ar = lang === "ar";
   const { transport, appUrl } = await resolveEmailRuntime();
   const cta = appUrl("/billing");
@@ -503,7 +542,7 @@ export async function sendSubscriptionExpiringEmail(args: {
   expiresAt: string;
   daysLeft: number;
 }): Promise<void> {
-  const lang: EmailLang = args.lang ?? "ar";
+  const lang: EmailLang = await resolveRecipientLang(args.to, args.lang);
   const ar = lang === "ar";
   const { transport, appUrl } = await resolveEmailRuntime();
   const cta = appUrl("/plans");
@@ -545,7 +584,7 @@ export async function sendNewMessageEmail(args: {
   preview: string;
   conversationId: string;
 }): Promise<void> {
-  const lang: EmailLang = args.lang ?? "ar";
+  const lang: EmailLang = await resolveRecipientLang(args.to, args.lang);
   const ar = lang === "ar";
   const { transport, appUrl } = await resolveEmailRuntime();
   // MSG-11: email CTAs land on the website workspace thread (not mobile /messages).
@@ -595,7 +634,7 @@ export async function sendNewMatchEmail(args: {
   listingTitle: string;
   listingId: string;
 }): Promise<void> {
-  const lang: EmailLang = args.lang ?? "ar";
+  const lang: EmailLang = await resolveRecipientLang(args.to, args.lang);
   const ar = lang === "ar";
   const { transport, appUrl } = await resolveEmailRuntime();
   const cta = appUrl(`/listing/${args.listingId}`);
@@ -639,7 +678,7 @@ export async function sendPriceDropEmail(args: {
   newPrice: number;
   listingId: string;
 }): Promise<void> {
-  const lang: EmailLang = args.lang ?? "ar";
+  const lang: EmailLang = await resolveRecipientLang(args.to, args.lang);
   const ar = lang === "ar";
   const { transport, appUrl } = await resolveEmailRuntime();
   const cta = appUrl(`/listing/${args.listingId}`);

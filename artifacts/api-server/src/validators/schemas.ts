@@ -907,6 +907,11 @@ export const UpdateMeSchema = z
   .object({
     account_type: z.enum(["individual", "dealer", "company", "financial_institution"]).optional(),
     phone: z.string().trim().min(4).max(30).nullable().optional(),
+    // Preferred language for anything the server writes to this person. Until
+    // now it lived only in the device's AsyncStorage, so the fully built English
+    // email templates could never be reached and every market got Arabic.
+    // Optional: an account that never sends it keeps today's behaviour exactly.
+    language: z.enum(["ar", "en"]).optional(),
     business: z
       .object({
         activity_type: z.enum([
