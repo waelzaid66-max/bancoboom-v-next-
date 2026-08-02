@@ -741,7 +741,6 @@ const en = {
     regionEU: "Europe",
     regionCN: "China",
     regionAE: "Dubai / UAE",
-    integrationReady: "Integration-ready",
     requestCta: "Request an import from this source",
   },
   importDocs: {
@@ -3068,7 +3067,6 @@ const ar: typeof en = {
     regionEU: "أوروبا",
     regionCN: "الصين",
     regionAE: "دبي / الإمارات",
-    integrationReady: "جاهز للربط",
     requestCta: "اطلب استيرادًا من هذا المصدر",
   },
   importDocs: {

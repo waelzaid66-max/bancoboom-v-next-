@@ -29,6 +29,8 @@ import { MiniAppBottomNav } from "@/components/MiniAppBottomNav";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
 
+import { SOURCES as AUCTION_SOURCES } from "./auctions";
+
 const RED = "#E53935";
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
@@ -178,9 +180,18 @@ export default function CarImportHubScreen() {
     }
   };
 
+  // A number is allowed here only when something in the repo can be counted to
+  // produce it. `8+` and `21` were typed by hand: the source list is exactly
+  // eight entries long, and no list of twenty-one countries exists anywhere. So
+  // the auction count is derived from the list it describes, and the country
+  // row drops to a capability like the three under it rather than guessing.
   const stats: { key: string; labelKey: string; value?: string }[] = [
-    { key: "auctions", labelKey: "importHub.statAuctions", value: "8+" },
-    { key: "countries", labelKey: "importHub.statCountries", value: "21" },
+    {
+      key: "auctions",
+      labelKey: "importHub.statAuctions",
+      value: String(AUCTION_SOURCES.length),
+    },
+    { key: "countries", labelKey: "importHub.statCountries" },
     { key: "shipping", labelKey: "importHub.statShipping" },
     { key: "customs", labelKey: "importHub.statCustoms" },
     { key: "tracking", labelKey: "importHub.statTracking" },

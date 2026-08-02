@@ -24,7 +24,10 @@ const RED = "#E53935";
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
 // Brand names stay literal (not translated); regions/types are i18n keys.
-const SOURCES: {
+/** The sources our specialists actually work with. Exported because the hub
+ *  counts them — a count on screen has to come from the list it counts, never
+ *  from a number typed next to it. */
+export const SOURCES: {
   key: string;
   name: string;
   regionKey: string;
@@ -127,12 +130,6 @@ export default function ImportAuctionsScreen() {
               >
                 {t(s.regionKey as never)} · {t(s.typeKey as never)}
               </AppText>
-              <View style={styles.readyChip}>
-                <Feather name="zap" size={10} color={RED} />
-                <AppText style={styles.readyText}>
-                  {t("importAuctions.integrationReady")}
-                </AppText>
-              </View>
             </Pressable>
           ))}
         </View>
@@ -184,15 +181,4 @@ const styles = StyleSheet.create({
   },
   cardName: { fontSize: 14.5, fontFamily: "Cairo_700Bold" },
   cardRegion: { fontSize: 11.5, fontFamily: "Inter_400Regular" },
-  readyChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(229,57,53,0.10)",
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    marginTop: 2,
-  },
-  readyText: { color: RED, fontSize: 10.5, fontFamily: "Inter_600SemiBold" },
 });
