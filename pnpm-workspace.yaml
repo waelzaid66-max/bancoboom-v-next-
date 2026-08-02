@@ -8,6 +8,7 @@ allowBuilds:
   '@clerk/shared': true
   browser-tabs-lock: true
   core-js: true
+  dtrace-provider: false
   esbuild: true
   sharp: true
 
