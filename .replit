@@ -103,7 +103,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "NODE_PATH=/home/runner/workspace/artifacts/banco-mobile/node_modules pnpm --filter @workspace/banco-mobile run dev"
+args = "EXPO_NO_INTERACTIVE=1 NODE_PATH=/home/runner/workspace/artifacts/banco-mobile/node_modules pnpm --filter @workspace/banco-mobile run dev"
 
 [[workflows.workflow]]
 name = "API Server"
