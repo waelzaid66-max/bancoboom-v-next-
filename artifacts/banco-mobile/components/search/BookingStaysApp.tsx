@@ -360,7 +360,7 @@ export function BookingStaysApp() {
   // The search box is tap-to-open (an icon), not a permanent rectangle. Opening
   // focuses the field; closing (toggle / submit) collapses it back to the icon.
   const openSearch = () => {
-    playSound("tap");
+    playSound("key");
     setSearchOpen(true);
     setShowSuggestions(true);
     setTimeout(() => inputRef.current?.focus(), 50);
@@ -450,7 +450,7 @@ export function BookingStaysApp() {
     }),
   ];
   const selectStayType = (value: string) => {
-    playSound("tap");
+    playSound("key");
     Haptics.selectionAsync();
     if (value === ALL_TAB) {
       update({ propertyType: null });
@@ -460,7 +460,7 @@ export function BookingStaysApp() {
   };
 
   const selectRentalTerm = (term: string) => {
-    playSound("tap");
+    playSound("key");
     Haptics.selectionAsync();
     update({
       rentalTerm: criteria.rentalTerm === term ? null : term,
@@ -469,7 +469,7 @@ export function BookingStaysApp() {
   };
 
   const selectListingModeWanted = () => {
-    playSound("tap");
+    playSound("key");
     Haptics.selectionAsync();
     update({
       listingMode: criteria.listingMode === "buy" ? "all" : "buy",
@@ -579,7 +579,7 @@ export function BookingStaysApp() {
   });
 
   const goBack = () => {
-    playSound("tap");
+    playSound("key");
     if (isDirty) {
       resetAndLeave(() => router.back());
       return;
@@ -641,7 +641,7 @@ export function BookingStaysApp() {
         {activeFilterCount > 0 || draftQuery.trim() ? (
           <Pressable
             onPress={() => {
-              playSound("tap");
+              playSound("key");
               clearAllFilters();
             }}
             style={[
@@ -662,7 +662,7 @@ export function BookingStaysApp() {
         ) : null}
         <Pressable
           onPress={() => {
-            playSound("tap");
+            playSound("key");
             router.push("/listings/create?request=1&category=real_estate" as Href);
           }}
           style={[
@@ -702,12 +702,12 @@ export function BookingStaysApp() {
         onBack={goBack}
         onSaveSearch={handleSaveSearch}
         onOpenMap={() => {
-          playSound("tap");
+          playSound("key");
           Haptics.selectionAsync();
           openOrLatchMap({ inResultsView, setMapMode, setWantMap });
         }}
         onOpenFilters={() => {
-          playSound("tap");
+          playSound("key");
           setShowFilters((v) => !v);
         }}
         onOpenSearch={openSearch}
@@ -775,13 +775,13 @@ export function BookingStaysApp() {
         <MarketCountryButton
           selected={criteria.marketCountry}
           onPress={() => {
-            playSound("tap");
+            playSound("key");
             setMarketPickerOpen(true);
           }}
         />
         <Pressable
           onPress={() => {
-            playSound("tap");
+            playSound("key");
             Haptics.selectionAsync();
             const cycle = [
               "recommended",
@@ -953,7 +953,7 @@ export function BookingStaysApp() {
           >
             <Pressable
               onPress={() => {
-                playSound("tap");
+                playSound("key");
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setMapMode((m) => !m);
               }}

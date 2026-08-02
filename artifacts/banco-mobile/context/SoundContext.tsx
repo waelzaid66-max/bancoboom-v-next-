@@ -28,6 +28,31 @@ const SOURCES: Record<SoundName, number> = {
   tap: require("@/assets/sounds/tap.wav"),
 };
 
+/**
+ * The section's own cue, so a mini-app sounds like the world it is.
+ *
+ * The intent above is as old as the three files, but every call site in the app
+ * was passing "tap" — engine.wav and key.wav shipped in the bundle and never
+ * played once. This is the map that was missing, not a new feature: no control
+ * moves, nothing new appears on screen, and a section gains its voice.
+ *
+ * Vehicles rev. Anything with a door — property and stays — turns a latch.
+ * Everything else keeps the neutral tap, including the mixed-category hubs,
+ * where a section cue would be claiming a world the screen is not in.
+ */
+export function soundForCategory(
+  category: string | null | undefined,
+): SoundName {
+  switch (category) {
+    case "car":
+      return "engine";
+    case "real_estate":
+      return "key";
+    default:
+      return "tap";
+  }
+}
+
 type SoundContextValue = {
   soundEnabled: boolean;
   notificationsEnabled: boolean;

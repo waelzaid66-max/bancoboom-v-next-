@@ -178,9 +178,20 @@ export default function CarImportHubScreen() {
     }
   };
 
+  /**
+   * Capability strip — what this hub DOES, never a count of what it holds.
+   *
+   * Two of these used to carry written-in numbers ("8+" auctions, "21"
+   * countries). Neither resolves to anything the API returns, which is the
+   * house rule the cars hero was cleaned of and its honesty guard now enforces:
+   * an unknown number is an absent slot, never a guess. The row already renders
+   * a label with no value — the other three always did — so they simply read as
+   * capabilities now. A real count can take the `value` slot the day an
+   * endpoint can prove it.
+   */
   const stats: { key: string; labelKey: string; value?: string }[] = [
-    { key: "auctions", labelKey: "importHub.statAuctions", value: "8+" },
-    { key: "countries", labelKey: "importHub.statCountries", value: "21" },
+    { key: "auctions", labelKey: "importHub.statAuctions" },
+    { key: "countries", labelKey: "importHub.statCountries" },
     { key: "shipping", labelKey: "importHub.statShipping" },
     { key: "customs", labelKey: "importHub.statCustoms" },
     { key: "tracking", labelKey: "importHub.statTracking" },
