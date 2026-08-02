@@ -76,8 +76,14 @@ const HERO_MIN_HEIGHT = 244;
  *    support    → in-app support requests (settings · import order)
  *  The mock said "24/7 Support". Support is real; the 24/7 is an availability
  *  promise nothing in this repo can keep, so the claim ships without it. */
-const FEATURES: { icon: string; key: string }[] = [
-  { icon: "shield-check", key: "search.discover.section.carTrustDealers" },
+type FeatherName = React.ComponentProps<typeof Feather>["name"];
+
+const FEATURES: { icon: FeatherName; key: string }[] = [
+  // "shield-check" renders through the icon shim but is a Lucide name, not a
+  // Feather one, so it fails the Feather prop type the repo types against
+  // (same pattern as MaterialsHomeHeader.tsx:61). "shield" keeps the silhouette
+  // and is genuine on both sides.
+  { icon: "shield", key: "search.discover.section.carTrustDealers" },
   { icon: "globe", key: "search.discover.section.carTrustShipping" },
   { icon: "lock", key: "search.discover.section.carTrustSecure" },
   { icon: "package", key: "search.discover.section.carTrustImport" },
