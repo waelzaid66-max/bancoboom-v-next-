@@ -180,11 +180,18 @@ export default function CarImportHubScreen() {
     }
   };
 
-  // A number is allowed here only when something in the repo can be counted to
-  // produce it. `8+` and `21` were typed by hand: the source list is exactly
-  // eight entries long, and no list of twenty-one countries exists anywhere. So
-  // the auction count is derived from the list it describes, and the country
-  // row drops to a capability like the three under it rather than guessing.
+  /**
+   * Capability strip — what this hub DOES. A number may sit here only when
+   * something in the repo can be counted to produce it.
+   *
+   * Both "8+" auctions and "21" countries were typed by hand. The auction list
+   * is exactly eight entries long, so that count now reads the list it
+   * describes and can never drift from it; the "+" was the part that lied. No
+   * list of twenty-one countries exists anywhere, so that row drops its value
+   * and reads as the capability it always was — the three rows under it never
+   * carried a number either. A real count can take the `value` slot the day an
+   * endpoint can prove it.
+   */
   const stats: { key: string; labelKey: string; value?: string }[] = [
     {
       key: "auctions",
