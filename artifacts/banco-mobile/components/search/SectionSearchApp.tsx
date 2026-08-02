@@ -44,6 +44,10 @@ import {
 } from "@/components/search/property/PropertyHomeHeader";
 import { MaterialsHomeHeader } from "@/components/search/materials/MaterialsHomeHeader";
 import {
+  FacilitiesHomeHeader,
+  type FacilityType,
+} from "@/components/search/facilities/FacilitiesHomeHeader";
+import {
   CAR_CATEGORIES,
   CarsHomeHeader,
   type CarHeroStat,
@@ -840,6 +844,31 @@ export function SectionSearchApp({
       : "all";
   const isMaterialsSection = criteria.category === "materials";
   const isCarSection = criteria.category === "car";
+  const isFacilitiesSection = criteria.category === "facilities";
+
+  /** B-INDUSTRY browse types. Every entry is a type the live `industrial_type`
+   *  facet actually returned with a count above zero, so the strip can never
+   *  offer a chip that leads to an empty result — and the number beside the
+   *  label is the same number the search will produce. Unlike the car section,
+   *  whose vehicle-type facet does not exist, this one is real. */
+  const facilityTypes = useMemo<FacilityType[]>(() => {
+    if (!isFacilitiesSection) return [];
+    const counts = scopedFacets?.industrial_type;
+    if (!counts) return [];
+    const icon: Record<string, React.ComponentProps<typeof Feather>["name"]> = {
+      factory: "home",
+      warehouse: "package",
+      land: "map",
+    };
+    return (visibleIndTypes ?? [])
+      .map((ty) => ({
+        key: ty,
+        label: t(`home.industrialTypes.${ty}` as never),
+        count: counts[ty] ?? 0,
+        icon: icon[ty] ?? "grid",
+      }))
+      .filter((ty) => ty.count > 0);
+  }, [isFacilitiesSection, scopedFacets, visibleIndTypes, t]);
   // B-CORE upper header: identity + search/Filters + market beside BANCO.
   // Smart horizontal strip under header: industrial types + origin (wrap, flexGrow:0).
   // Commodity strip when raw/all. listingMode + refinements stay in FilterSheet
@@ -1417,6 +1446,65 @@ export function SectionSearchApp({
     t,
   ]);
 
+  /** B-INDUSTRY's scrolling slice — hero, type strip, proven count. Placed here,
+   *  immediately before the return, because it reads state declared above it. */
+  const facilitiesScrollHeader = useMemo(() => {
+    if (!isFacilitiesSection) return null;
+    return (
+      <FacilitiesHomeHeader
+        slot="scroll"
+        searchOpen={searchOpen}
+        draftQuery={draftQuery}
+        searchSaved={searchSaved}
+        activeFilterCount={activeFilterCount}
+        marketCountry={criteria.marketCountry}
+        sort={criteria.sort}
+        inputRef={inputRef}
+        types={facilityTypes}
+        activeType={criteria.industrialType}
+        onSelectType={(key) => {
+          playSound("tap");
+          selectIndustrialType(key as IndustrialType);
+        }}
+        onBack={goBack}
+        onSaveSearch={handleSaveSearch}
+        onOpenMap={() => {
+          playSound("tap");
+          Haptics.selectionAsync();
+          openOrLatchMap({ inResultsView, setMapMode, setWantMap });
+        }}
+        onOpenFilters={() => setShowFilters(true)}
+        onOpenSearch={openSearch}
+        onCloseSearch={closeSearch}
+        onQueryChange={handleQueryChange}
+        onSubmitQuery={() => commitQueryNow(draftQuery)}
+        onClearQuery={clearQuery}
+        onOpenMarket={() => {
+          playSound("tap");
+          setMarketPickerOpen(true);
+        }}
+        onCycleSort={() => {
+          playSound("tap");
+          const cycle = ["recommended", "newest", "price_asc", "price_desc"] as const;
+          const next =
+            cycle[(cycle.indexOf(criteria.sort as (typeof cycle)[number]) + 1) % cycle.length];
+          update({ sort: next });
+        }}
+      />
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isFacilitiesSection,
+    searchOpen,
+    draftQuery,
+    searchSaved,
+    activeFilterCount,
+    criteria.marketCountry,
+    criteria.sort,
+    criteria.industrialType,
+    facilityTypes,
+  ]);
+
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -1494,6 +1582,50 @@ export function SectionSearchApp({
           marketCountry={criteria.marketCountry}
           sort={criteria.sort}
           inputRef={inputRef}
+          onBack={goBack}
+          onSaveSearch={handleSaveSearch}
+          onOpenMap={() => {
+            playSound("tap");
+            Haptics.selectionAsync();
+            openOrLatchMap({ inResultsView, setMapMode, setWantMap });
+          }}
+          onOpenFilters={() => {
+            playSound("tap");
+            setShowFilters(true);
+          }}
+          onOpenSearch={openSearch}
+          onCloseSearch={closeSearch}
+          onQueryChange={handleQueryChange}
+          onSubmitQuery={() => commitQueryNow(draftQuery)}
+          onClearQuery={clearQuery}
+          onOpenMarket={() => {
+            playSound("tap");
+            setMarketPickerOpen(true);
+          }}
+          onCycleSort={() => {
+            playSound("tap");
+            const cycle = ["recommended", "newest", "price_asc", "price_desc"] as const;
+            const next =
+              cycle[(cycle.indexOf(criteria.sort as (typeof cycle)[number]) + 1) % cycle.length];
+            update({ sort: next });
+          }}
+        />
+      ) : isFacilitiesSection ? (
+        <FacilitiesHomeHeader
+          slot="pinned"
+          searchOpen={searchOpen}
+          draftQuery={draftQuery}
+          searchSaved={searchSaved}
+          activeFilterCount={activeFilterCount}
+          marketCountry={criteria.marketCountry}
+          sort={criteria.sort}
+          inputRef={inputRef}
+          types={facilityTypes}
+          activeType={criteria.industrialType}
+          onSelectType={(key) => {
+            playSound("tap");
+            selectIndustrialType(key as IndustrialType);
+          }}
           onBack={goBack}
           onSaveSearch={handleSaveSearch}
           onOpenMap={() => {
@@ -2495,7 +2627,7 @@ export function SectionSearchApp({
           onRefresh={retry}
           overlay={overlay}
           contentPaddingBottom={insets.bottom + 150}
-          listHeader={carScrollHeader}
+          listHeader={carScrollHeader ?? facilitiesScrollHeader}
         />
 
         {mapMode && inResultsView ? (
