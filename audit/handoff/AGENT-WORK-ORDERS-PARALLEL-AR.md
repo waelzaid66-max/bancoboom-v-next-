@@ -4,7 +4,7 @@
 **صادر بصلاحية المالك** · **المرجع العلمي:** `SOLUTION-THREE-HEADERS-SCIENTIFIC-AR.md`
 
 > **⛔ ممنوع يبدأ أي وكيل قبل ما يقرا `MASTER-PROFESSIONAL-HANDOVER-OWNER-TO-CLAUDE-AR.md` كامل.**
-> **✅ مفيش قرار موقّف شغل. كل المهام دي قابلة للتنفيذ فورًا.**
+> **⚠️ مهمة واحدة موقوفة بأمر المالك (B-1 المصانع) — الباقي قابل للتنفيذ فورًا.**
 
 ---
 
@@ -19,7 +19,7 @@
 | `search/property/PropertyHomeHeader.tsx` | **وكيل A** |
 | `search/materials/MaterialsHomeHeader.tsx` | **وكيل A** |
 | `search/stays/StaysHomeHeader.tsx` | **وكيل B** |
-| `search/facilities/FacilitiesHomeHeader.tsx` (جديد) | **وكيل B** |
+| ~~`search/facilities/FacilitiesHomeHeader.tsx`~~ | 🔴 **ممنوع إنشاؤه — Owner HOLD** |
 | `app/import/**` | **وكيل B** |
 | `MarketCountryPicker.tsx` | **وكيل A** |
 
@@ -151,44 +151,31 @@ cd ../.. && node scripts/chain-integrity-gate.mjs
 
 # 2) وكيل B — البناء الجديد والاستيراد
 
-**التخصص:** المصانع · الحجز · بوليش الاستيراد
-**السبب:** المصانع بناء من الصفر، والاستيراد منفصل تمامًا — صفر تعارض مع وكيل A.
+**التخصص:** الحجز · بوليش الاستيراد
+**السبب:** الاستيراد منفصل تمامًا عن ملفات وكيل A — صفر تعارض.
+**ملاحظة:** المصانع كانت في نطاقه واتشالت — موقوفة بأمر المالك (`B-1` تحت).
 
-## 🟢 B-1 · هيدر المصانع — **جديد بالكامل**
+## 🔴 B-1 · هيدر المصانع — **ملغي · موقوف بأمر المالك**
 
-| البند | القيمة |
-|---|---|
-| الملف | `components/search/facilities/FacilitiesHomeHeader.tsx` ← **إنشاء** |
-| الوضع الحالي | 🔴 **مفيش هيدر خاص** — بيستخدم العام (`SectionSearchApp.tsx:1496`) |
-| العلة | **مفيش هوية بصرية خالص** — لا wordmark، لا powered-by |
+> 🔴 **موقوف بأمر المالك — ممنوع البناء.**
+> `tests/section-miniapp-guard.test.mjs:2057-2070` فيه اختبار اسمه
+> *"W8-D: Factories screen locks facilities + chips chrome (no invented premium header)"*
+> ورسالته حرفيًا: **`"Factories premium header remains Owner HOLD — do not invent"`**
+> وفي الكود نفسه (`SectionSearchApp.tsx:1648`): **`Do NOT invent FactoriesHomeHeader.`**
+> **بناؤه هيفشّل البيلد.** لا يُرفع الحظر إلا بأمر صريح من المالك.
 
-### ⭐ ميزة القسم ده
+**الوضع الفعلي:** القسم بيستخدم الهيدر العام (`SectionSearchApp.tsx:1580` وما بعده)،
+ومعاه **زر خريطة في الهيدر** اتحط عن قصد في الموجة W9 (`D-W9-02`) لأن الـ FAB لوحده
+سهل ميتشافش. يعني القسم **مش مهمَل** — اتقرر يفضل على الكروم العام.
 
-**مالوش أي قيد** — بيتبني من الصفر، فحط `brandLockup` مضغوط جوه الشريحة المثبّتة **من أول لحظة**.
-**مفيش هجرة، مفيش مخاطرة. ده أفضل مهمة تبدأ بيها.**
+**⛔ ممنوع على أي وكيل:**
+- إنشاء `FacilitiesHomeHeader.tsx` أو `FactoriesHomeHeader.tsx`
+- إضافة فرع `isFacilitiesSection` للهيدر في `SectionSearchApp`
+- تعديل `app/section/factories.tsx` — الحارس بيقفل `category="facilities"` و `chrome={{ listingMode: "pill", engines: "chips" }}`
 
-### التحضير
-
-1. اقرا `CarsHomeHeader.tsx` كامل — ده المرجع
-2. اقرا `MaterialsHomeHeader.tsx` — الأقرب حجمًا
-3. حدد الـ wordmark الصح للمصانع (اسأل في القناة لو مش واضح)
-
-### التنفيذ
-
-| # | المهمة |
-|---|---|
-| 1 | إنشاء المكوّن بنفس بنية النطاقات (A–E) |
-| 2 | `slot` من أول لحظة · `brandLockup` **صف واحد** |
-| 3 | `testID` متسق: `facilities-home-header` · `facilities-hero-band` · `facilities-brand` |
-| 4 | **فرع جديد في `SectionSearchApp` زي `isCarSection` بالظبط** |
-| 5 | الأكسنت من `sectionAccent()` — ⛔ **ممنوع رقم لون مكتوب** |
-| 6 | توصيل `listHeader` |
-
-### ⛔ محاذير
-
-- ⛔ **ممنوع تشيل الهيدر العام** — أقسام تانية بتستخدمه. أضف فرع، متبدّلش
-- ⛔ **ممنوع أي رقم إحصائي** إلا من `scopedFacets` — الحارس هيفشّل البيلد
-- ⛔ **ممنوع أي أيقونة مش SVG**
+**لو المالك رفع الحظر صراحةً**، الخطة الجاهزة: نفس بنية نطاقات السيارات ·
+`slot` من أول لحظة · `brandLockup` صف واحد · أكسنت من `sectionAccent()` ·
+`testID` متسق · **فرع جديد** في `SectionSearchApp` (مش استبدال الهيدر العام).
 
 ---
 
@@ -281,7 +268,7 @@ cd ../.. && node scripts/chain-integrity-gate.mjs
 
 | الوكيل | المهمة |
 |---|---|
-| **B** | `B-1` هيدر المصانع ← **الأول لأنه بناء نظيف بيثبت النموذج** |
+| **B** | ~~`B-1` هيدر المصانع~~ 🔴 **موقوف** — ابدأ بـ `B-2-ب` الحجز |
 | **A** | `A-1` هيدر العقارات ← الأكبر، يستفيد من دروس المصانع |
 
 **بوابة:** لقطة قبل/بعد + قياس أول بطاقة.
@@ -309,7 +296,7 @@ cd ../.. && node scripts/chain-integrity-gate.mjs
 
 | # | الناقص | الحالة | المسؤول |
 |---|---|---|---|
-| 1 | هيدر المصانع | 🔴 **مش موجود** | B |
+| 1 | هيدر المصانع | 🔴 **موقوف بأمر المالك — ممنوع البناء** | المالك |
 | 2 | لوحة هيرو العقارات | 🔴 ناقصة — قرار 5 | المالك |
 | 3 | لوحة هيرو الحجز | 🔴 ناقصة | المالك |
 | 4 | لوحة هيرو المصانع | 🔴 ناقصة | المالك |

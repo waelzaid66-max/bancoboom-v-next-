@@ -194,9 +194,17 @@ audit/handoff/evidence/
 
 ## وكيل B
 
+> 🔴 **موقوف بأمر المالك — ممنوع البناء.**
+> `tests/section-miniapp-guard.test.mjs:2057-2070` فيه اختبار اسمه
+> *"W8-D: Factories screen locks facilities + chips chrome (no invented premium header)"*
+> ورسالته حرفيًا: **`"Factories premium header remains Owner HOLD — do not invent"`**
+> وفي الكود نفسه (`SectionSearchApp.tsx:1648`): **`Do NOT invent FactoriesHomeHeader.`**
+> **بناؤه هيفشّل البيلد.** لا يُرفع الحظر إلا بأمر صريح من المالك.
+
+
 | # | المهمة | الملف | الحالة |
 |---|---|---|---|
-| B-1 | **هيدر المصانع — جديد** | `facilities/FacilitiesHomeHeader.tsx` | 🟢 **ابدأ بيها** |
+| B-1 | ~~هيدر المصانع~~ | — | 🔴 **موقوف — Owner HOLD** |
 | B-2-أ | تعريب شعار الحجز | `stays/StaysHomeHeader.tsx` + i18n | 🟢 مخاطرة صفر |
 | B-2-ب | هيدر الحجز | `stays/StaysHomeHeader.tsx` (456) | 🟢 جاهز |
 | B-3-أ | **شيل الادعاءات الوهمية** | `import/auctions.tsx` + `import/index.tsx:181` | 🔴 مخالفة مؤكدة |
@@ -218,7 +226,7 @@ audit/handoff/evidence/
 
 | # | الناقص | المسؤول |
 |---|---|---|
-| 1 | هيدر المصانع | B |
+| 1 | هيدر المصانع | 🔴 **موقوف بأمر المالك** |
 | 2 | لوحة هيرو العقارات | **المالك** |
 | 3 | لوحة هيرو الحجز | **المالك** |
 | 4 | لوحة هيرو المصانع | **المالك** |
