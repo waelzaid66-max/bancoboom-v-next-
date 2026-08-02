@@ -48,15 +48,24 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "@/components/AppText";
 import { useI18n } from "@/context/LanguageContext";
+import { sectionAccent } from "@/lib/sectionTheme";
 import { VehicleGlyph, type VehicleGlyphName } from "./VehicleGlyph";
 
 const BANCO_LOGO = require("../../../assets/images/banco-logo.png");
 const BOOM_LOGO = require("../../../assets/images/boom-logo.png");
 
-/** Owner spec: pure black ground, one accent, no multi-colour gradients. */
+/** Owner spec: pure black ground, one accent, no multi-colour gradients.
+ *
+ *  The accent is taken from `sectionTheme`, not written here as a literal.
+ *  The spec asked for #E60012, but sampling the shipped brand asset settles it:
+ *  the dominant red in assets/images/banco-logo.png is #CF1626, and
+ *  SECTION_ACCENT.car (#CC1E24) sits 3/8/2 away from it per channel while
+ *  #E60012 sits 23/22/38 away. The section theme was already right — its own
+ *  comment calls #CC1E24 "the vivid flagship red, nearest the logo" — and
+ *  binding to it keeps this header from becoming a fifth competing red. */
 const VOID = "#050505";
 const SURFACE = "#111111";
-const ACCENT = "#E60012";
+const ACCENT = sectionAccent("car");
 const SNOW = "#FFFFFF";
 const ASH = "#8E8E93";
 const STEEL = "#C7C7CC";

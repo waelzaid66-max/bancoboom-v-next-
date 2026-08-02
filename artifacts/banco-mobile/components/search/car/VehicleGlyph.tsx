@@ -6,8 +6,15 @@
  * helicopter glyph, so mixing it with substitutes produced the inconsistent
  * icon row the owner rejected ("هوية الميني اب والطبقات مفقودة").
  *
+ * These sit in a strip beside real app icons, so they are drawn to the same
+ * spec the icon shim produces. `components/icons.tsx` forwards only size and
+ * colour to lucide, so every other icon in the app renders at lucide's own
+ * defaults — 24×24 viewBox, fill none, strokeWidth 2, round caps and joins
+ * (lucide-react-native/dist/esm/defaultAttributes.js). Drawn at 1.6 these read
+ * visibly lighter than the icons next to them.
+ *
  * Rules for anyone adding a type here:
- *   • 24×24 viewBox, stroke-only, strokeWidth 1.6, round caps/joins.
+ *   • 24×24 viewBox, stroke-only, strokeWidth 2, round caps/joins.
  *   • Wheels/rotors are the only closed shapes — never fill a body.
  *   • Keep the visual mass between y=6 and y=18 so every glyph optically
  *     centres against its neighbours in the horizontal strip.
@@ -48,7 +55,7 @@ export function VehicleGlyph({ name, size = 24, color = "#FFFFFF" }: Props) {
   const stroke = color;
   const common = {
     stroke,
-    strokeWidth: 1.6,
+    strokeWidth: 2,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
     fill: "none" as const,
