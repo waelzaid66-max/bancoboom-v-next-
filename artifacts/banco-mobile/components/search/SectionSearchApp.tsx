@@ -43,7 +43,12 @@ import {
   RE_MORE_TYPES,
 } from "@/components/search/property/PropertyHomeHeader";
 import { MaterialsHomeHeader } from "@/components/search/materials/MaterialsHomeHeader";
-import { CarsHomeHeader } from "@/components/search/car/CarsHomeHeader";
+import {
+  CAR_CATEGORIES,
+  CarsHomeHeader,
+  type CarHeroStat,
+} from "@/components/search/car/CarsHomeHeader";
+import type { VehicleGlyphName } from "@/components/search/car/VehicleGlyph";
 import { axisShape, type SectionChrome } from "@/components/search/sectionChrome";
 import { MiniAppBottomNav } from "@/components/MiniAppBottomNav";
 import {
@@ -67,6 +72,7 @@ import {
 import { labelForValue } from "@/constants/locations";
 import {
   DEFAULT_MARKET_COUNTRY,
+  MARKET_COUNTRIES,
   MATERIAL_TYPES,
   PROPERTY_TYPES,
   sectionEmptyPostRequestCategory,
@@ -554,6 +560,15 @@ export function SectionSearchApp({
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [brandValue, setBrandValue] = useState<string | null>(null);
   const [carPickerOpen, setCarPickerOpen] = useState(false);
+  /** B-oom Car: the filter axes open COLLAPSED. They used to paint five wrapped
+   *  chip rows across the first screen and bury the results (owner, 2026-08-01).
+   *  Nothing is deleted — market/sort/mode/engines/brand/origin all keep their
+   *  single seat, they just wait behind one control. */
+  const [carFiltersOpen, setCarFiltersOpen] = useState(false);
+  /** Hero quick-category → free text. Not a taxonomy enum on purpose: the
+   *  marine/aviation vehicle taxonomy is unapproved (REL-21) and an unsupported
+   *  enum returns nothing. See the note in CarsHomeHeader. */
+  const [carCategory, setCarCategory] = useState<VehicleGlyphName | null>(null);
 
   const autocompleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -838,6 +853,58 @@ export function SectionSearchApp({
   const showMaterialsLayer2 = showMaterialChrome;
   const showCarOriginChrome = criteria.category === "car" && !lockedEngine;
   const showCarBrandStrip = criteria.category === "car" && !lockedEngine;
+  /**
+   * Hero quick-category gate. Owner rule 2026-08-01: no fake anything.
+   *
+   * FacetCounts has no vehicle-type map (category · condition · fuel_type ·
+   * transmission · payment_plan · property_type · finishing_type · offer_type ·
+   * industrial_type · industry · origin_type), and GET /v1/search has no
+   * body_type param — the API cannot separate a yacht from a sedan today. So
+   * every one of the owner's 21 types is ungated and the strip stays empty,
+   * exactly as lib/facets.ts requires ("never surface a chip that returns
+   * nothing"). Point `typeCounts` at the real map when it ships; the strip,
+   * the glyphs and the labels are already built.
+   */
+  const carHeroCategories = useMemo(() => {
+    if (!isCarSection) return [];
+    const typeCounts: Record<string, number> | undefined = undefined;
+    if (!typeCounts) return [];
+    return CAR_CATEGORIES.filter(
+      (c) => c.key === "more" || (typeCounts[c.key] ?? 0) > 0,
+    );
+  }, [isCarSection]);
+
+  /**
+   * Hero stats. Every entry is a live count or it does not exist.
+   *
+   * `scopedFacets.category` is the real per-category tally of active, publicly
+   * visible listings for the chosen market — the same source the browse chips
+   * already trust. While it loads, the band is simply absent (no skeleton
+   * pretending to be a number, no last-known value).
+   *
+   * The mock's other five figures — 1.2M+ vehicles, 950+ dealers, 18+ auctions,
+   * 34+ ports, 92+ shipping lines — have NO endpoint behind them anywhere in
+   * this repo. They are not written here as literals and must not be: this
+   * screen is the front door of a marketplace people spend money in.
+   */
+  const carHeroStats = useMemo<CarHeroStat[]>(() => {
+    if (!isCarSection) return [];
+    const out: CarHeroStat[] = [];
+    const liveCars = scopedFacets?.category?.car;
+    if (typeof liveCars === "number" && liveCars > 0) {
+      out.push({
+        key: "vehicles",
+        value: `${liveCars}`,
+        labelKey: "search.discover.section.carStatVehicles",
+      });
+    }
+    out.push({
+      key: "markets",
+      value: `${MARKET_COUNTRIES.length}`,
+      labelKey: "search.discover.section.carStatCountries",
+    });
+    return out;
+  }, [isCarSection, scopedFacets]);
   const showRentalTerms =
     criteria.category === "real_estate" &&
     (activeOfferKey === "rent" ||
@@ -1395,6 +1462,36 @@ export function SectionSearchApp({
           onQueryChange={handleQueryChange}
           onSubmitQuery={() => commitQueryNow(draftQuery)}
           onClearQuery={clearQuery}
+          categories={carHeroCategories}
+          selectedCategory={carCategory}
+          stats={carHeroStats}
+          onSelectCategory={(key) => {
+            playSound("tap");
+            // "More" is not a vehicle type — it is the way into the axes that
+            // used to sprawl across the first screen.
+            if (key === "more") {
+              setCarFiltersOpen(true);
+              return;
+            }
+            const next = carCategory === key ? null : key;
+            setCarCategory(next);
+            const term = next
+              ? t(
+                  CAR_CATEGORIES.find((c) => c.key === next)?.i18nKey ??
+                    "search.discover.section.carTypeCars",
+                )
+              : "";
+            setDraftQuery(term);
+            commitQueryNow(term);
+          }}
+          onOpenNotifications={() => {
+            playSound("tap");
+            router.push("/notifications");
+          }}
+          onOpenProfile={() => {
+            playSound("tap");
+            router.push("/(tabs)/profile" as Href);
+          }}
         />
       ) : (
       <>
@@ -1603,11 +1700,66 @@ export function SectionSearchApp({
       {/* ── B-PROPERTIES service desks retired from first paint — offer/map/request
           live in FilterSheet + Band D. Import-hub rule still holds: no dead taps. ── */}
 
+      {/* ── B-oom Car: ONE control in front of every axis below.
+          Before this, market + sort + mode + engines + brand + origin painted
+          five wrapped chip rows over the first screen and the results started
+          off-screen. The axes are unchanged and un-deleted — they are simply
+          collapsed until asked for, which is what "الفلاتر" now means. ── */}
+      {isCarSection ? (
+        <Pressable
+          onPress={() => {
+            playSound("tap");
+            setCarFiltersOpen((v) => !v);
+          }}
+          style={[
+            styles.carFilterToggle,
+            {
+              backgroundColor: carFiltersOpen ? accent : colors.secondary,
+              flexDirection: rowDir,
+            },
+          ]}
+          testID="car-filters-toggle"
+          accessibilityRole="button"
+          accessibilityState={{ expanded: carFiltersOpen }}
+        >
+          <Feather
+            name="sliders"
+            size={14}
+            color={carFiltersOpen ? "#FFFFFF" : colors.mutedForeground}
+          />
+          <AppText
+            style={[
+              styles.carFilterToggleText,
+              { color: carFiltersOpen ? "#FFFFFF" : colors.foreground },
+            ]}
+          >
+            {t(
+              carFiltersOpen
+                ? "search.discover.section.carFiltersHide"
+                : "search.discover.section.carFiltersShow",
+            )}
+          </AppText>
+          {!carFiltersOpen && activeFilterCount > 0 ? (
+            <View style={[styles.carFilterToggleCount, { backgroundColor: accent }]}>
+              <AppText style={styles.carFilterToggleCountText}>
+                {activeFilterCount}
+              </AppText>
+            </View>
+          ) : null}
+          <Feather
+            name={carFiltersOpen ? "chevron-up" : "chevron-down"}
+            size={15}
+            color={carFiltersOpen ? "#FFFFFF" : colors.mutedForeground}
+          />
+        </Pressable>
+      ) : null}
+
       {/* ── Primary chip strip: country/currency · sort · mode/engines.
           RE/materials: country + sort live inside home headers.
           B-oom Car: market/sort SoT = this strip only (W8 D-W8-01); listingMode
-          + engines chips stay visible (REL-17). ── */}
-      {!isRealEstateSection && !isMaterialsSection ? (
+          + engines chips stay visible (REL-17) — visible meaning "on this strip
+          and nowhere else", now behind the car collapse above. ── */}
+      {!isRealEstateSection && !isMaterialsSection && (!isCarSection || carFiltersOpen) ? (
       <View
         style={[styles.chipStrip, { flexDirection: rowDir }]}
         testID="section-primary-strip"
@@ -1847,7 +1999,7 @@ export function SectionSearchApp({
           Replaces the old brand-only row + the separate origin row, saving
           ~50dp of vertical chrome. Brand collapses to a single icon+label
           button (active = accent, shows chosen brand; idle = grid icon).  ── */}
-      {showCarBrandStrip ? (
+      {showCarBrandStrip && carFiltersOpen ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -2496,6 +2648,36 @@ const styles = StyleSheet.create({
     height: 20,
     opacity: 0.5,
     marginHorizontal: 2,
+  },
+  // B-oom Car collapse. Sits on the same 12 left edge / 8 rhythm as every other
+  // strip so opening it does not shift the column sideways.
+  carFilterToggle: {
+    alignSelf: "flex-start",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 18,
+  },
+  carFilterToggleText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  carFilterToggleCount: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+  },
+  carFilterToggleCountText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
   },
   stripChip: {
     paddingHorizontal: 14,

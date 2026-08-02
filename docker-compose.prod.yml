@@ -65,7 +65,11 @@ services:
       - banco_net
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-    command: ["pnpm", "--filter", "@workspace/db", "run", "push", "--", "--force"]
+    # Applies committed migrations in order, once each. Was `push -- --force`
+    # — second row of the adoption table in lib/db/MIGRATIONS.md. An existing
+    # database must be stamped once before this works:
+    #     DATABASE_URL=... pnpm --filter @workspace/db run baseline
+    command: ["pnpm", "--filter", "@workspace/db", "run", "migrate"]
 
   # ── API server ──────────────────────────────────────────────────────────────
   api:
