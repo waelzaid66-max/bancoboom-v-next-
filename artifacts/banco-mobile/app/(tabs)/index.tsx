@@ -207,8 +207,43 @@ function Rail({ title, items, onCardPress, onSave, isSaved }: RailProps) {
 // component used before its definition throws a ReferenceError at runtime.
 const BOOM_LOGO = require("../../assets/images/boom-logo.png");
 const BOOM_ASPECT = 2045 / 769; // native px of the official B-OOM asset
-const BOOM_H = 16; // fixed, smaller than the 26px BANCO wordmark (never competes)
+/**
+ * 21, up from 16 — owner asked for "2mm bigger, same shape, same motion".
+ *
+ * Measured against the wordmark's WIDTH, which is the dimension a reader
+ * actually registers: 16dp put it at 43dp wide, 21dp puts it at 56dp, so it
+ * grows 13dp. Android defines 160dp as a physical inch, which makes 13dp
+ * 2.06mm — the ask, to two decimal places. Height grows only 5dp (0.79mm), so
+ * it still sits well under the 26dp BANCO wordmark and never competes with it.
+ */
+const BOOM_H = 21;
 const BOOM_W = Math.round(BOOM_H * BOOM_ASPECT);
+/**
+ * Why the mark was hard to see, which was NOT its size.
+ *
+ * `styles.spark` is `flex: 1` with `overflow: hidden`, so it only gets what the
+ * header row has left over — and the row spends 103.6dp on the BANCO logo,
+ * 122dp on three action buttons and 48dp on four gaps. Measured:
+ *
+ *     320dp screen → 14.4dp of spark   43dp mark → CLIPPED to a third of itself
+ *     360dp screen → 54.4dp of spark   fits at rest, clipped at the pulse peak
+ *     390dp screen → 84.4dp of spark   comfortable
+ *
+ * On a narrow phone the owner was not looking at a small mark, he was looking
+ * at the middle third of one. Growing it alone would have clipped MORE.
+ *
+ * So the mark now shrinks to fit instead of being cut: capped at 90% of the
+ * space, which leaves exactly the headroom the 1.10 pulse needs (0.9 × 1.10 =
+ * 0.99), so the peak still cannot reach the clip — or the BANCO logo, which is
+ * what the clip is there to protect. Wide screens get the full 2mm; narrow ones
+ * get a whole wordmark instead of a fragment. Shape, motion and logic all
+ * unchanged.
+ */
+const BOOM_FIT: { flexShrink: 1; maxWidth: "90%" } = {
+  flexShrink: 1,
+  maxWidth: "90%",
+};
+const BOOM_IMG = { width: BOOM_W, height: BOOM_H, maxWidth: "100%" } as const;
 
 function HeaderSpark() {
   const reduceMotion = useReducedMotion();
@@ -237,8 +272,10 @@ function HeaderSpark() {
       ),
       transform: [
         {
-          // Max scale 1.10 on the 16px mark ≈ +1.6px (~0.25mm) — a clear pulse
-          // well under the owner's 1mm cap; never exaggerated.
+          // Unchanged, on the owner's instruction — same motion, same logic.
+          // Max scale 1.10 now rides a 56dp-wide mark, so the pulse travels
+          // ~5.6dp (~0.9mm) instead of ~4.3dp: still inside the 1mm cap, and
+          // the 90% width guard keeps the peak clear of the clip either way.
           scale: interpolate(
             t.value,
             [0, 0.15, 0.5, 0.85, 1],
@@ -253,23 +290,17 @@ function HeaderSpark() {
   if (reduceMotion) {
     return (
       <View style={styles.spark} pointerEvents="none">
-        <Image
-          source={BOOM_LOGO}
-          style={{ width: BOOM_W, height: BOOM_H }}
-          contentFit="contain"
-        />
+        <View style={BOOM_FIT}>
+          <Image source={BOOM_LOGO} style={BOOM_IMG} contentFit="contain" />
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.spark} pointerEvents="none">
-      <Animated.View style={logoStyle}>
-        <Image
-          source={BOOM_LOGO}
-          style={{ width: BOOM_W, height: BOOM_H }}
-          contentFit="contain"
-        />
+      <Animated.View style={[BOOM_FIT, logoStyle]}>
+        <Image source={BOOM_LOGO} style={BOOM_IMG} contentFit="contain" />
       </Animated.View>
     </View>
   );
