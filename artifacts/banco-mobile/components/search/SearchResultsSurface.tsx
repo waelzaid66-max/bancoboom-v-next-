@@ -2,14 +2,17 @@ import { FeedItem } from "@workspace/api-client-react";
 import React, { useEffect, useRef } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
   View,
 } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import Animated, {
+  FadeInDown,
+  useAnimatedScrollHandler,
+  type SharedValue,
+} from "react-native-reanimated";
 
 import { Feather } from "@/components/icons";
 import { AppText } from "@/components/AppText";
@@ -75,6 +78,20 @@ interface SearchResultsSurfaceProps {
    * behaviour it had before.
    */
   listHeader?: React.ReactElement | null;
+  /**
+   * Where the list currently is, published for chrome that lives OUTSIDE it.
+   *
+   * A caller that keeps a pinned bar above this surface has no other way to
+   * know the list moved, so a collapsing header had to either re-enter the list
+   * or be driven from JS state — one costs the architecture, the other costs
+   * frames. Handing a shared value down keeps the whole read on the UI thread:
+   * the scroll handler writes it as a worklet and the caller interpolates from
+   * it, so nothing here re-renders while the user scrolls.
+   *
+   * Optional by design — omit it and no scroll handler is attached at all, so
+   * the list keeps the exact behaviour it had before.
+   */
+  scrollY?: SharedValue<number>;
 }
 
 /**
@@ -103,6 +120,7 @@ export function SearchResultsSurface({
   contentPaddingBottom = 120,
   CardComponent,
   listHeader,
+  scrollY,
 }: SearchResultsSurfaceProps) {
   const colors = useColors();
   const { t, isRTL } = useI18n();
@@ -118,9 +136,19 @@ export function SearchResultsSurface({
 
   const showBanner = !!error && !overlay && items.length > 0;
 
+  // Runs as a worklet on the UI thread, so publishing the offset costs no
+  // render and no bridge hop. Guarded because `scrollY` is optional: a caller
+  // that never asked for the offset gets a handler that does nothing, and we
+  // leave `onScroll` off the list entirely for that case.
+  const handleScroll = useAnimatedScrollHandler((event) => {
+    if (scrollY) scrollY.value = event.contentOffset.y;
+  });
+
   return (
     <View style={styles.fill}>
-      <FlatList
+      <Animated.FlatList
+        onScroll={scrollY ? handleScroll : undefined}
+        scrollEventThrottle={16}
         data={items}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {

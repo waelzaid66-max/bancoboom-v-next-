@@ -26,6 +26,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSharedValue } from "react-native-reanimated";
 
 import { AppText } from "@/components/AppText";
 import { CarPicker } from "@/components/CarPicker";
@@ -1346,7 +1347,14 @@ export function SectionSearchApp({
    * The top bar and the search row stay pinned above the list — they are how a
    * buyer changes the query, and the non-results overlay would swallow them if
    * they lived in here.
+   *
+   * `carScrollY` is how the two halves stay in step. The list writes its offset
+   * to it on the UI thread and the pinned half interpolates its collapse from
+   * it, so the header answers the scroll without either half re-rendering, and
+   * without the hero having to leave the list to be animated.
    */
+  const carScrollY = useSharedValue(0);
+
   const carScrollHeader = useMemo(() => {
     if (!isCarSection) return null;
     return (
@@ -1525,6 +1533,7 @@ export function SectionSearchApp({
       ) : isCarSection ? (
         <CarsHomeHeader
           slot="pinned"
+          scrollY={carScrollY}
           searchOpen={searchOpen}
           draftQuery={draftQuery}
           searchSaved={searchSaved}
@@ -2496,6 +2505,10 @@ export function SectionSearchApp({
           overlay={overlay}
           contentPaddingBottom={insets.bottom + 150}
           listHeader={carScrollHeader}
+          // Only Cars splits its header, so only Cars needs the offset. Every
+          // other section leaves this undefined and the list attaches no scroll
+          // handler at all.
+          scrollY={isCarSection ? carScrollY : undefined}
         />
 
         {mapMode && inResultsView ? (

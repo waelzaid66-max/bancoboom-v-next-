@@ -43,7 +43,20 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import Svg, { Defs, Ellipse, RadialGradient, Stop } from "react-native-svg";
+import Svg, {
+  Defs,
+  Ellipse,
+  LinearGradient,
+  Rect,
+  RadialGradient,
+  Stop,
+} from "react-native-svg";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  type SharedValue,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "@/components/AppText";
@@ -54,24 +67,63 @@ import { VehicleGlyph, type VehicleGlyphName } from "./VehicleGlyph";
 const BANCO_LOGO = require("../../../assets/images/banco-logo.png");
 const BOOM_LOGO = require("../../../assets/images/boom-logo.png");
 
-/** Owner spec: pure black ground, one accent, no multi-colour gradients.
+/** Owner brief (2026-08-02): layered dark ground, one accent, premium depth.
  *
- *  The accent is taken from `sectionTheme`, not written here as a literal.
- *  The spec asked for #E60012, but sampling the shipped brand asset settles it:
- *  the dominant red in assets/images/banco-logo.png is #CF1626, and
- *  SECTION_ACCENT.car (#CC1E24) sits 3/8/2 away from it per channel while
- *  #E60012 sits 23/22/38 away. The section theme was already right — its own
- *  comment calls #CC1E24 "the vivid flagship red, nearest the logo" — and
- *  binding to it keeps this header from becoming a fifth competing red. */
-const VOID = "#050505";
-const SURFACE = "#111111";
+ *  Every neutral below is the brief's literal value. The RED is the one place
+ *  the brief is overruled, on the owner's own instruction — "the colours must be
+ *  as close as possible to the identity of the application as a whole".
+ *
+ *  Measured, not argued: the dominant red in the shipped brand asset
+ *  (assets/images/banco-logo.png) is #CF1626. Perceptual distance to it:
+ *      SECTION_ACCENT.car #CC1E24 → ΔE 2.4   (below the noticeable threshold)
+ *      the brief's        #E60012 → ΔE 16.7  (plainly a different red)
+ *  So the locked section token IS the logo red, and the brief's value is not.
+ *  Both clear contrast (white on #CC1E24 = 5.56:1, on #E60012 = 4.80:1), so this
+ *  is an identity call, not an accessibility one.
+ *
+ *  sectionTheme.ts carries a user-locked identity rule: every section colour is
+ *  a derivative of the logo red, and sections separate by depth, not by hue.
+ *  Moving car to #E60012 would put it 24–37 ΔE from its own siblings. The accent
+ *  therefore stays BOUND to `sectionAccent("car")` — never a literal here — and
+ *  the glow and the bright accent are DERIVED from it, so the header never shows
+ *  two unrelated reds. */
+const VOID = "#090909";
+const SECONDARY = "#121212";
+const SURFACE = "#181818";
 const ACCENT = sectionAccent("car");
+/** The brief's glow is its red at 18%. Ours is the identity red at 18%. */
+const GLOW = "rgba(204,30,36,0.18)";
+/** The brief's #FF2B2B lifted from OUR red instead of theirs — same job (the
+ *  brighter tint for active states), same family as everything around it. */
+const ACCENT_BRIGHT = "#FF3A40";
 const SNOW = "#FFFFFF";
-const ASH = "#8E8E93";
+const ASH = "#A5A5A5";
 const STEEL = "#C7C7CC";
-const HAIRLINE = "rgba(255,255,255,0.10)";
+const HAIRLINE = "rgba(255,255,255,0.06)";
 
 const HERO_MIN_HEIGHT = 244;
+
+/** Brief metrics. 94 → 60 is the TOP ROW, which is what the brief calls the
+ *  header: the search bar is its own sticky element below and keeps its 54
+ *  whether the header is open or shut. At 94 the brand block has room for the
+ *  wordmark and the powered-by line under it; 60 is a single 48dp control row
+ *  plus its padding, so the second line has to go on the way down. */
+const HEADER_EXPANDED = 94;
+const HEADER_COLLAPSED = 60;
+/** Scroll travel the collapse is mapped over — a separate number from the 34dp
+ *  of height it removes. Tying the two together would slam the header shut in
+ *  34px of finger movement; ~40% of the hero reads as the header answering the
+ *  scroll rather than snapping. */
+const COLLAPSE_SCROLL = 96;
+const LOGO_SCALE_MIN = 0.82;
+const BOTTOM_RADIUS = 20;
+const PAD_H = 16;
+const GAP = 12;
+/** 48dp minimum touch target — the brief asks for it and the previous 40×40
+ *  hit boxes were under it, which is an accessibility defect, not a taste call. */
+const TAP = 48;
+const SEARCH_H = 54;
+const SEARCH_R = 28;
 
 /** Trust row — monochrome only, accent is spent on the filter button.
  *
@@ -166,6 +218,17 @@ type Props = {
    *              it scrolls off and gives the screen back.
    */
   slot?: "all" | "pinned" | "scroll";
+  /**
+   * How far the results list has scrolled, published by SearchResultsSurface.
+   *
+   * Only the "pinned" slot reads it, and only to collapse: the top row scales
+   * and fades out, the search row stays put. Everything is derived on the UI
+   * thread through `useAnimatedStyle`, so scrolling drives no React render.
+   *
+   * Optional. Without it the header paints its expanded state and never moves —
+   * which is exactly what it did before, so no caller is forced to opt in.
+   */
+  scrollY?: SharedValue<number>;
   onBack: () => void;
   onSaveSearch: () => void;
   onOpenMap: () => void;
@@ -203,6 +266,7 @@ export function CarsHomeHeader({
   onOpenNotifications,
   onOpenProfile,
   slot = "all",
+  scrollY,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { t, isRTL } = useI18n();
@@ -219,31 +283,122 @@ export function CarsHomeHeader({
   const showPinned = slot === "all" || slot === "pinned";
   const showScroll = slot === "all" || slot === "scroll";
 
+  // ── Collapse. Every value below is read off the shared offset on the UI
+  // thread, so a scroll never re-renders this component. `interpolate` is a
+  // straight mapping with no spring and no overshoot, which is what the brief
+  // means by "no bounce, no spring — professional motion only": the header is
+  // not playing an animation, it is tracking the finger.
+  //
+  // Hooks are unconditional; when no offset was handed down, `progress` is a
+  // constant 0 and every style below resolves to the expanded state.
+  const collapse = useAnimatedStyle(() => {
+    const p = scrollY
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
+      : 0;
+    return {
+      height: HEADER_EXPANDED + (HEADER_COLLAPSED - HEADER_EXPANDED) * p,
+    };
+  });
+
+  // The wordmark shrinks to 82% exactly as specced. Scaling (not resizing) keeps
+  // the glyphs on the GPU — no text re-layout per frame.
+  const logoCollapse = useAnimatedStyle(() => {
+    const p = scrollY
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
+      : 0;
+    return { transform: [{ scale: 1 + (LOGO_SCALE_MIN - 1) * p }] };
+  });
+
+  // The powered-by line is the row that 60dp cannot hold. It leaves first, over
+  // the first 60% of the travel, so the wordmark is never crowded mid-collapse.
+  const poweredCollapse = useAnimatedStyle(() => {
+    const p = scrollY
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL * 0.6], [1, 0], Extrapolation.CLAMP)
+      : 1;
+    return { opacity: p };
+  });
+
+  // Shadow deepens as the header takes over from the content behind it. iOS
+  // reads opacity/radius, Android reads elevation — both are animatable here.
+  const liftCollapse = useAnimatedStyle(() => {
+    const p = scrollY
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
+      : 0;
+    return {
+      shadowOpacity: 0.18 + 0.34 * p,
+      shadowRadius: 8 + 12 * p,
+      elevation: 2 + 10 * p,
+    };
+  });
+
   return (
-    <View
-      style={[styles.root, { paddingTop: slot === "scroll" ? 0 : topPad }]}
+    <Animated.View
+      style={[
+        styles.root,
+        { paddingTop: slot === "scroll" ? 0 : topPad },
+        // The rounded bottom edge and the lift belong to the pinned bar — it is
+        // the piece that sits OVER the results. The scrolling half is inside the
+        // list, where a shadow would trail the hero down the screen.
+        showPinned && !showScroll ? styles.pinnedShell : null,
+        showPinned && !showScroll ? liftCollapse : null,
+      ]}
       testID={slot === "scroll" ? "cars-hero-band" : "cars-home-header"}
     >
+      {/* "No flat background" — the pinned bar gets the same treatment as the
+          hero, scaled down: a vertical lift so the bar has a top edge, and a
+          faint red wash under the brand so the accent is present even when the
+          header is collapsed to a single row. Vector, so it costs no memory and
+          cannot band on a wide gamut screen. */}
+      {showPinned && !showScroll ? (
+        <View style={styles.barBackdrop} pointerEvents="none">
+          <Svg width="100%" height="100%">
+            <Defs>
+              <LinearGradient id="carBarGround" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={SECONDARY} stopOpacity="1" />
+                <Stop offset="1" stopColor={VOID} stopOpacity="1" />
+              </LinearGradient>
+              <RadialGradient id="carBarWash" cx="50%" cy="50%" r="50%">
+                <Stop offset="0" stopColor={ACCENT} stopOpacity="0.14" />
+                <Stop offset="1" stopColor={ACCENT} stopOpacity="0" />
+              </RadialGradient>
+            </Defs>
+            <Rect x="0" y="0" width="100%" height="100%" fill="url(#carBarGround)" />
+            <Ellipse cx="50%" cy="18%" rx="46%" ry="58%" fill="url(#carBarWash)" />
+          </Svg>
+        </View>
+      ) : null}
+
       {/* ── Band A — top bar. Back · brand · bell · profile. Nothing else. ── */}
       {showPinned ? (
-      <View style={[styles.topBar, { flexDirection: rowDir }]}>
-        <Pressable
-          onPress={onBack}
-          style={styles.iconHit}
-          hitSlop={12}
-          testID="section-back"
-          accessibilityRole="button"
-          accessibilityLabel={t("common.back")}
-        >
-          <Feather
-            name={isRTL ? "arrow-right" : "arrow-left"}
-            size={22}
-            color={SNOW}
-          />
-        </Pressable>
+      <Animated.View
+        style={[styles.topBar, { flexDirection: rowDir }, collapse]}
+      >
+        {/* The brief wants the logo optically centred "regardless of left/right
+            buttons", and this row is lopsided by design — one control leading,
+            two trailing. Reserving the SAME width on both sides is what makes
+            the centre true, and unlike absolute positioning it cannot let the
+            wordmark slide under a button on a narrow screen. */}
+        <View style={[styles.topSide, { flexDirection: rowDir }]}>
+          <Pressable
+            onPress={onBack}
+            style={styles.iconHit}
+            hitSlop={12}
+            testID="section-back"
+            accessibilityRole="button"
+            accessibilityLabel={t("common.back")}
+          >
+            <Feather
+              name={isRTL ? "arrow-right" : "arrow-left"}
+              size={22}
+              color={SNOW}
+            />
+          </Pressable>
+        </View>
 
         <View style={styles.brandBlock} testID="cars-boom-brand">
-          <View style={[styles.wordmarkRow, { flexDirection: rowDir }]}>
+          <Animated.View
+            style={[styles.wordmarkRow, { flexDirection: rowDir }, logoCollapse]}
+          >
             <Image
               source={BOOM_LOGO}
               style={styles.wordmarkBoom}
@@ -252,8 +407,10 @@ export function CarsHomeHeader({
             <AppText style={styles.wordmarkCar} numberOfLines={1}>
               {t("search.discover.section.carBrand")}
             </AppText>
-          </View>
-          <View style={[styles.poweredRow, { flexDirection: rowDir }]}>
+          </Animated.View>
+          <Animated.View
+            style={[styles.poweredRow, { flexDirection: rowDir }, poweredCollapse]}
+          >
             <AppText style={styles.poweredLabel} numberOfLines={1}>
               {t("booking.poweredBy")}
             </AppText>
@@ -263,7 +420,7 @@ export function CarsHomeHeader({
               contentFit="contain"
               tintColor={ACCENT}
             />
-          </View>
+          </Animated.View>
         </View>
 
         <View style={[styles.topActions, { flexDirection: rowDir }]}>
@@ -289,19 +446,33 @@ export function CarsHomeHeader({
             <Feather name="user" size={20} color={SNOW} />
           </Pressable>
         </View>
-      </View>
+      </Animated.View>
       ) : null}
 
-      {/* ── Band B — hero. Red ambient lighting only; no photo collage. ── */}
+      {/* ── Band B — hero. Depth is BUILT, never photographed: the brief asks
+              for a layered gradient, red ambience and a vignette, and every one
+              of them is drawn here in react-native-svg. No raster, so it is
+              resolution-free and cannot band, clip or blur on any Android
+              density — which is the whole reason the brief bans PNG. ── */}
       {showScroll ? (
       <View style={styles.hero} testID="cars-hero">
         <View style={styles.heroGlow} pointerEvents="none">
-          {/* Two soft red sources — a key light off to the trailing side and a
-              floor bounce along the bottom edge. The ELLIPSE carries the shape
-              (rx/ry); the gradient only carries the falloff (r), which is the
-              only radius SVG's radialGradient actually has. */}
+          {/* Four layers, back to front:
+                1 ground   a vertical lift off #090909 so the band is not flat
+                2 key      a soft red source off the trailing side
+                3 floor    the bounce along the bottom edge
+                4 vignette corners pulled down, which is what makes the middle
+                           read as lit rather than merely lighter
+              The ELLIPSE carries the shape (rx/ry); the gradient only carries
+              the falloff (r), which is the only radius SVG's radialGradient
+              actually has. */}
           <Svg width="100%" height="100%">
             <Defs>
+              <LinearGradient id="carHeroGround" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={SECONDARY} stopOpacity="1" />
+                <Stop offset="0.55" stopColor={VOID} stopOpacity="1" />
+                <Stop offset="1" stopColor={VOID} stopOpacity="1" />
+              </LinearGradient>
               <RadialGradient id="carHeroKey" cx="50%" cy="50%" r="50%">
                 <Stop offset="0" stopColor={ACCENT} stopOpacity="0.40" />
                 <Stop offset="0.5" stopColor={ACCENT} stopOpacity="0.13" />
@@ -311,9 +482,29 @@ export function CarsHomeHeader({
                 <Stop offset="0" stopColor={ACCENT} stopOpacity="0.22" />
                 <Stop offset="1" stopColor={ACCENT} stopOpacity="0" />
               </RadialGradient>
+              {/* Inverted falloff: transparent at the centre, black at the rim.
+                  Drawn last so it darkens the ambience too, not just the ground. */}
+              <RadialGradient id="carHeroVignette" cx="50%" cy="50%" r="72%">
+                <Stop offset="0.45" stopColor="#000000" stopOpacity="0" />
+                <Stop offset="1" stopColor="#000000" stopOpacity="0.55" />
+              </RadialGradient>
             </Defs>
+            <Rect
+              x="0"
+              y="0"
+              width="100%"
+              height="100%"
+              fill="url(#carHeroGround)"
+            />
             <Ellipse cx="74%" cy="46%" rx="58%" ry="72%" fill="url(#carHeroKey)" />
             <Ellipse cx="50%" cy="100%" rx="72%" ry="34%" fill="url(#carHeroFloor)" />
+            <Rect
+              x="0"
+              y="0"
+              width="100%"
+              height="100%"
+              fill="url(#carHeroVignette)"
+            />
           </Svg>
         </View>
 
@@ -500,7 +691,7 @@ export function CarsHomeHeader({
           ))}
         </ScrollView>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -509,49 +700,99 @@ const styles = StyleSheet.create({
     backgroundColor: VOID,
     paddingBottom: 8,
   },
+  /** Only the pinned bar. Rounded bottom edge per the brief, and the shadow
+   *  colour/offset the animated lift drives the opacity and radius of. */
+  pinnedShell: {
+    borderBottomLeftRadius: BOTTOM_RADIUS,
+    borderBottomRightRadius: BOTTOM_RADIUS,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    // z-index above the results so the rounded edge reads as an overlap, not a
+    // seam. Android needs both this and elevation to order correctly.
+    zIndex: 10,
+  },
+  /** The gradient plate, clipped to the shell's rounded corners. The clipping
+   *  lives HERE and not on the shell because `overflow: hidden` on a view that
+   *  also carries elevation drops the shadow on several Android versions. */
+  barBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    borderBottomLeftRadius: BOTTOM_RADIUS,
+    borderBottomRightRadius: BOTTOM_RADIUS,
+    overflow: "hidden",
+  },
 
   // Band A
   topBar: {
     alignItems: "center",
-    minHeight: 56,
-    paddingHorizontal: 8,
+    // Height is driven by the collapse; this is the floor for the "all" slot,
+    // which has no scroll offset and therefore never animates.
+    minHeight: HEADER_COLLAPSED,
+    paddingHorizontal: PAD_H,
+    gap: 4,
   },
   iconHit: {
-    width: 40,
-    height: 40,
+    width: TAP,
+    height: TAP,
+    borderRadius: TAP / 2,
     alignItems: "center",
     justifyContent: "center",
+    // "Dark glass" per the brief — a lifted plane, not a hole in the header.
+    backgroundColor: SECONDARY,
+    overflow: "hidden",
+  },
+  /** Both flanks claim the same width so the brand block between them lands on
+   *  the true centre of the header. The trailing side is the wider of the two
+   *  (two controls), so it sets the number. */
+  topSide: {
+    minWidth: TAP * 2 + 8,
+    alignItems: "center",
   },
   topActions: {
     alignItems: "center",
+    justifyContent: "flex-end",
+    minWidth: TAP * 2 + 8,
+    gap: 8,
   },
   bellDot: {
     position: "absolute",
-    top: 9,
-    end: 9,
-    width: 7,
-    height: 7,
+    // Recentred for the 48dp button: the badge rides the icon's top-trailing
+    // corner, which moved out by 4 on each axis when the hit box grew from 40.
+    top: 13,
+    end: 13,
+    width: 8,
+    height: 8,
     borderRadius: 4,
-    backgroundColor: ACCENT,
+    backgroundColor: ACCENT_BRIGHT,
+    // Ringed against the glass so the dot never melts into the icon behind it.
+    borderWidth: 1.5,
+    borderColor: SECONDARY,
   },
   brandBlock: {
     flex: 1,
     alignItems: "center",
+    justifyContent: "center",
     gap: 2,
   },
+  /** "Auto scale" in the brief. Equal flanks leave the centre a fixed budget,
+   *  so on the narrowest phones the wordmark has to give rather than push a
+   *  control off the row — flexShrink is what lets it, and contentFit keeps the
+   *  logo's aspect while it does. */
   wordmarkRow: {
     alignItems: "center",
-    gap: 7,
+    flexShrink: 1,
+    gap: 6,
   },
   wordmarkBoom: {
-    width: 78,
-    height: 30,
+    width: 68,
+    height: 26,
+    flexShrink: 1,
   },
   wordmarkCar: {
     color: SNOW,
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: "800",
-    letterSpacing: 2,
+    letterSpacing: 1.5,
+    flexShrink: 1,
   },
   poweredRow: {
     alignItems: "center",
@@ -620,23 +861,27 @@ const styles = StyleSheet.create({
   // Band C
   searchRow: {
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 16,
+    gap: GAP,
+    paddingHorizontal: PAD_H,
     paddingTop: 4,
   },
   searchPill: {
     flex: 1,
     alignItems: "center",
     gap: 10,
-    height: 56,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    height: SEARCH_H,
+    paddingHorizontal: PAD_H,
+    borderRadius: SEARCH_R,
     backgroundColor: SURFACE,
+    // A hairline lifts the pill off the ground without adding a second surface
+    // colour — the brief's divider token doing the work a border would.
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: HAIRLINE,
   },
   searchMainHit: {
     flex: 1,
     justifyContent: "center",
-    height: 56,
+    height: SEARCH_H,
   },
   searchInput: {
     flex: 1,
@@ -658,19 +903,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   filterButton: {
-    width: 56,
-    height: 56,
-    // Circle, per the mock — the one round shape on the row, so the eye finds
-    // filters without a label. The pill stays at 20 as specced.
-    borderRadius: 28,
+    width: TAP,
+    height: TAP,
+    // Circle, per the brief — the one round shape on the row, so the eye finds
+    // filters without a label. It is also the only accent-filled control here.
+    borderRadius: TAP / 2,
     backgroundColor: ACCENT,
     alignItems: "center",
     justifyContent: "center",
+    // "Floating" per the brief: the accent carries its own glow rather than a
+    // grey drop shadow, which would read as dirt on a #090909 ground.
+    shadowColor: ACCENT,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 6,
   },
   filterBadge: {
     position: "absolute",
-    top: 8,
-    end: 8,
+    top: 4,
+    end: 4,
     minWidth: 16,
     height: 16,
     borderRadius: 8,
