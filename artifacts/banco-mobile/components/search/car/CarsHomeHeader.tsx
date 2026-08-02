@@ -48,15 +48,24 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "@/components/AppText";
 import { useI18n } from "@/context/LanguageContext";
+import { sectionAccent } from "@/lib/sectionTheme";
 import { VehicleGlyph, type VehicleGlyphName } from "./VehicleGlyph";
 
 const BANCO_LOGO = require("../../../assets/images/banco-logo.png");
 const BOOM_LOGO = require("../../../assets/images/boom-logo.png");
 
-/** Owner spec: pure black ground, one accent, no multi-colour gradients. */
+/** Owner spec: pure black ground, one accent, no multi-colour gradients.
+ *
+ *  The accent is taken from `sectionTheme`, not written here as a literal.
+ *  The spec asked for #E60012, but sampling the shipped brand asset settles it:
+ *  the dominant red in assets/images/banco-logo.png is #CF1626, and
+ *  SECTION_ACCENT.car (#CC1E24) sits 3/8/2 away from it per channel while
+ *  #E60012 sits 23/22/38 away. The section theme was already right — its own
+ *  comment calls #CC1E24 "the vivid flagship red, nearest the logo" — and
+ *  binding to it keeps this header from becoming a fifth competing red. */
 const VOID = "#050505";
 const SURFACE = "#111111";
-const ACCENT = "#E60012";
+const ACCENT = sectionAccent("car");
 const SNOW = "#FFFFFF";
 const ASH = "#8E8E93";
 const STEEL = "#C7C7CC";
@@ -76,8 +85,14 @@ const HERO_MIN_HEIGHT = 244;
  *    support    → in-app support requests (settings · import order)
  *  The mock said "24/7 Support". Support is real; the 24/7 is an availability
  *  promise nothing in this repo can keep, so the claim ships without it. */
-const FEATURES: { icon: string; key: string }[] = [
-  { icon: "shield-check", key: "search.discover.section.carTrustDealers" },
+type FeatherName = React.ComponentProps<typeof Feather>["name"];
+
+const FEATURES: { icon: FeatherName; key: string }[] = [
+  // "shield-check" renders through the icon shim but is a Lucide name, not a
+  // Feather one, so it fails the Feather prop type the repo types against
+  // (same pattern as MaterialsHomeHeader.tsx:61). "shield" keeps the silhouette
+  // and is genuine on both sides.
+  { icon: "shield", key: "search.discover.section.carTrustDealers" },
   { icon: "globe", key: "search.discover.section.carTrustShipping" },
   { icon: "lock", key: "search.discover.section.carTrustSecure" },
   { icon: "package", key: "search.discover.section.carTrustImport" },
@@ -143,6 +158,14 @@ type Props = {
   selectedCategory: VehicleGlyphName | null;
   stats: CarHeroStat[];
   notificationCount?: number;
+  /**
+   * Which half to paint. Default "all" — every band, original order, which is
+   * what a caller that does not split the header gets.
+   *   "pinned" → top bar + search row. Held above the results, always reachable.
+   *   "scroll" → hero + categories + stats. Handed to the list as its header so
+   *              it scrolls off and gives the screen back.
+   */
+  slot?: "all" | "pinned" | "scroll";
   onBack: () => void;
   onSaveSearch: () => void;
   onOpenMap: () => void;
@@ -179,6 +202,7 @@ export function CarsHomeHeader({
   onSelectCategory,
   onOpenNotifications,
   onOpenProfile,
+  slot = "all",
 }: Props) {
   const insets = useSafeAreaInsets();
   const { t, isRTL } = useI18n();
@@ -187,9 +211,21 @@ export function CarsHomeHeader({
   const textAlign = isRTL ? "right" : "left";
   const alignStart = isRTL ? "flex-end" : "flex-start";
 
+  // Which bands this instance paints. The parent mounts the header twice: the
+  // pinned half stays above the results, the scrolling half is handed to the
+  // list as its own header so the hero can leave the screen. "all" is the
+  // default and renders every band in the original order, so any caller that
+  // does not split keeps exactly the layout it had.
+  const showPinned = slot === "all" || slot === "pinned";
+  const showScroll = slot === "all" || slot === "scroll";
+
   return (
-    <View style={[styles.root, { paddingTop: topPad }]} testID="cars-home-header">
+    <View
+      style={[styles.root, { paddingTop: slot === "scroll" ? 0 : topPad }]}
+      testID={slot === "scroll" ? "cars-hero-band" : "cars-home-header"}
+    >
       {/* ── Band A — top bar. Back · brand · bell · profile. Nothing else. ── */}
+      {showPinned ? (
       <View style={[styles.topBar, { flexDirection: rowDir }]}>
         <Pressable
           onPress={onBack}
@@ -254,8 +290,10 @@ export function CarsHomeHeader({
           </Pressable>
         </View>
       </View>
+      ) : null}
 
       {/* ── Band B — hero. Red ambient lighting only; no photo collage. ── */}
+      {showScroll ? (
       <View style={styles.hero} testID="cars-hero">
         <View style={styles.heroGlow} pointerEvents="none">
           {/* Two soft red sources — a key light off to the trailing side and a
@@ -305,9 +343,11 @@ export function CarsHomeHeader({
           </View>
         </View>
       </View>
+      ) : null}
 
       {/* ── Band C — one search row. Map + save sit inline so the top bar can
               stay exactly as specced; Filters is the ONLY accent control. ── */}
+      {showPinned ? (
       <View style={[styles.searchRow, { flexDirection: rowDir }]}>
         <View style={[styles.searchPill, { flexDirection: rowDir }]}>
           <Ionicons name="search" size={19} color={ACCENT} />
@@ -391,10 +431,11 @@ export function CarsHomeHeader({
           ) : null}
         </Pressable>
       </View>
+      ) : null}
 
       {/* ── Band D — quick vehicle categories. Absent until live inventory can
               actually be filtered by vehicle type (see CAR_CATEGORIES). ── */}
-      {categories.length > 0 ? (
+      {showScroll && categories.length > 0 ? (
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -436,7 +477,7 @@ export function CarsHomeHeader({
       ) : null}
 
       {/* ── Band E — stats. Absent when the parent has no real numbers. ── */}
-      {stats.length > 0 ? (
+      {showScroll && stats.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}

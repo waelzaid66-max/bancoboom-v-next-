@@ -102,7 +102,7 @@ export function StaysHomeHeader({
   const textAlign = isRTL ? "right" : "left";
 
   return (
-    <View style={[styles.root, { paddingTop: topPad - 1 }]} testID="stays-header">
+    <View style={[styles.root, { paddingTop: Math.max(0, topPad - 1) }]} testID="stays-header">
       {/* Band A — top actions */}
       <View style={[styles.topBar, { flexDirection: rowDir }]}>
         <Pressable

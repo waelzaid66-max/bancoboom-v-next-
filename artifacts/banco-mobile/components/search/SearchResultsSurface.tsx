@@ -57,6 +57,24 @@ interface SearchResultsSurfaceProps {
     onSave?: (item: FeedItem) => void;
     isSaved?: boolean;
   }>;
+  /**
+   * Chrome that should scroll away with the results instead of holding a fixed
+   * slice of the viewport forever.
+   *
+   * Section mini-apps used to render their whole header as a SIBLING above this
+   * surface, so a 465dp Cars header meant the first card started at 511dp of a
+   * 932dp screen — measured, not estimated. Anything passed here becomes the
+   * list's own header: it scrolls off, and the results get the full screen back.
+   *
+   * A caller is expected to KEEP a slim bar (back / brand / search / filters)
+   * outside this surface. Two reasons: the non-results overlay covers the list,
+   * so in-list chrome is unreachable in the empty and error states; and the user
+   * must always be able to change the query without scrolling back up.
+   *
+   * Optional by design — every existing caller that omits it keeps the exact
+   * behaviour it had before.
+   */
+  listHeader?: React.ReactElement | null;
 }
 
 /**
@@ -84,6 +102,7 @@ export function SearchResultsSurface({
   overlay,
   contentPaddingBottom = 120,
   CardComponent,
+  listHeader,
 }: SearchResultsSurfaceProps) {
   const colors = useColors();
   const { t, isRTL } = useI18n();
@@ -126,9 +145,14 @@ export function SearchResultsSurface({
           { paddingBottom: contentPaddingBottom },
         ]}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={listHeader ?? null}
         onEndReached={onEndReached}
         onEndReachedThreshold={0.5}
-        scrollEnabled={items.length > 0}
+        // Scrolling was gated on having rows because an empty list had nothing
+        // to scroll. Once a caller puts its header IN the list, that gate would
+        // trap the header on screen with no way to reach what is under it, so
+        // the presence of a header is now reason enough to allow scrolling.
+        scrollEnabled={items.length > 0 || !!listHeader}
         // Virtualization tuning — keeps frame rate healthy with 50+ results.
         // windowSize=7 keeps 3 screens above/below rendered; default (21) is
         // wasteful. maxToRenderPerBatch+updateCellsBatchingPeriod control how

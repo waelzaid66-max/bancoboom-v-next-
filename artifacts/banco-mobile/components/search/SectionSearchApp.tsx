@@ -1335,6 +1335,89 @@ export function SectionSearchApp({
     );
   }
 
+  /**
+   * The half of the Cars header that scrolls.
+   *
+   * The hero is 244dp of brand atmosphere; measured on a 932dp screen it helped
+   * push the first card down to 511dp. It is identity, not a control, so it
+   * belongs with the content: handed to the results list as its own header it
+   * leaves the screen on the first scroll and never comes back uninvited.
+   *
+   * The top bar and the search row stay pinned above the list — they are how a
+   * buyer changes the query, and the non-results overlay would swallow them if
+   * they lived in here.
+   */
+  const carScrollHeader = useMemo(() => {
+    if (!isCarSection) return null;
+    return (
+      <CarsHomeHeader
+        slot="scroll"
+        searchOpen={searchOpen}
+        draftQuery={draftQuery}
+        searchSaved={searchSaved}
+        activeFilterCount={activeFilterCount}
+        inputRef={inputRef}
+        categories={carHeroCategories}
+        selectedCategory={carCategory}
+        stats={carHeroStats}
+        onBack={goBack}
+        onSaveSearch={handleSaveSearch}
+        // This slot paints no map / bell / profile control today — those live in
+        // the pinned bar. They are still wired to the real handlers instead of
+        // no-ops, so nothing here becomes a dead control if a band ever moves
+        // between slots.
+        onOpenMap={() => {
+          playSound("tap");
+          Haptics.selectionAsync();
+          openOrLatchMap({ inResultsView, setMapMode, setWantMap });
+        }}
+        onOpenFilters={() => setShowFilters(true)}
+        onOpenSearch={openSearch}
+        onCloseSearch={closeSearch}
+        onQueryChange={handleQueryChange}
+        onSubmitQuery={() => commitQueryNow(draftQuery)}
+        onClearQuery={clearQuery}
+        onSelectCategory={(key) => {
+          playSound("tap");
+          if (key === "more") {
+            setCarFiltersOpen(true);
+            return;
+          }
+          const next = carCategory === key ? null : key;
+          setCarCategory(next);
+          const term = next
+            ? t(
+                CAR_CATEGORIES.find((c) => c.key === next)?.i18nKey ??
+                  "search.discover.section.carTypeCars",
+              )
+            : "";
+          setDraftQuery(term);
+          commitQueryNow(term);
+        }}
+        onOpenNotifications={() => {
+          playSound("tap");
+          router.push("/notifications");
+        }}
+        onOpenProfile={() => {
+          playSound("tap");
+          router.push("/(tabs)/profile" as Href);
+        }}
+      />
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isCarSection,
+    searchOpen,
+    draftQuery,
+    searchSaved,
+    activeFilterCount,
+    carHeroCategories,
+    carCategory,
+    carHeroStats,
+    t,
+  ]);
+
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {isRealEstateSection ? (
@@ -1441,6 +1524,7 @@ export function SectionSearchApp({
         />
       ) : isCarSection ? (
         <CarsHomeHeader
+          slot="pinned"
           searchOpen={searchOpen}
           draftQuery={draftQuery}
           searchSaved={searchSaved}
@@ -2411,6 +2495,7 @@ export function SectionSearchApp({
           onRefresh={retry}
           overlay={overlay}
           contentPaddingBottom={insets.bottom + 150}
+          listHeader={carScrollHeader}
         />
 
         {mapMode && inResultsView ? (

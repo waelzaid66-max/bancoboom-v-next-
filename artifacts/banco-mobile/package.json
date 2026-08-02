@@ -15,6 +15,7 @@
     "test:resilience": "node --test tests/mobile-resilience.test.mjs",
     "test:universal-links": "node --test tests/universal-links-config.test.mjs",
     "test:session-restore": "node --test tests/session-restore.test.mjs",
+    "test:auth-routes": "node --test tests/auth-routes.test.mjs",
     "test:section-guard": "node --test tests/section-miniapp-guard.test.mjs",
     "test:materials-core": "node --test tests/materials-core-guard.test.mjs",
     "test:i18n": "node --test tests/i18n-usage.test.mjs",
@@ -23,12 +24,13 @@
     "test:create-market": "node --test tests/create-listing-market-guard.test.mjs",
     "test:ui-density": "node --test tests/ui-density-guard.test.mjs",
     "test:stay-honesty": "node --test tests/stay-honesty-guard.test.mjs",
+    "test:car-hero-honesty": "node --test tests/car-hero-honesty-guard.test.mjs",
     "test:messenger-wiring": "node --test tests/messenger-wiring-guard.test.mjs",
     "test:production-wiring": "node --test tests/production-wiring-guard.test.mjs",
     "test:import-docs": "node --test tests/import-order-documents-guard.test.mjs",
     "test:scale": "node --test tests/scale-readiness.test.mjs",
     "test:cdn": "node --test tests/cdn-readiness.test.mjs",
-    "test": "pnpm run test:icons && pnpm run test:lib && pnpm run test:resilience && pnpm run test:universal-links && pnpm run test:session-restore && pnpm run test:section-guard && pnpm run test:materials-core && pnpm run test:i18n && pnpm run test:accounts && pnpm run test:notification-routing && pnpm run test:create-market && pnpm run test:ui-density && pnpm run test:stay-honesty && pnpm run test:messenger-wiring && pnpm run test:production-wiring && pnpm run test:import-docs && pnpm run test:scale && pnpm run test:cdn"
+    "test": "pnpm run test:icons && pnpm run test:lib && pnpm run test:resilience && pnpm run test:universal-links && pnpm run test:session-restore && pnpm run test:auth-routes && pnpm run test:section-guard && pnpm run test:materials-core && pnpm run test:i18n && pnpm run test:accounts && pnpm run test:notification-routing && pnpm run test:create-market && pnpm run test:ui-density && pnpm run test:stay-honesty && pnpm run test:car-hero-honesty && pnpm run test:messenger-wiring && pnpm run test:production-wiring && pnpm run test:import-docs && pnpm run test:scale && pnpm run test:cdn"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
