@@ -221,6 +221,7 @@ NEXT_PUBLIC_MARKET_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcg
 NEXT_PUBLIC_SITE_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev"
 NEXT_PUBLIC_SITE_URL_EN = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/en"
 WEB_PLUG_ENABLED = "false"
+CLERK_SECRET_KEY = "sk_test_LPrI7rAZkjGe6x8UzubzJufqBGqE7mzwggbKIxj0ZQ"
 # PAYMENT_CONFIG_ENCRYPTION_KEY  <- REMOVED from source control.
 # It is a real AES-256 key: it MUST come from Replit Secrets / Coolify env only.
 # Committing it here also OVERRODE the encrypted secret (userenv wins over Secrets).
