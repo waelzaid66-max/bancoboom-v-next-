@@ -27,6 +27,22 @@ args = "Web App"
 task = "workflow.run"
 args = "Mobile Serve"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "API Server"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Dealer OS Dev"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Admin OS Dev"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "artifacts/banco-mobile: expo"
+
 # ── banco-website Next.js consumer web (:5000 → external :80) ────────────────
 [[workflows.workflow]]
 name = "Web App"
@@ -62,12 +78,11 @@ name = "Dealer OS Dev"
 author = "agent"
 
 [workflows.workflow.metadata]
-outputType = "webview"
+outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "PORT=5002 BASE_PATH=/market/ pnpm --filter @workspace/dealer-os run dev"
-waitForPort = 5002
 
 # ── Admin-os SPA (:5003) ─────────────────────────────────────────────────────
 [[workflows.workflow]]
@@ -75,12 +90,11 @@ name = "Admin OS Dev"
 author = "agent"
 
 [workflows.workflow.metadata]
-outputType = "webview"
+outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "PORT=5003 BASE_PATH=/admin/ pnpm --filter @workspace/admin-os run dev"
-waitForPort = 5003
 
 # ── Expo dev server (Metro bundler, for native app development) ──────────────
 [[workflows.workflow]]
@@ -92,7 +106,19 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/banco-mobile run dev"
+args = "NODE_PATH=/home/runner/workspace/artifacts/banco-mobile/node_modules pnpm --filter @workspace/banco-mobile run dev"
+
+[[workflows.workflow]]
+name = "API Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=8080 pnpm --filter @workspace/api-server run dev"
+waitForPort = 8080
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [agent]
 stack = "BEST_EFFORT_FALLBACK"
