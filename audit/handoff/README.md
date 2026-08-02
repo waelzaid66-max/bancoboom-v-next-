@@ -1,5 +1,10 @@
 > # 📌 التسليم الرسمي — 2026-08-02 · `main`
 >
+> ## ⓿ ابدأ من هنا — التسليم الرسمي وخطة الفريق
+> # 🏛️ [`OFFICIAL-HANDOFF-TEAM-PLAN-AR.md`](./OFFICIAL-HANDOFF-TEAM-PLAN-AR.md)
+> الخطة المرسومة · نموذج الفريق ومين بيقرر إيه · **التحضير الإلزامي قبل أي كود** ·
+> 5 أبحاث · 10 مهام · 10 نواقص · 16 محذور · 📸 [`evidence/`](./evidence) الأدلة البصرية.
+>
 > ## ① وكيل Claude — ابدأ من هنا، اقراه كامل قبل أي سطر كود
 > ## 👉 [`MASTER-PROFESSIONAL-HANDOVER-OWNER-TO-CLAUDE-AR.md`](./MASTER-PROFESSIONAL-HANDOVER-OWNER-TO-CLAUDE-AR.md)
 > فلسفة المالك · بروتوكول الشغل الصارم · **12 درس اتعلمناهم بالغلط** ·
