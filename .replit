@@ -57,9 +57,6 @@ args = "pnpm --filter @workspace/banco-website exec -- next dev --hostname 0.0.0
 waitForPort = 5000
 
 # ── Mobile serve.js (:3000 → external :6800) ──────────────────────────────────
-# Shows static-build/web/ (real Expo web app) if built,
-# otherwise serves the Expo Go QR landing page.
-# To build the web surface: pnpm --filter @workspace/banco-mobile run build:web
 [[workflows.workflow]]
 name = "Mobile Serve"
 author = "agent"
@@ -149,46 +146,6 @@ externalPort = 3003
 localPort = 5000
 externalPort = 80
 
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
-localPort = 8081
-externalPort = 8081
-
-[[ports]]
-localPort = 8082
-externalPort = 8082
-
-[[ports]]
-localPort = 8083
-externalPort = 5173
-
-[[ports]]
-localPort = 8084
-externalPort = 6000
-
-[[ports]]
-localPort = 18150
-externalPort = 4200
-
-[[ports]]
-localPort = 21539
-externalPort = 3000
-
-[[ports]]
-localPort = 22357
-externalPort = 8008
-
-[[ports]]
-localPort = 23351
-externalPort = 8000
-
-[nix]
-channel = "stable-25_05"
-packages = ["psmisc", "nginx"]
-
 [objectStorage]
 defaultBucketID = "replit-objstore-41fc812e-9f5e-42cb-93cc-f15445fe1efa"
 
@@ -212,7 +169,6 @@ CLERK_TELEMETRY_DISABLED = "true"
 PUBLIC_OBJECT_SEARCH_PATHS = "/public"
 PRIVATE_OBJECT_DIR = "/private"
 OBJECT_STORAGE_PROVIDER = "s3"
-OPENAI_API_KEY = "_DUMMY_API_KEY_"
 VITE_ADMIN_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/admin/"
 VITE_MARKET_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/market/"
 VITE_WEB_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev"
@@ -220,7 +176,7 @@ NEXT_PUBLIC_ADMIN_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga
 NEXT_PUBLIC_MARKET_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/market/"
 NEXT_PUBLIC_SITE_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev"
 NEXT_PUBLIC_SITE_URL_EN = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/en"
-WEB_PLUG_ENABLED = "false"
+WEB_PLUG_ENABLED = "true"
 CLERK_SECRET_KEY = "sk_test_LPrI7rAZkjGe6x8UzubzJufqBGqE7mzwggbKIxj0ZQ"
 # PAYMENT_CONFIG_ENCRYPTION_KEY  <- REMOVED from source control.
 # It is a real AES-256 key: it MUST come from Replit Secrets / Coolify env only.
