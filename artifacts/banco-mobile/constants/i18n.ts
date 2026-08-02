@@ -2942,7 +2942,7 @@ const ar: typeof en = {
         bookingSub: "إقامات مفروشة — إيجار يومي وشهري وسنوي",
         staysWhere: "إلى أين؟ المدينة أو المنطقة",
         staysTabAll: "الكل",
-        staysTagline: "Banco Owners Open Market",
+        staysTagline: "سوق أصحاب بانكو المفتوح",
         staysAll: "كل الإقامات",
         staysBookable: "قابل للحجز الآن",
         staysMap: "الخريطة",
