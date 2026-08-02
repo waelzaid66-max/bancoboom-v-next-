@@ -1595,7 +1595,24 @@ export default function CreateListingScreen() {
     <View key={field.key}>
       <FieldLabel
         label={t(field.labelKey)}
-        tag={field.required ? t("create.required") : t("create.optional")}
+        // Read the tag from the SAME source that decides whether a field gates
+        // submission and which bucket it lands in — `requiredSpecKeys`, above.
+        // The static `field.required` flag on the taxonomy row disagrees with it
+        // in four places, and because bucketing already followed the runtime
+        // keys, the label was the half that lied:
+        //   • rental_term carries no flag, so it read "Optional" while blocking
+        //     submit for every rent listing — a seller could not publish and was
+        //     told nothing was missing.
+        //   • car year / mileage / fuel_type carry required:true but are not
+        //     runtime-required, so they read "Required" from inside the
+        //     collapsed "More details" block.
+        //   • raw_materials.industry does the same.
+        // One source, so the tag can no longer contradict the gate.
+        tag={
+          requiredSpecKeys.includes(field.key)
+            ? t("create.required")
+            : t("create.optional")
+        }
         colors={colors}
         rowDir={rowDir}
       />
