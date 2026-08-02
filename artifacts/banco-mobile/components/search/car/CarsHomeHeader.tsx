@@ -149,6 +149,14 @@ type Props = {
   selectedCategory: VehicleGlyphName | null;
   stats: CarHeroStat[];
   notificationCount?: number;
+  /**
+   * Which half to paint. Default "all" — every band, original order, which is
+   * what a caller that does not split the header gets.
+   *   "pinned" → top bar + search row. Held above the results, always reachable.
+   *   "scroll" → hero + categories + stats. Handed to the list as its header so
+   *              it scrolls off and gives the screen back.
+   */
+  slot?: "all" | "pinned" | "scroll";
   onBack: () => void;
   onSaveSearch: () => void;
   onOpenMap: () => void;
@@ -185,6 +193,7 @@ export function CarsHomeHeader({
   onSelectCategory,
   onOpenNotifications,
   onOpenProfile,
+  slot = "all",
 }: Props) {
   const insets = useSafeAreaInsets();
   const { t, isRTL } = useI18n();
@@ -193,9 +202,21 @@ export function CarsHomeHeader({
   const textAlign = isRTL ? "right" : "left";
   const alignStart = isRTL ? "flex-end" : "flex-start";
 
+  // Which bands this instance paints. The parent mounts the header twice: the
+  // pinned half stays above the results, the scrolling half is handed to the
+  // list as its own header so the hero can leave the screen. "all" is the
+  // default and renders every band in the original order, so any caller that
+  // does not split keeps exactly the layout it had.
+  const showPinned = slot === "all" || slot === "pinned";
+  const showScroll = slot === "all" || slot === "scroll";
+
   return (
-    <View style={[styles.root, { paddingTop: topPad }]} testID="cars-home-header">
+    <View
+      style={[styles.root, { paddingTop: slot === "scroll" ? 0 : topPad }]}
+      testID={slot === "scroll" ? "cars-hero-band" : "cars-home-header"}
+    >
       {/* ── Band A — top bar. Back · brand · bell · profile. Nothing else. ── */}
+      {showPinned ? (
       <View style={[styles.topBar, { flexDirection: rowDir }]}>
         <Pressable
           onPress={onBack}
@@ -260,8 +281,10 @@ export function CarsHomeHeader({
           </Pressable>
         </View>
       </View>
+      ) : null}
 
       {/* ── Band B — hero. Red ambient lighting only; no photo collage. ── */}
+      {showScroll ? (
       <View style={styles.hero} testID="cars-hero">
         <View style={styles.heroGlow} pointerEvents="none">
           {/* Two soft red sources — a key light off to the trailing side and a
@@ -311,9 +334,11 @@ export function CarsHomeHeader({
           </View>
         </View>
       </View>
+      ) : null}
 
       {/* ── Band C — one search row. Map + save sit inline so the top bar can
               stay exactly as specced; Filters is the ONLY accent control. ── */}
+      {showPinned ? (
       <View style={[styles.searchRow, { flexDirection: rowDir }]}>
         <View style={[styles.searchPill, { flexDirection: rowDir }]}>
           <Ionicons name="search" size={19} color={ACCENT} />
@@ -397,10 +422,11 @@ export function CarsHomeHeader({
           ) : null}
         </Pressable>
       </View>
+      ) : null}
 
       {/* ── Band D — quick vehicle categories. Absent until live inventory can
               actually be filtered by vehicle type (see CAR_CATEGORIES). ── */}
-      {categories.length > 0 ? (
+      {showScroll && categories.length > 0 ? (
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -442,7 +468,7 @@ export function CarsHomeHeader({
       ) : null}
 
       {/* ── Band E — stats. Absent when the parent has no real numbers. ── */}
-      {stats.length > 0 ? (
+      {showScroll && stats.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
