@@ -3,7 +3,7 @@
 > **مدير الإنتاج / أي مستلم جديد — ابدأ من هنا:**
 > ## 👉 [`MASTER-HANDOFF-PRODUCTION-MANAGER-FULL-AR.md`](./MASTER-HANDOFF-PRODUCTION-MANAGER-FULL-AR.md)
 > الاستلام الشامل — تاريخ المشروع · شغل الزميل المختفي · برومبتات المالك بالنص ·
-> أماكن التعديل بالسطر · الخطة حرف حرف · **17 تحذير صارم** · **6 قرارات عند المالك**.
+> أماكن التعديل بالسطر · الخطة حرف حرف · **16 تحذير صارم** · **5 قرارات تصميم عند المالك**.
 >
 > **الوكيل المنفّذ — اقرا ده بعده:**
 > ### 👉 [`TO-CLAUDE-AGENT-ON-REPO-HEADERS-HANDOVER-AR.md`](./TO-CLAUDE-AGENT-ON-REPO-HEADERS-HANDOVER-AR.md)
