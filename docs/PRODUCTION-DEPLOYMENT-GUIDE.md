@@ -11,7 +11,7 @@ banco.today/          ← nginx (web service — Coolify)
 ├── /                 ← landing (Vite SPA)          [artifacts/landing]
 ├── /market/          ← dealer-os (Vite SPA)        [artifacts/dealer-os]
 ├── /admin/           ← admin-os (Vite SPA)         [artifacts/admin-os]
-├── /api/*            ← api-server (Node/Hono)      [artifacts/api-server] port 8080
+├── /api/*            ← api-server (Node/Express)   [artifacts/api-server] port 8080
 ├── /l/* /listing/*   ← api-server (SEO/share)
 ├── /sitemap.xml      ← api-server
 ├── /robots.txt       ← api-server

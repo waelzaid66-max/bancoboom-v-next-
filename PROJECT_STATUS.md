@@ -7,7 +7,7 @@ BANCO is a full-stack marketplace + B2B platform built as a pnpm monorepo.
 
 ```
 artifacts/
-├── api-server/          — Node.js + Hono REST API + Drizzle ORM (PostgreSQL)
+├── api-server/          — Node.js + Express 5 REST API + Drizzle ORM (PostgreSQL)
 ├── banco-mobile/        — React Native (Expo Router) — primary user app
 ├── dealer-os/           — React + Vite — Dealer / BANCO Market portal  
 ├── admin-os/            — React + Vite — Admin Control Center
@@ -90,7 +90,7 @@ Long Press → opens chip tray:
 
 ## API Server
 
-- **Runtime:** Node.js, Hono framework, Drizzle ORM, PostgreSQL
+- **Runtime:** Node.js, Express 5, Drizzle ORM, PostgreSQL
 - **Auth:** Clerk (JWT validation via `@clerk/backend`)
 - **Object Storage:** Replit Object Storage (GCS signed URLs via `@replit/object-storage`)
 - **Push Notifications:** Expo Push Notification Service
