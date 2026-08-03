@@ -217,6 +217,17 @@ type Props = {
    *   "scroll" → hero + categories + stats. Handed to the list as its header so
    *              it scrolls off and gives the screen back.
    */
+  /**
+   * Market country + currency control, owned and rendered by the parent.
+   *
+   * It arrives as a node rather than as data because this header holds no state
+   * and knows nothing about markets. Before this it lived in the collapsed chip
+   * strip below the header, which is what the owner meant by the country and
+   * currency choices "not being compressed" — Property and Factories already
+   * carry theirs in the header, and Cars was the section still leaving it
+   * loose. Optional: a caller that passes nothing gets the row it had.
+   */
+  marketSlot?: React.ReactNode;
   slot?: "all" | "pinned" | "scroll";
   /**
    * How far the results list has scrolled, published by SearchResultsSurface.
@@ -265,6 +276,7 @@ export function CarsHomeHeader({
   onSelectCategory,
   onOpenNotifications,
   onOpenProfile,
+  marketSlot,
   slot = "all",
   scrollY,
 }: Props) {
@@ -404,14 +416,29 @@ export function CarsHomeHeader({
               style={styles.wordmarkBoom}
               contentFit="contain"
             />
-            <AppText style={styles.wordmarkCar} numberOfLines={1}>
+            {/* Scales down instead of clipping. Equal flanks keep the wordmark
+                optically centred, which leaves the centre a fixed budget — and
+                on 320dp that budget rendered "CAR" as "CA". flexShrink alone
+                cannot fix that: shrinking a Text clips it, it does not resize
+                the glyphs. */}
+            <AppText
+              style={styles.wordmarkCar}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+            >
               {t("search.discover.section.carBrand")}
             </AppText>
           </Animated.View>
           <Animated.View
             style={[styles.poweredRow, { flexDirection: rowDir }, poweredCollapse]}
           >
-            <AppText style={styles.poweredLabel} numberOfLines={1}>
+            <AppText
+              style={styles.poweredLabel}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+            >
               {t("booking.poweredBy")}
             </AppText>
             <Image
@@ -607,6 +634,12 @@ export function CarsHomeHeader({
           </Pressable>
         </View>
 
+        {marketSlot ? (
+          <View style={styles.marketSlot} testID="cars-header-market">
+            {marketSlot}
+          </View>
+        ) : null}
+
         <Pressable
           onPress={onOpenFilters}
           style={styles.filterButton}
@@ -743,8 +776,17 @@ const styles = StyleSheet.create({
   /** Both flanks claim the same width so the brand block between them lands on
    *  the true centre of the header. The trailing side is the wider of the two
    *  (two controls), so it sets the number. */
+  /** The LEADING flank holds one control, the trailing flank holds two.
+   *
+   *  It used to reserve two slots on both sides so the wordmark sat optically
+   *  centred. On 320dp that is arithmetic the row cannot satisfy: 320 less 32
+   *  of padding leaves 288, two flanks of 104 take 208, and the 80 left is not
+   *  enough for a 68dp mark plus "CAR" — the render clipped it to "CA" and the
+   *  BANCO mark under it to "BANC". Identity intact beats identity centred, and
+   *  `adjustsFontSizeToFit` is not an answer here because it does nothing on
+   *  web, which is the surface these captures come from. */
   topSide: {
-    minWidth: TAP * 2 + 8,
+    minWidth: TAP,
     alignItems: "center",
   },
   topActions: {
@@ -806,6 +848,7 @@ const styles = StyleSheet.create({
   poweredLogo: {
     width: 58,
     height: 14,
+    flexShrink: 1,
   },
 
   // Band B
@@ -859,6 +902,11 @@ const styles = StyleSheet.create({
   },
 
   // Band C
+  /** Shrinks before the search pill does: the market chip is a fixed, readable
+   *  width and the pill is the element that can afford to give on 320dp. */
+  marketSlot: {
+    flexShrink: 0,
+  },
   searchRow: {
     alignItems: "center",
     gap: GAP,

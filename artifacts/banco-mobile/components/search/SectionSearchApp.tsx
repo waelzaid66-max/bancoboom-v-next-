@@ -944,6 +944,11 @@ export function SectionSearchApp({
     (activeOfferKey === "rent" ||
       engineByKey(criteria.category, criteria.engineKey)?.params.offer_type ===
         "rent");
+  /** Cars collapse their BROWSE AXES behind the Filters control. Market and
+   *  sort never go behind it: a choice you must expand a panel to reach is not
+   *  compressed, it is hidden, and the owner asked for the country and currency
+   *  to be compressed into the design — not tucked away. */
+  const carAxesVisible = !isCarSection || carFiltersOpen;
   const showIndustrialChipsInStrip =
     showIndustrialChips && !isMaterialsSection;
   // Keep engine chips visible during facet load — visibleEngines already
@@ -1939,61 +1944,13 @@ export function SectionSearchApp({
           five wrapped chip rows over the first screen and the results started
           off-screen. The axes are unchanged and un-deleted — they are simply
           collapsed until asked for, which is what "الفلاتر" now means. ── */}
-      {isCarSection ? (
-        <Pressable
-          onPress={() => {
-            playSound(tap);
-            setCarFiltersOpen((v) => !v);
-          }}
-          style={[
-            styles.carFilterToggle,
-            {
-              backgroundColor: carFiltersOpen ? accent : colors.secondary,
-              flexDirection: rowDir,
-            },
-          ]}
-          testID="car-filters-toggle"
-          accessibilityRole="button"
-          accessibilityState={{ expanded: carFiltersOpen }}
-        >
-          <Feather
-            name="sliders"
-            size={14}
-            color={carFiltersOpen ? "#FFFFFF" : colors.mutedForeground}
-          />
-          <AppText
-            style={[
-              styles.carFilterToggleText,
-              { color: carFiltersOpen ? "#FFFFFF" : colors.foreground },
-            ]}
-          >
-            {t(
-              carFiltersOpen
-                ? "search.discover.section.carFiltersHide"
-                : "search.discover.section.carFiltersShow",
-            )}
-          </AppText>
-          {!carFiltersOpen && activeFilterCount > 0 ? (
-            <View style={[styles.carFilterToggleCount, { backgroundColor: accent }]}>
-              <AppText style={styles.carFilterToggleCountText}>
-                {activeFilterCount}
-              </AppText>
-            </View>
-          ) : null}
-          <Feather
-            name={carFiltersOpen ? "chevron-up" : "chevron-down"}
-            size={15}
-            color={carFiltersOpen ? "#FFFFFF" : colors.mutedForeground}
-          />
-        </Pressable>
-      ) : null}
 
       {/* ── Primary chip strip: country/currency · sort · mode/engines.
           RE/materials: country + sort live inside home headers.
           B-oom Car: market/sort SoT = this strip only (W8 D-W8-01); listingMode
           + engines chips stay visible (REL-17) — visible meaning "on this strip
           and nowhere else", now behind the car collapse above. ── */}
-      {!isRealEstateSection && !isMaterialsSection && (!isCarSection || carFiltersOpen) ? (
+      {!isRealEstateSection && !isMaterialsSection ? (
       <View
         style={[styles.chipStrip, { flexDirection: rowDir }]}
         testID="section-primary-strip"
@@ -2039,13 +1996,13 @@ export function SectionSearchApp({
             color={criteria.sort !== "recommended" ? "#FFFFFF" : colors.mutedForeground}
           />
         </Pressable>
-        {(showListingMode || showEngineChips || showIndustrialChips) ? (
+        {carAxesVisible && (showListingMode || showEngineChips || showIndustrialChips) ? (
           <View style={[styles.chipStripDivider, { backgroundColor: colors.border }]} />
         ) : null}
         {/* Offer + engine axes: the SECTION decides the shape, this only renders
             it. Cars ask for chips (REL-17) so new/used/import/instalment stay
             visible. A section whose axis is set once may ask for a pill. */}
-        {showListingMode ? (
+        {carAxesVisible && showListingMode ? (
           axisShape(chrome, "listingMode") === "pill" ? (
             <FilterPillSelect
               icon="tag"
@@ -2083,7 +2040,7 @@ export function SectionSearchApp({
             })
           )
         ) : null}
-        {showEngineChips ? (
+        {carAxesVisible && showEngineChips ? (
           axisShape(chrome, "engines") === "pill" ? (
             <FilterPillSelect
               icon="sliders"
@@ -2138,6 +2095,55 @@ export function SectionSearchApp({
             </Pressable>
           );
         }) : null}
+
+        {isCarSection ? (
+          <Pressable
+            onPress={() => {
+              playSound(tap);
+              setCarFiltersOpen((v) => !v);
+            }}
+            style={[
+              styles.carFilterToggle,
+              {
+                backgroundColor: carFiltersOpen ? accent : colors.secondary,
+                flexDirection: rowDir,
+              },
+            ]}
+            testID="car-filters-toggle"
+            accessibilityRole="button"
+            accessibilityState={{ expanded: carFiltersOpen }}
+          >
+            <Feather
+              name="sliders"
+              size={14}
+              color={carFiltersOpen ? "#FFFFFF" : colors.mutedForeground}
+            />
+            <AppText
+              style={[
+                styles.carFilterToggleText,
+                { color: carFiltersOpen ? "#FFFFFF" : colors.foreground },
+              ]}
+            >
+              {t(
+                carFiltersOpen
+                  ? "search.discover.section.carFiltersHide"
+                  : "search.discover.section.carFiltersShow",
+              )}
+            </AppText>
+            {!carFiltersOpen && activeFilterCount > 0 ? (
+              <View style={[styles.carFilterToggleCount, { backgroundColor: accent }]}>
+                <AppText style={styles.carFilterToggleCountText}>
+                  {activeFilterCount}
+                </AppText>
+              </View>
+            ) : null}
+            <Feather
+              name={carFiltersOpen ? "chevron-up" : "chevron-down"}
+              size={15}
+              color={carFiltersOpen ? "#FFFFFF" : colors.mutedForeground}
+            />
+          </Pressable>
+        ) : null}
       </View>
       ) : null}
 
@@ -2892,16 +2898,15 @@ const styles = StyleSheet.create({
   },
   // B-oom Car collapse. Sits on the same 12 left edge / 8 rhythm as every other
   // strip so opening it does not shift the column sideways.
+  /** Compressed and moved into the strip 2026-08-03. It used to sit on its own
+   *  line above, with 10 of margin and 9 of vertical padding, reading as a
+   *  separate row of chrome rather than a control on the row it opens. */
   carFilterToggle: {
-    alignSelf: "flex-start",
     alignItems: "center",
-    gap: 8,
-    marginHorizontal: 12,
-    marginTop: 10,
-    marginBottom: 2,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 18,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   carFilterToggleText: {
     fontSize: 13,
