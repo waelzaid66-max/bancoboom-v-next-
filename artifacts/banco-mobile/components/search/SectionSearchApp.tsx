@@ -1387,6 +1387,10 @@ export function SectionSearchApp({
    * without the hero having to leave the list to be animated.
    */
   const carScrollY = useSharedValue(0);
+  /** Same mechanism for Factories: the pinned half reads it to collapse the
+   *  brand lockup. Separate value per section — one shared offset would carry
+   *  a stale scroll position across a section change. */
+  const facilitiesScrollY = useSharedValue(0);
 
   const carScrollHeader = useMemo(() => {
     if (!isCarSection) return null;
@@ -1625,6 +1629,7 @@ export function SectionSearchApp({
       ) : isFacilitiesSection ? (
         <FacilitiesHomeHeader
           slot="pinned"
+          scrollY={facilitiesScrollY}
           searchOpen={searchOpen}
           draftQuery={draftQuery}
           searchSaved={searchSaved}
@@ -2641,11 +2646,12 @@ export function SectionSearchApp({
           overlay={overlay}
           contentPaddingBottom={insets.bottom + 150}
           listHeader={carScrollHeader ?? facilitiesScrollHeader}
-          // Only Cars animates its collapse, so only Cars needs the offset.
-          // Facilities uses the same split without the animation, and every
-          // other section leaves this undefined so the list attaches no scroll
-          // handler at all.
-          scrollY={isCarSection ? carScrollY : undefined}
+          // Cars and Facilities both animate their collapse, so both need the
+          // offset. Every other section leaves this undefined and the list
+          // attaches no scroll handler at all.
+          scrollY={
+            isCarSection ? carScrollY : isFacilitiesSection ? facilitiesScrollY : undefined
+          }
         />
 
         {mapMode && inResultsView ? (
