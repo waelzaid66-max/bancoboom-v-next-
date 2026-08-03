@@ -561,10 +561,14 @@ export function CarsHomeHeader({
           />
           <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
             <Defs>
-              <LinearGradient id="carPlateScrim2" x1="0" y1="0" x2="1" y2="0">
-                <Stop offset="0" stopColor={VOID} stopOpacity="0.90" />
-                <Stop offset="0.5" stopColor={VOID} stopOpacity="0.34" />
-                <Stop offset="1" stopColor={VOID} stopOpacity="0.05" />
+              {/* The copy is gone, so this no longer has to darken half the
+                  frame to seat white text. All it does now is blend the plate's
+                  edges into the shell, top and bottom. */}
+              <LinearGradient id="carPlateScrim2" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={VOID} stopOpacity="0.55" />
+                <Stop offset="0.28" stopColor={VOID} stopOpacity="0.05" />
+                <Stop offset="0.80" stopColor={VOID} stopOpacity="0.10" />
+                <Stop offset="1" stopColor={VOID} stopOpacity="0.72" />
               </LinearGradient>
             </Defs>
             <Rect x="0" y="0" width="100%" height="100%" fill="url(#carPlateScrim2)" />
@@ -622,29 +626,12 @@ export function CarsHomeHeader({
           </Svg>
         </View>
 
-        <View style={[styles.heroCopy, { alignItems: alignStart }]}>
-          {/* "GLOBAL VEHICLE MARKETPLACE" removed by the owner, 2026-08-03:
-              «دي غلط، ملهاش عوزة ولا قيمة — الهيدر بيدل عن كل ده». The wordmark
-              above already says it. The i18n keys stay in place, unused, so the
-              line can come back with one edit if he changes his mind. */}
-          <AppText style={[styles.heroSubtitle, { textAlign }]} numberOfLines={2}>
-            {t("search.discover.section.carHeroSubtitle")}
-          </AppText>
-
-          <View style={[styles.featureList, { alignItems: alignStart }]}>
-            {FEATURES.map((f) => (
-              <View
-                key={f.key}
-                style={[styles.featureRow, { flexDirection: rowDir }]}
-              >
-                <Feather name={f.icon} size={13} color={STEEL} />
-                <AppText style={styles.featureText} numberOfLines={1}>
-                  {t(f.key)}
-                </AppText>
-              </View>
-            ))}
-          </View>
-        </View>
+        {/* Removed by the owner, 2026-08-03: «امسح الكلام دة».
+            The subtitle line and the five trust rows are gone from the hero —
+            he was explicit that the wording was getting in the way of the
+            header itself, and that the plate plus the controls are what this
+            band is. The i18n keys and FEATURES stay defined so the block can be
+            restored in one edit; nothing was deleted from the translations. */}
       </Animated.View>
       ) : null}
 
