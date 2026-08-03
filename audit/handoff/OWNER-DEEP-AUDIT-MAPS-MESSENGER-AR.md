@@ -75,6 +75,13 @@ git ls-remote --heads origin | grep -i cursor    # صفر
 
 ### ف-٢ · 🔴 **خريطة الويب بتسقط لصورة ساكتة — من غير ما تحذّر حد**
 
+> **⚠️ تصحيح ذاتي (نفس اليوم):** أول نسخة من المستند ده كتبت إن المفتاح «مش
+> موثّق خالص». **ده كان غلط.** المفتاح موجود في:
+> `artifacts/banco-website/.env.example` · `.env.staging.example` ·
+> `deploy/aws/env/.env.banco-web.{production,staging}.example`.
+> غايب من `.env.example` **الجذر** بس — ومش ده المكان اللي ناشر الموقع بيبص
+> فيه. **الفجوة الحقيقية مش التوثيق — هي الصمت.** والباقي تحت صحيح.
+
 ```ts
 // SearchMapSurface.tsx:42
 const hasGoogleKey = searchConfig.map.googleMapsApiKey.length > 0;
@@ -87,13 +94,27 @@ return <SearchMapClusterCanvas .../>;      // ← كانفس ساكن، مفيش
 googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""
 ```
 
-```bash
-grep -n "GOOGLE_MAPS" .env.example      # ❌ صفر — مش مذكور خالص
+**والسيناريو الحقيقي محدد جدًا** — الخريطة أصلًا خلف علم:
+```ts
+enabled: process.env.NEXT_PUBLIC_WEB_SEARCH_MAP === "true"   // افتراضه false
 ```
 
-**يعني:** أي حد ينشر الموقع من غير ما يعرف إن فيه مفتاح مطلوب — **الخريطة
-هتشتغل، بس كصورة**. مفيش خطأ، مفيش تحذير، مفيش لوج. **دي أسوأ نوع فجوة: بتفشل
-بهدوء وتبان شغالة.**
+فالمشكلة مش «حد نسي المفتاح»، هي: **حد شغّل الخريطة عن قصد ونسي المفتاح**.
+
+**والسقوط صامت بالكامل — متحقق منه بالأمر:**
+```bash
+grep -rn "console\.\|warn" components/SearchMapSurface.tsx lib/search-config.ts
+# ❌ صفر تحذير
+grep -c "onClick\|onPointer\|onWheel\|onDrag" components/SearchMapClusterCanvas.tsx
+# 0 ← ولا معالج تفاعل واحد
+```
+
+يعني: **صفر لوج للمشغّل · صفر تسمية للمستخدم · صفر تحريك أو تكبير**. خريطة
+تبان منشورة وبتشتغل لحد. **دي أسوأ نوع فجوة: بتفشل بهدوء وتبان شغالة.**
+
+**✅ اتصلح:** تحذير مرة واحدة لكل تحميل صفحة، **بيولّع على الاقتران ده بالظبط**
+(الخريطة مفعّلة + المفتاح فاضي) — مش على أي مفتاح ناقص، عشان التحذير ما يبقاش
+ضوضاء يتعوّد الناس يتجاهلوها.
 
 ### ف-٣ · التايلات لسه بتحتاج شبكة
 
