@@ -1387,6 +1387,13 @@ export function SectionSearchApp({
    * without the hero having to leave the list to be animated.
    */
   const carScrollY = useSharedValue(0);
+  /** Same contract as `carScrollY`, for the Property split. Separate values
+   *  rather than one shared offset: only one section is ever mounted, but a
+   *  single value would carry the previous section's scroll position into the
+   *  next one's first frame. */
+  const propertyScrollY = useSharedValue(0);
+  /** Same again for Materials. */
+  const materialsScrollY = useSharedValue(0);
 
   const carScrollHeader = useMemo(() => {
     if (!isCarSection) return null;
@@ -1518,10 +1525,77 @@ export function SectionSearchApp({
   ]);
 
 
+  /**
+   * The half of the B-CORE header that scrolls — just the tagline today.
+   *
+   * Small, and deliberately so: this header was already the leanest of the
+   * five, so the win here is not height, it is that identity prose stops
+   * holding a permanent slice of the viewport. The browse strips this section
+   * uses live under the header in this file, not inside it, so there is
+   * nothing else to hand down.
+   */
+  const materialsScrollHeader = useMemo(() => {
+    if (!isMaterialsSection) return null;
+    return (
+      <MaterialsHomeHeader
+        slot="scroll"
+        searchOpen={searchOpen}
+        draftQuery={draftQuery}
+        searchSaved={searchSaved}
+        activeFilterCount={activeFilterCount}
+        marketCountry={criteria.marketCountry}
+        sort={criteria.sort}
+        inputRef={inputRef}
+        onBack={goBack}
+        onSaveSearch={handleSaveSearch}
+        // Wired to the real handlers rather than no-ops even though this slot
+        // paints no control today — an empty handler is a dead control, and the
+        // guard fails one on sight.
+        onOpenMap={() => {
+          playSound(tap);
+          Haptics.selectionAsync();
+          openOrLatchMap({ inResultsView, setMapMode, setWantMap });
+        }}
+        onOpenFilters={() => {
+          playSound(tap);
+          setShowFilters(true);
+        }}
+        onOpenSearch={openSearch}
+        onCloseSearch={closeSearch}
+        onQueryChange={handleQueryChange}
+        onSubmitQuery={() => commitQueryNow(draftQuery)}
+        onClearQuery={clearQuery}
+        onOpenMarket={() => {
+          playSound(tap);
+          setMarketPickerOpen(true);
+        }}
+        onCycleSort={() => {
+          playSound(tap);
+          const cycle = ["recommended", "newest", "price_asc", "price_desc"] as const;
+          const next =
+            cycle[(cycle.indexOf(criteria.sort as (typeof cycle)[number]) + 1) % cycle.length];
+          update({ sort: next });
+        }}
+      />
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isMaterialsSection,
+    searchOpen,
+    draftQuery,
+    searchSaved,
+    activeFilterCount,
+    criteria.marketCountry,
+    criteria.sort,
+  ]);
+
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {isRealEstateSection ? (
         <PropertyHomeHeader
+          slot="pinned"
+          scrollY={propertyScrollY}
           searchOpen={searchOpen}
           draftQuery={draftQuery}
           searchSaved={searchSaved}
@@ -1587,6 +1661,8 @@ export function SectionSearchApp({
         />
       ) : isMaterialsSection ? (
         <MaterialsHomeHeader
+          slot="pinned"
+          scrollY={materialsScrollY}
           searchOpen={searchOpen}
           draftQuery={draftQuery}
           searchSaved={searchSaved}
@@ -2640,12 +2716,22 @@ export function SectionSearchApp({
           onRefresh={retry}
           overlay={overlay}
           contentPaddingBottom={insets.bottom + 150}
-          listHeader={carScrollHeader ?? facilitiesScrollHeader}
+          listHeader={
+            carScrollHeader ?? materialsScrollHeader ?? facilitiesScrollHeader
+          }
           // Only Cars animates its collapse, so only Cars needs the offset.
           // Facilities uses the same split without the animation, and every
           // other section leaves this undefined so the list attaches no scroll
           // handler at all.
-          scrollY={isCarSection ? carScrollY : undefined}
+          scrollY={
+            isCarSection
+              ? carScrollY
+              : isRealEstateSection
+                ? propertyScrollY
+                : isMaterialsSection
+                  ? materialsScrollY
+                  : undefined
+          }
         />
 
         {mapMode && inResultsView ? (
