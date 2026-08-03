@@ -76,6 +76,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "@/components/AppText";
 import { STAYS_ACCENT } from "@/components/StayCard";
+import { SECTION_NEUTRAL } from "@/lib/sectionTheme";
 import { useI18n } from "@/context/LanguageContext";
 
 const BANCO_LOGO = require("../../../assets/images/banco-logo.png");
@@ -83,10 +84,10 @@ const BOOM_LOGO = require("../../../assets/images/boom-logo.png");
 
 /** Neutrals lifted from CarsHomeHeader so the two sections read as one system.
  *  The real fix is one shared token file — logged as debt, not done here. */
-const VOID = "#090909";
-const SNOW = "#FFFFFF";
-const ASH = "#A5A5A5";
-const HAIRLINE = "rgba(255,255,255,0.06)";
+const VOID = SECTION_NEUTRAL.void;
+const SNOW = SECTION_NEUTRAL.snow;
+const ASH = SECTION_NEUTRAL.ash;
+const HAIRLINE = SECTION_NEUTRAL.hairline;
 
 /** The owner's spec sheet: expanded 88–100, collapsed 56–64. Cars settled on
  *  94 → 60 and this matches it rather than picking a second pair of numbers. */

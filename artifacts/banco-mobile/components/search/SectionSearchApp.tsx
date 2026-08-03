@@ -112,7 +112,7 @@ import {
   rentalTermsForSearch,
   sanitizeRentalTermForMarket,
 } from "@/lib/searchTaxonomy";
-import { sectionAccent } from "@/lib/sectionTheme";
+import { SECTION_NEUTRAL, sectionAccent } from "@/lib/sectionTheme";
 
 const QUICK_BRANDS: CarBrand[] = POPULAR_BRANDS;
 const CLEAR_ATTRS = CLEAR_SECTION_ATTRS;
@@ -2951,13 +2951,13 @@ const styles = StyleSheet.create({
   /** Cars filter surface — the same #090909 the header root uses, so the chips
    *  continue the header card rather than floating on the page. */
   carFilterPanel: {
-    backgroundColor: "#090909",
+    backgroundColor: SECTION_NEUTRAL.void,
     paddingTop: 10,
   },
   /** The last cars filter row: same surface, and the rounded bottom that closes
    *  the card off. */
   carFilterPanelFooter: {
-    backgroundColor: "#090909",
+    backgroundColor: SECTION_NEUTRAL.void,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
     paddingBottom: 10,
