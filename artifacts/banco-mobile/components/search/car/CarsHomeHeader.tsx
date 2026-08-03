@@ -61,7 +61,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "@/components/AppText";
 import { useI18n } from "@/context/LanguageContext";
-import { sectionAccent } from "@/lib/sectionTheme";
+import { SECTION_NEUTRAL, sectionAccent } from "@/lib/sectionTheme";
 import { VehicleGlyph, type VehicleGlyphName } from "./VehicleGlyph";
 
 const BANCO_LOGO = require("../../../assets/images/banco-logo.png");
@@ -87,19 +87,19 @@ const BOOM_LOGO = require("../../../assets/images/boom-logo.png");
  *  therefore stays BOUND to `sectionAccent("car")` — never a literal here — and
  *  the glow and the bright accent are DERIVED from it, so the header never shows
  *  two unrelated reds. */
-const VOID = "#090909";
-const SECONDARY = "#121212";
-const SURFACE = "#181818";
+const VOID = SECTION_NEUTRAL.void;
+const SECONDARY = SECTION_NEUTRAL.secondary;
+const SURFACE = SECTION_NEUTRAL.surface;
 const ACCENT = sectionAccent("car");
 /** The brief's glow is its red at 18%. Ours is the identity red at 18%. */
 const GLOW = "rgba(204,30,36,0.18)";
 /** The brief's #FF2B2B lifted from OUR red instead of theirs — same job (the
  *  brighter tint for active states), same family as everything around it. */
 const ACCENT_BRIGHT = "#FF3A40";
-const SNOW = "#FFFFFF";
-const ASH = "#A5A5A5";
-const STEEL = "#C7C7CC";
-const HAIRLINE = "rgba(255,255,255,0.06)";
+const SNOW = SECTION_NEUTRAL.snow;
+const ASH = SECTION_NEUTRAL.ash;
+const STEEL = SECTION_NEUTRAL.steel;
+const HAIRLINE = SECTION_NEUTRAL.hairline;
 
 const HERO_MIN_HEIGHT = 244;
 

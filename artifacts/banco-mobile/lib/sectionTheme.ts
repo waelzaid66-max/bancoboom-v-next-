@@ -98,3 +98,44 @@ export function sectionMotif(key: string | null | undefined): string {
   if (!key) return SECTION_MOTIF.all;
   return SECTION_MOTIF[key as SectionKey] ?? SECTION_MOTIF.all;
 }
+
+/**
+ * The neutrals every section header is built on.
+ *
+ * They were written out five times — once per header — and drifted, which is
+ * what always happens to a value with five homes. Cars moved to the owner's
+ * 2026-08-02 brief palette and the other four stayed on the older one, so the
+ * app was quietly running two greys and two blacks at the same time:
+ *
+ *     Cars                          #090909 · #A5A5A5 · hairline 0.06
+ *     Property · Materials ·        #000000 · #8E8E93 · hairline 0.16
+ *     Facilities · Stays
+ *
+ * The values here are the brief's, verbatim. That is not a preference — the
+ * owner specified them, Cars already ships them by that decision, and the job
+ * of this constant is to stop the other headers disagreeing with it.
+ *
+ * Why not pure black. #090909 is a hair off it so a card, a sheet or a pinned
+ * bar laid on top has something to be lighter THAN. On a true #000000 ground
+ * every surface above it has to invent its own separation, which is where four
+ * different hairline opacities came from in the first place.
+ *
+ * The accent is deliberately NOT here. That belongs to SECTION_ACCENT above,
+ * where each world keeps its own — these are the parts that must not differ.
+ */
+export const SECTION_NEUTRAL = {
+  /** Page ground. */
+  void: "#090909",
+  /** One step up — the plane a pinned bar or a sheet sits on. */
+  secondary: "#121212",
+  /** Two steps up — cards, pills, the search field. */
+  surface: "#181818",
+  /** Primary text. */
+  snow: "#FFFFFF",
+  /** Secondary text: labels, captions, the inactive half of a chip row. */
+  ash: "#A5A5A5",
+  /** Tertiary text — still readable, never a heading. */
+  steel: "#C7C7CC",
+  /** The only divider. Four different opacities existed before this line. */
+  hairline: "rgba(255,255,255,0.06)",
+} as const;

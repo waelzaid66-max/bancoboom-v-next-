@@ -538,6 +538,15 @@ const en = {
     nearMeDenied: "Location permission is required to search near you.",
     nearestNeedsNearMe:
       "Turn on Near me first so we can sort by distance from your location.",
+    mapDrawArea: "Draw a search area",
+    mapDrawDone: "Search this area",
+    mapDrawUndo: "Undo last point",
+    mapDrawClear: "Clear the area",
+    /** Every listing inside the shape is a single pin, so this number is exact. */
+    mapAreaCount: "{count} in this area",
+    /** A cluster inside the shape may hold listings outside it, so the number
+     *  is a floor, never a total. Zooming in resolves it into an exact one. */
+    mapAreaCountAtLeast: "{count}+ in this area · zoom in for the exact count",
     locateFailedTitle: "Couldn't find your location",
     locateDeniedBody:
       "Allow location access so Locate me can centre the map. You can enable it in Settings.",
@@ -2912,6 +2921,12 @@ const ar: typeof en = {
     nearMeDenied: "يلزم السماح بالموقع للبحث بالقرب منك.",
     nearestNeedsNearMe:
       "فعّل «قريب مني» أولاً عشان نرتّب النتائج حسب المسافة من موقعك.",
+    mapDrawArea: "ارسم منطقة بحث",
+    mapDrawDone: "ابحث في المنطقة دي",
+    mapDrawUndo: "تراجع عن آخر نقطة",
+    mapDrawClear: "امسح المنطقة",
+    mapAreaCount: "{count} في المنطقة دي",
+    mapAreaCountAtLeast: "{count}+ في المنطقة دي · قرّب للعدد الدقيق",
     locateFailedTitle: "تعذّر تحديد موقعك",
     locateDeniedBody:
       "اسمح بالوصول للموقع عشان زر موقعي يوسّط الخريطة. تقدر تفعّله من الإعدادات.",
