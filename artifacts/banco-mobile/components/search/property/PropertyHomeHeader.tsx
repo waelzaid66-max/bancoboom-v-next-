@@ -203,7 +203,7 @@ export function PropertyHomeHeader({
     typePicker === "commercial" ? "re-commercial" : "re-more";
 
   return (
-    <View style={[styles.root, { paddingTop: topPad - 1 }]} testID="re-property-header">
+    <View style={[styles.root, { paddingTop: Math.max(0, topPad - 1) }]} testID="re-property-header">
       {/* Band A — top actions */}
       <View style={[styles.topBar, { flexDirection: rowDir }]}>
         <Pressable

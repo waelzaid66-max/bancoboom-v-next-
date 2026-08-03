@@ -256,15 +256,12 @@ export function MarketCountryButton({
   /** Search/Stay: currency rides in the button. Create/edit: false — currency
    *  has its own compact control (seller may override to USD/EUR). */
   showCurrency = true,
-  compact = false,
   density = "default",
 }: {
   selected: string;
   onPress: () => void;
   testID?: string;
   showCurrency?: boolean;
-  /** Dense hit for B-PROPERTIES header — slightly smaller, same content. */
-  compact?: boolean;
   /**
    * `micro` — flag + currency (+ chevron) for welding next to BANCO.
    * Keeps a second signal (currency) so it is not the banned flag-only look.
@@ -283,7 +280,10 @@ export function MarketCountryButton({
   // Currency rides in the same icon (owner: currency is display/valuation in the
   // market's money, NOT a search filter). Follows the market — never chosen alone.
   const currency = CURRENCY_BY_MARKET[selected] ?? "";
-  const micro = density === "micro" || compact;
+  // `density` is the only dial. A `compact` boolean used to sit beside it
+  // saying the same thing, passed by nobody across seven call sites, with no
+  // defined answer for what compact + density="default" should mean.
+  const micro = density === "micro";
   const showLabel = density !== "micro";
   const currencyVisible = showCurrency || density === "micro";
 

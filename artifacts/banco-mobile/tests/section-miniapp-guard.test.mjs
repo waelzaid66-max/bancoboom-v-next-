@@ -2054,7 +2054,7 @@ test("W8-D: BOOM STAY header + FAB map chrome protected", () => {
   );
 });
 
-test("W8-D: Factories screen locks facilities + chips chrome (no invented premium header)", () => {
+test("W8-D: Factories screen keeps facilities + chips chrome", () => {
   const factories = fs.readFileSync(
     path.join(APP_ROOT, "app", "section", "factories.tsx"),
     "utf8",
@@ -2064,10 +2064,97 @@ test("W8-D: Factories screen locks facilities + chips chrome (no invented premiu
     factories,
     /chrome=\{\{\s*listingMode:\s*"pill",\s*engines:\s*"chips"\s*\}\}/,
   );
+  // The route stays a thin declaration — identity belongs to the header
+  // component, never inlined here.
   assert.doesNotMatch(
     factories,
-    /FactoriesHomeHeader/,
-    "Factories premium header remains Owner HOLD — do not invent",
+    /HomeHeader/,
+    "the factories route declares the section; it does not mount chrome itself",
+  );
+});
+
+// The hold that used to live here ("Factories premium header remains Owner
+// HOLD — do not invent") was lifted by the owner on 2026-08-02, who asked for
+// this section to be given an identity of its own. The guard now locks what was
+// built instead of forbidding it, so the section cannot silently lose the
+// identity it was just granted.
+test("B-INDUSTRY: facilities header exists and keeps its identity", () => {
+  const header = fs.readFileSync(
+    path.join(
+      APP_ROOT,
+      "components",
+      "search",
+      "facilities",
+      "FacilitiesHomeHeader.tsx",
+    ),
+    "utf8",
+  );
+
+  // Identity: wordmark, powered-by, market — the four siblings all carry these.
+  assert.match(header, /testID="facilities-industry-brand"/);
+  assert.match(header, /testID="facilities-market-beside-banco"/);
+  assert.match(header, /booking\.poweredBy/);
+
+  // W9 D-W9-02 gave this section a header map hit because the FAB alone is easy
+  // to miss. That requirement survives the redesign.
+  assert.match(
+    header,
+    /testID="facilities-header-map"/,
+    "the header map hit is load-bearing — the FAB alone is easy to miss",
+  );
+
+  // Accent comes from the section theme, never a literal.
+  assert.match(header, /sectionAccent\("facilities"\)/);
+  assert.doesNotMatch(
+    header,
+    /ACCENT\s*=\s*"#/,
+    "the accent must come from sectionAccent, not a hardcoded hex",
+  );
+});
+
+test("B-INDUSTRY: the split defaults to the old behaviour and stays honest", () => {
+  const header = fs.readFileSync(
+    path.join(
+      APP_ROOT,
+      "components",
+      "search",
+      "facilities",
+      "FacilitiesHomeHeader.tsx",
+    ),
+    "utf8",
+  );
+  const app = fs.readFileSync(
+    path.join(APP_ROOT, "components", "search", "SectionSearchApp.tsx"),
+    "utf8",
+  );
+
+  // Any caller that passes no slot gets exactly what it got before the split.
+  assert.match(header, /slot = "all"/);
+  assert.match(header, /showPinned = slot === "all" \|\| slot === "pinned"/);
+  assert.match(header, /showScroll = slot === "all" \|\| slot === "scroll"/);
+
+  // Brand is pinned, so BANCO can never end up beneath the filter chips.
+  assert.match(
+    header,
+    /\{showPinned \? \(\s*<View\s+style=\{\[styles\.brandLockup/,
+    "the brand lockup must sit in the pinned slice",
+  );
+
+  // Counts are proven or absent — never typed in, never a guess.
+  assert.doesNotMatch(
+    header,
+    /count:\s*\d/,
+    "a count literal in the header means a number nothing can back",
+  );
+  assert.match(
+    app,
+    /counts\[ty\] \?\? 0/,
+    "facility type counts must read the live industrial_type facet",
+  );
+  assert.match(
+    app,
+    /\.filter\(\(ty\) => ty\.count > 0\)/,
+    "a type with no listings must not become a chip that leads nowhere",
   );
 });
 

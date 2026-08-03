@@ -23,6 +23,12 @@ import {
 import { AppText } from "@/components/AppText";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
+import { sectionAccent } from "@/lib/sectionTheme";
+
+/** The seventh copy of the Material red, and the one no audit had listed —
+ *  it hid inside a StyleSheet instead of a named constant. Same binding as its
+ *  six siblings: car import wears the car accent. */
+const RED = sectionAccent("car");
 
 export default function ImportRequestScreen() {
   const colors = useColors();
@@ -224,7 +230,7 @@ const styles = StyleSheet.create({
   multiline: { minHeight: 90, textAlignVertical: "top" },
   submit: {
     marginTop: 20,
-    backgroundColor: "#E53935",
+    backgroundColor: RED,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",

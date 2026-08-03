@@ -59,11 +59,28 @@ const SPEC_LABELS: Record<string, Bi> = {
   doors: { en: "Doors", ar: "الأبواب" },
   body_type: { en: "Body Type", ar: "نوع الهيكل" },
   drivetrain: { en: "Drivetrain", ar: "نظام الدفع" },
+  // Seven keys the create taxonomy collects that this table never knew about.
+  // `formatSpecKey` falls back to title-casing the raw key, so an Arabic
+  // listing page rendered these in English — "Offer Type", "Rental Term",
+  // "Industry" — sitting beside fields that were correctly Arabic.
+  offer_type: { en: "Offer Type", ar: "نوع العرض" },
+  rental_term: { en: "Rental Term", ar: "نظام الإيجار" },
+  ownership: { en: "Ownership", ar: "نوع الملكية" },
+  industry: { en: "Industry", ar: "الصناعة" },
+  capacity: { en: "Capacity", ar: "الطاقة الإنتاجية" },
+  material: { en: "Material", ar: "الخامة" },
+  origin: { en: "Origin", ar: "المنشأ" },
 };
 
 const VALUE_LABELS: Record<string, Record<string, Bi>> = {
   finishing: {
     super_lux: { en: "Super Lux", ar: "سوبر لوكس" },
+    // FINISHING_TYPES stores "finished" (listingCreateTaxonomy.ts:144) while
+    // this table only knew "fully_finished", so every listing created through
+    // the form fell through to the raw-key fallback and showed the English
+    // "Finished" on an Arabic page. The stored value is deliberately NOT
+    // renamed — that would orphan every row already carrying it.
+    finished: { en: "Finished", ar: "تشطيب كامل" },
     fully_finished: { en: "Fully Finished", ar: "تشطيب كامل" },
     semi_finished: { en: "Semi Finished", ar: "نص تشطيب" },
     core_shell: { en: "Core & Shell", ar: "على المحارة" },

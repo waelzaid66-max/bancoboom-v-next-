@@ -26,6 +26,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSharedValue } from "react-native-reanimated";
 
 import { AppText } from "@/components/AppText";
 import { CarPicker } from "@/components/CarPicker";
@@ -43,6 +44,10 @@ import {
   RE_MORE_TYPES,
 } from "@/components/search/property/PropertyHomeHeader";
 import { MaterialsHomeHeader } from "@/components/search/materials/MaterialsHomeHeader";
+import {
+  FacilitiesHomeHeader,
+  type FacilityType,
+} from "@/components/search/facilities/FacilitiesHomeHeader";
 import {
   CAR_CATEGORIES,
   CarsHomeHeader,
@@ -88,7 +93,7 @@ import {
 } from "@/constants/engines";
 import { useI18n } from "@/context/LanguageContext";
 import { useSession } from "@/context/SessionContext";
-import { useSound } from "@/context/SoundContext";
+import { soundForCategory, useSound } from "@/context/SoundContext";
 import { useColors } from "@/hooks/useColors";
 import { useSearchMiniApp } from "@/hooks/useSearchMiniApp";
 import {
@@ -212,6 +217,10 @@ export function SectionSearchApp({
   const colors = useColors();
   const { t, isRTL } = useI18n();
   const { playSound } = useSound();
+  // This mini-app is one section at a time, so its taps can carry that
+  // section's cue instead of the neutral one. Read once — `category` is locked
+  // for the life of the screen by the anti-melt guards.
+  const tap = soundForCategory(category);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const {
@@ -802,7 +811,7 @@ export function SectionSearchApp({
   }, [criteria.nearMeEnabled, criteria.sort, t, update]);
 
   const openSearch = () => {
-    playSound("tap");
+    playSound(tap);
     setSearchOpen(true);
     setTimeout(() => inputRef.current?.focus(), 50);
   };
@@ -840,6 +849,31 @@ export function SectionSearchApp({
       : "all";
   const isMaterialsSection = criteria.category === "materials";
   const isCarSection = criteria.category === "car";
+  const isFacilitiesSection = criteria.category === "facilities";
+
+  /** B-INDUSTRY browse types. Every entry is a type the live `industrial_type`
+   *  facet actually returned with a count above zero, so the strip can never
+   *  offer a chip that leads to an empty result — and the number beside the
+   *  label is the same number the search will produce. Unlike the car section,
+   *  whose vehicle-type facet does not exist, this one is real. */
+  const facilityTypes = useMemo<FacilityType[]>(() => {
+    if (!isFacilitiesSection) return [];
+    const counts = scopedFacets?.industrial_type;
+    if (!counts) return [];
+    const icon: Record<string, React.ComponentProps<typeof Feather>["name"]> = {
+      factory: "home",
+      warehouse: "package",
+      land: "map",
+    };
+    return (visibleIndTypes ?? [])
+      .map((ty) => ({
+        key: ty,
+        label: t(`home.industrialTypes.${ty}` as never),
+        count: counts[ty] ?? 0,
+        icon: icon[ty] ?? "grid",
+      }))
+      .filter((ty) => ty.count > 0);
+  }, [isFacilitiesSection, scopedFacets, visibleIndTypes, t]);
   // B-CORE upper header: identity + search/Filters + market beside BANCO.
   // Smart horizontal strip under header: industrial types + origin (wrap, flexGrow:0).
   // Commodity strip when raw/all. listingMode + refinements stay in FilterSheet
@@ -1189,7 +1223,7 @@ export function SectionSearchApp({
   });
 
   const goBack = () => {
-    playSound("tap");
+    playSound(tap);
     if (isDirty) {
       resetAndLeave(() => router.back());
       return;
@@ -1255,7 +1289,7 @@ export function SectionSearchApp({
         {activeFilterCount > 0 || draftQuery.trim() ? (
           <Pressable
             onPress={() => {
-              playSound("tap");
+              playSound(tap);
               clearAllFilters();
             }}
             style={[
@@ -1280,7 +1314,7 @@ export function SectionSearchApp({
             bridge into the B2B RFQ flow. */}
         <Pressable
           onPress={() => {
-            playSound("tap");
+            playSound(tap);
             const createCategory = sectionEmptyPostRequestCategory(
               category as "car" | "real_estate" | "facilities" | "materials",
             );
@@ -1308,7 +1342,7 @@ export function SectionSearchApp({
         {activeGroup ? (
           <Pressable
             onPress={() => {
-              playSound("tap");
+              playSound(tap);
               router.push("/rfq/create" as Href);
             }}
             style={[
@@ -1335,6 +1369,155 @@ export function SectionSearchApp({
     );
   }
 
+  /**
+   * The half of the Cars header that scrolls.
+   *
+   * The hero is 244dp of brand atmosphere; measured on a 932dp screen it helped
+   * push the first card down to 511dp. It is identity, not a control, so it
+   * belongs with the content: handed to the results list as its own header it
+   * leaves the screen on the first scroll and never comes back uninvited.
+   *
+   * The top bar and the search row stay pinned above the list — they are how a
+   * buyer changes the query, and the non-results overlay would swallow them if
+   * they lived in here.
+   *
+   * `carScrollY` is how the two halves stay in step. The list writes its offset
+   * to it on the UI thread and the pinned half interpolates its collapse from
+   * it, so the header answers the scroll without either half re-rendering, and
+   * without the hero having to leave the list to be animated.
+   */
+  const carScrollY = useSharedValue(0);
+
+  const carScrollHeader = useMemo(() => {
+    if (!isCarSection) return null;
+    return (
+      <CarsHomeHeader
+        slot="scroll"
+        searchOpen={searchOpen}
+        draftQuery={draftQuery}
+        searchSaved={searchSaved}
+        activeFilterCount={activeFilterCount}
+        inputRef={inputRef}
+        categories={carHeroCategories}
+        selectedCategory={carCategory}
+        stats={carHeroStats}
+        onBack={goBack}
+        onSaveSearch={handleSaveSearch}
+        // This slot paints no map / bell / profile control today — those live in
+        // the pinned bar. They are still wired to the real handlers instead of
+        // no-ops, so nothing here becomes a dead control if a band ever moves
+        // between slots.
+        onOpenMap={() => {
+          playSound(tap);
+          Haptics.selectionAsync();
+          openOrLatchMap({ inResultsView, setMapMode, setWantMap });
+        }}
+        onOpenFilters={() => setShowFilters(true)}
+        onOpenSearch={openSearch}
+        onCloseSearch={closeSearch}
+        onQueryChange={handleQueryChange}
+        onSubmitQuery={() => commitQueryNow(draftQuery)}
+        onClearQuery={clearQuery}
+        onSelectCategory={(key) => {
+          playSound(tap);
+          if (key === "more") {
+            setCarFiltersOpen(true);
+            return;
+          }
+          const next = carCategory === key ? null : key;
+          setCarCategory(next);
+          const term = next
+            ? t(
+                CAR_CATEGORIES.find((c) => c.key === next)?.i18nKey ??
+                  "search.discover.section.carTypeCars",
+              )
+            : "";
+          setDraftQuery(term);
+          commitQueryNow(term);
+        }}
+        onOpenNotifications={() => {
+          playSound(tap);
+          router.push("/notifications");
+        }}
+        onOpenProfile={() => {
+          playSound(tap);
+          router.push("/(tabs)/profile" as Href);
+        }}
+      />
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isCarSection,
+    searchOpen,
+    draftQuery,
+    searchSaved,
+    activeFilterCount,
+    carHeroCategories,
+    carCategory,
+    carHeroStats,
+    t,
+  ]);
+
+  /** B-INDUSTRY's scrolling slice — hero, type strip, proven count. Placed here,
+   *  immediately before the return, because it reads state declared above it. */
+  const facilitiesScrollHeader = useMemo(() => {
+    if (!isFacilitiesSection) return null;
+    return (
+      <FacilitiesHomeHeader
+        slot="scroll"
+        searchOpen={searchOpen}
+        draftQuery={draftQuery}
+        searchSaved={searchSaved}
+        activeFilterCount={activeFilterCount}
+        marketCountry={criteria.marketCountry}
+        sort={criteria.sort}
+        inputRef={inputRef}
+        types={facilityTypes}
+        activeType={criteria.industrialType}
+        onSelectType={(key) => {
+          playSound("tap");
+          selectIndustrialType(key as IndustrialType);
+        }}
+        onBack={goBack}
+        onSaveSearch={handleSaveSearch}
+        onOpenMap={() => {
+          playSound("tap");
+          Haptics.selectionAsync();
+          openOrLatchMap({ inResultsView, setMapMode, setWantMap });
+        }}
+        onOpenFilters={() => setShowFilters(true)}
+        onOpenSearch={openSearch}
+        onCloseSearch={closeSearch}
+        onQueryChange={handleQueryChange}
+        onSubmitQuery={() => commitQueryNow(draftQuery)}
+        onClearQuery={clearQuery}
+        onOpenMarket={() => {
+          playSound("tap");
+          setMarketPickerOpen(true);
+        }}
+        onCycleSort={() => {
+          playSound("tap");
+          const cycle = ["recommended", "newest", "price_asc", "price_desc"] as const;
+          const next =
+            cycle[(cycle.indexOf(criteria.sort as (typeof cycle)[number]) + 1) % cycle.length];
+          update({ sort: next });
+        }}
+      />
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isFacilitiesSection,
+    searchOpen,
+    draftQuery,
+    searchSaved,
+    activeFilterCount,
+    criteria.marketCountry,
+    criteria.sort,
+    criteria.industrialType,
+    facilityTypes,
+  ]);
+
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {isRealEstateSection ? (
@@ -1354,20 +1537,20 @@ export function SectionSearchApp({
           onBack={goBack}
           onSaveSearch={handleSaveSearch}
           onOpenStays={() => {
-            playSound("tap");
+            playSound(tap);
             router.push("/section/booking" as Href);
           }}
           onOpenRequest={() => {
-            playSound("tap");
+            playSound(tap);
             router.push("/listings/create?request=1&category=real_estate" as Href);
           }}
           onOpenMap={() => {
-            playSound("tap");
+            playSound(tap);
             Haptics.selectionAsync();
             openOrLatchMap({ inResultsView, setMapMode, setWantMap });
           }}
           onOpenFilters={() => {
-            playSound("tap");
+            playSound(tap);
             setShowFilters(true);
           }}
           onOpenSearch={openSearch}
@@ -1376,26 +1559,26 @@ export function SectionSearchApp({
           onSubmitQuery={() => commitQueryNow(draftQuery)}
           onClearQuery={clearQuery}
           onSelectType={(value) => {
-            playSound("tap");
+            playSound(tap);
             Haptics.selectionAsync();
             selectRePropertyType(value);
           }}
           onSelectOffer={(engineKey) => {
-            playSound("tap");
+            playSound(tap);
             Haptics.selectionAsync();
             selectEngine(engineKey);
           }}
           onToggleWanted={() => {
-            playSound("tap");
+            playSound(tap);
             Haptics.selectionAsync();
             selectListingMode(criteria.listingMode === "buy" ? "all" : "buy");
           }}
           onOpenMarket={() => {
-            playSound("tap");
+            playSound(tap);
             setMarketPickerOpen(true);
           }}
           onCycleSort={() => {
-            playSound("tap");
+            playSound(tap);
             const cycle = ["recommended", "newest", "price_asc", "price_desc"] as const;
             const next =
               cycle[(cycle.indexOf(criteria.sort as (typeof cycle)[number]) + 1) % cycle.length];
@@ -1411,6 +1594,50 @@ export function SectionSearchApp({
           marketCountry={criteria.marketCountry}
           sort={criteria.sort}
           inputRef={inputRef}
+          onBack={goBack}
+          onSaveSearch={handleSaveSearch}
+          onOpenMap={() => {
+            playSound(tap);
+            Haptics.selectionAsync();
+            openOrLatchMap({ inResultsView, setMapMode, setWantMap });
+          }}
+          onOpenFilters={() => {
+            playSound(tap);
+            setShowFilters(true);
+          }}
+          onOpenSearch={openSearch}
+          onCloseSearch={closeSearch}
+          onQueryChange={handleQueryChange}
+          onSubmitQuery={() => commitQueryNow(draftQuery)}
+          onClearQuery={clearQuery}
+          onOpenMarket={() => {
+            playSound(tap);
+            setMarketPickerOpen(true);
+          }}
+          onCycleSort={() => {
+            playSound(tap);
+            const cycle = ["recommended", "newest", "price_asc", "price_desc"] as const;
+            const next =
+              cycle[(cycle.indexOf(criteria.sort as (typeof cycle)[number]) + 1) % cycle.length];
+            update({ sort: next });
+          }}
+        />
+      ) : isFacilitiesSection ? (
+        <FacilitiesHomeHeader
+          slot="pinned"
+          searchOpen={searchOpen}
+          draftQuery={draftQuery}
+          searchSaved={searchSaved}
+          activeFilterCount={activeFilterCount}
+          marketCountry={criteria.marketCountry}
+          sort={criteria.sort}
+          inputRef={inputRef}
+          types={facilityTypes}
+          activeType={criteria.industrialType}
+          onSelectType={(key) => {
+            playSound("tap");
+            selectIndustrialType(key as IndustrialType);
+          }}
           onBack={goBack}
           onSaveSearch={handleSaveSearch}
           onOpenMap={() => {
@@ -1441,6 +1668,8 @@ export function SectionSearchApp({
         />
       ) : isCarSection ? (
         <CarsHomeHeader
+          slot="pinned"
+          scrollY={carScrollY}
           searchOpen={searchOpen}
           draftQuery={draftQuery}
           searchSaved={searchSaved}
@@ -1449,12 +1678,12 @@ export function SectionSearchApp({
           onBack={goBack}
           onSaveSearch={handleSaveSearch}
           onOpenMap={() => {
-            playSound("tap");
+            playSound(tap);
             Haptics.selectionAsync();
             openOrLatchMap({ inResultsView, setMapMode, setWantMap });
           }}
           onOpenFilters={() => {
-            playSound("tap");
+            playSound(tap);
             setShowFilters(true);
           }}
           onOpenSearch={openSearch}
@@ -1466,7 +1695,7 @@ export function SectionSearchApp({
           selectedCategory={carCategory}
           stats={carHeroStats}
           onSelectCategory={(key) => {
-            playSound("tap");
+            playSound(tap);
             // "More" is not a vehicle type — it is the way into the axes that
             // used to sprawl across the first screen.
             if (key === "more") {
@@ -1485,11 +1714,11 @@ export function SectionSearchApp({
             commitQueryNow(term);
           }}
           onOpenNotifications={() => {
-            playSound("tap");
+            playSound(tap);
             router.push("/notifications");
           }}
           onOpenProfile={() => {
-            playSound("tap");
+            playSound(tap);
             router.push("/(tabs)/profile" as Href);
           }}
         />
@@ -1564,7 +1793,7 @@ export function SectionSearchApp({
             map hit — FAB alone is easy to miss. Do NOT invent FactoriesHomeHeader. */}
         <Pressable
           onPress={() => {
-            playSound("tap");
+            playSound(tap);
             Haptics.selectionAsync();
             openOrLatchMap({ inResultsView, setMapMode, setWantMap });
           }}
@@ -1583,7 +1812,7 @@ export function SectionSearchApp({
         </Pressable>
         <Pressable
           onPress={() => {
-            playSound("tap");
+            playSound(tap);
             setShowFilters((v) => !v);
           }}
           style={[
@@ -1631,7 +1860,7 @@ export function SectionSearchApp({
             value={draftQuery}
             onChangeText={handleQueryChange}
             onSubmitEditing={() => commitQueryNow(draftQuery)}
-            onFocus={() => playSound("tap")}
+            onFocus={() => playSound(tap)}
             placeholder={t("search.placeholder")}
             placeholderTextColor={colors.mutedForeground}
             style={[styles.searchBarInput, { color: colors.foreground, textAlign }]}
@@ -1708,7 +1937,7 @@ export function SectionSearchApp({
       {isCarSection ? (
         <Pressable
           onPress={() => {
-            playSound("tap");
+            playSound(tap);
             setCarFiltersOpen((v) => !v);
           }}
           style={[
@@ -1767,7 +1996,7 @@ export function SectionSearchApp({
         <MarketCountryButton
           selected={criteria.marketCountry}
           onPress={() => {
-            playSound("tap");
+            playSound(tap);
             setMarketPickerOpen(true);
           }}
         />
@@ -1775,7 +2004,7 @@ export function SectionSearchApp({
             → price low→high → high→low. */}
         <Pressable
           onPress={() => {
-            playSound("tap");
+            playSound(tap);
             const cycle = ["recommended", "newest", "price_asc", "price_desc"] as const;
             const next =
               cycle[(cycle.indexOf(criteria.sort as (typeof cycle)[number]) + 1) % cycle.length];
@@ -1824,7 +2053,7 @@ export function SectionSearchApp({
               allValue="all"
               allLabel={t("search.offerAny")}
               onSelect={(v) => {
-                playSound("tap");
+                playSound(tap);
                 Haptics.selectionAsync();
                 selectListingMode(v as "all" | "sale" | "buy");
               }}
@@ -1837,7 +2066,7 @@ export function SectionSearchApp({
               return (
                 <Pressable
                   key={mode}
-                  onPress={() => { playSound("tap"); Haptics.selectionAsync(); selectListingMode(mode); }}
+                  onPress={() => { playSound(tap); Haptics.selectionAsync(); selectListingMode(mode); }}
                   style={[styles.stripChip, { backgroundColor: active ? accent : colors.secondary }]}
                   testID={`section-listing-mode-${mode}`}
                 >
@@ -1861,7 +2090,7 @@ export function SectionSearchApp({
               allValue="all"
               allLabel={t("search.typeAny")}
               onSelect={(v) => {
-                playSound("tap");
+                playSound(tap);
                 Haptics.selectionAsync();
                 selectEngine(v);
               }}
@@ -1874,7 +2103,7 @@ export function SectionSearchApp({
               return (
                 <Pressable
                   key={e.key}
-                  onPress={() => { playSound("tap"); Haptics.selectionAsync(); selectEngine(e.key); }}
+                  onPress={() => { playSound(tap); Haptics.selectionAsync(); selectEngine(e.key); }}
                   style={[styles.stripChip, { backgroundColor: active ? accent : colors.secondary }]}
                   testID={`engine-${e.key}`}
                 >
@@ -1894,7 +2123,7 @@ export function SectionSearchApp({
           return (
             <Pressable
               key={item.key}
-              onPress={() => { playSound("tap"); Haptics.selectionAsync(); selectIndustrialType(item.key); }}
+              onPress={() => { playSound(tap); Haptics.selectionAsync(); selectIndustrialType(item.key); }}
               style={[styles.stripChip, { backgroundColor: active ? accent : colors.secondary }]}
               testID={`industrial-type-${item.key}`}
             >
@@ -1931,7 +2160,7 @@ export function SectionSearchApp({
               allValue={RE_TYPE_ALL}
               allLabel={t("search.discover.section.propertyTypeAny")}
               onSelect={(v) => {
-                playSound("tap");
+                playSound(tap);
                 Haptics.selectionAsync();
                 selectRePropertyType(v);
               }}
@@ -1966,7 +2195,7 @@ export function SectionSearchApp({
                   <Pressable
                     key={tab.value}
                     onPress={() => {
-                      playSound("tap");
+                      playSound(tap);
                       Haptics.selectionAsync();
                       selectRePropertyType(tab.value);
                     }}
@@ -2011,7 +2240,7 @@ export function SectionSearchApp({
           <View testID="car-brand-strip">
           <Pressable
             onPress={() => {
-              playSound("tap");
+              playSound(tap);
               setCarPickerOpen(true);
             }}
             style={[
@@ -2058,7 +2287,7 @@ export function SectionSearchApp({
                 <Pressable
                   key={o}
                   onPress={() => {
-                    playSound("tap");
+                    playSound(tap);
                     Haptics.selectionAsync();
                     selectOrigin(o);
                   }}
@@ -2102,7 +2331,7 @@ export function SectionSearchApp({
               <Pressable
                 key={tab.value}
                 onPress={() => {
-                  playSound("tap");
+                  playSound(tap);
                   Haptics.selectionAsync();
                   selectIndustrialType(tab.value);
                 }}
@@ -2140,7 +2369,7 @@ export function SectionSearchApp({
                 <Pressable
                   key={o}
                   onPress={() => {
-                    playSound("tap");
+                    playSound(tap);
                     Haptics.selectionAsync();
                     selectOrigin(o);
                   }}
@@ -2186,7 +2415,7 @@ export function SectionSearchApp({
         >
           <Pressable
             onPress={() => {
-              playSound("tap");
+              playSound(tap);
               Haptics.selectionAsync();
               update({ material: null });
             }}
@@ -2218,7 +2447,7 @@ export function SectionSearchApp({
               <Pressable
                 key={m.value}
                 onPress={() => {
-                  playSound("tap");
+                  playSound(tap);
                   Haptics.selectionAsync();
                   selectMaterial(m.value);
                 }}
@@ -2266,7 +2495,7 @@ export function SectionSearchApp({
             allValue="any"
             allLabel={t("search.discover.rentalTermAny")}
             onSelect={(v) => {
-              playSound("tap");
+              playSound(tap);
               Haptics.selectionAsync();
               if (v === "any") {
                 update({ rentalTerm: null });
@@ -2295,7 +2524,7 @@ export function SectionSearchApp({
             <Pressable
               key={chip.id}
               onPress={() => {
-                playSound("tap");
+                playSound(tap);
                 Haptics.selectionAsync();
                 chip.onClear();
               }}
@@ -2320,7 +2549,7 @@ export function SectionSearchApp({
           {reActiveChips.length > 1 ? (
             <Pressable
               onPress={() => {
-                playSound("tap");
+                playSound(tap);
                 clearAllFilters();
               }}
               style={[
@@ -2411,6 +2640,12 @@ export function SectionSearchApp({
           onRefresh={retry}
           overlay={overlay}
           contentPaddingBottom={insets.bottom + 150}
+          listHeader={carScrollHeader ?? facilitiesScrollHeader}
+          // Only Cars animates its collapse, so only Cars needs the offset.
+          // Facilities uses the same split without the animation, and every
+          // other section leaves this undefined so the list attaches no scroll
+          // handler at all.
+          scrollY={isCarSection ? carScrollY : undefined}
         />
 
         {mapMode && inResultsView ? (
@@ -2443,7 +2678,7 @@ export function SectionSearchApp({
           >
             <Pressable
               onPress={() => {
-                playSound("tap");
+                playSound(tap);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setMapMode((m) => !m);
               }}

@@ -28,8 +28,15 @@ import { AppText } from "@/components/AppText";
 import { MiniAppBottomNav } from "@/components/MiniAppBottomNav";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
+import { SECTION_HERO_RAMP, sectionAccent } from "@/lib/sectionTheme";
 
-const RED = "#E53935";
+import { SOURCES as AUCTION_SOURCES } from "./auctions";
+
+/** Car import is the CAR world, so its accent is the CAR token — bound, never
+ *  written as a literal. #E53935 was Material Design's default red: a sixth
+ *  family the app never chose, sitting ΔE ≈ 19 from the logo. Owner ruling
+ *  2026-08-02: colours track the identity of the app as a whole. */
+const RED = sectionAccent("car");
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -178,9 +185,25 @@ export default function CarImportHubScreen() {
     }
   };
 
+  /**
+   * Capability strip — what this hub DOES. A number may sit here only when
+   * something in the repo can be counted to produce it.
+   *
+   * Both "8+" auctions and "21" countries were typed by hand. The auction list
+   * is exactly eight entries long, so that count now reads the list it
+   * describes and can never drift from it; the "+" was the part that lied. No
+   * list of twenty-one countries exists anywhere, so that row drops its value
+   * and reads as the capability it always was — the three rows under it never
+   * carried a number either. A real count can take the `value` slot the day an
+   * endpoint can prove it.
+   */
   const stats: { key: string; labelKey: string; value?: string }[] = [
-    { key: "auctions", labelKey: "importHub.statAuctions", value: "8+" },
-    { key: "countries", labelKey: "importHub.statCountries", value: "21" },
+    {
+      key: "auctions",
+      labelKey: "importHub.statAuctions",
+      value: String(AUCTION_SOURCES.length),
+    },
+    { key: "countries", labelKey: "importHub.statCountries" },
     { key: "shipping", labelKey: "importHub.statShipping" },
     { key: "customs", labelKey: "importHub.statCustoms" },
     { key: "tracking", labelKey: "importHub.statTracking" },
@@ -237,7 +260,7 @@ export default function CarImportHubScreen() {
         {/* Hero — section-scoped identity card (BANCO dark + red accent). */}
         <View style={styles.heroWrap} testID="import-hub-hero">
           <LinearGradient
-            colors={["#1A0A0C", "#2A0E12", "#151518"]}
+            colors={SECTION_HERO_RAMP.car}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.heroGradient}
