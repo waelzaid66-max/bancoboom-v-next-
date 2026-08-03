@@ -15,6 +15,13 @@
       "when": 1785603125895,
       "tag": "0001_minor_stingray",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785758395006,
+      "tag": "0002_violet_miss_america",
+      "breakpoints": true
     }
   ]
 }

@@ -501,6 +501,31 @@ export const users = pgTable("users", {
   // 'ar' | 'en' — kept as text rather than an enum so adding a market's language
   // is a seed change, not a migration.
   language: text("language"),
+  /**
+   * When this account last made an authenticated request.
+   *
+   * PRESENCE, WITHOUT PRETENDING TO BE REALTIME
+   *
+   * The messenger is where deals are negotiated and closed, and across time
+   * zones the first question a buyer has is whether the other side is even
+   * awake. A socket-based presence system would answer that more precisely and
+   * would also lie more often: a dropped connection on a weak mobile network
+   * reads as "offline" for someone who is sitting right there, and
+   * international users on poor links would flicker between states all day.
+   *
+   * So presence is derived from a fact instead of a connection. The server
+   * stamps this on authenticated traffic; the client turns its AGE into a
+   * state. "Online" then means "made a request in the last few minutes" —
+   * something that was measured, not something that was assumed. When the age
+   * is too old to claim anything, the honest answer is a relative "last seen",
+   * never a guess.
+   *
+   * Nullable on purpose: absent means "we have never observed this account",
+   * which must render as unknown rather than as offline. An account that has
+   * not been seen is not the same as an account that is away, and conflating
+   * them is the kind of small untruth this codebase does not allow.
+   */
+  lastSeenAt: timestamp("last_seen_at"),
   role: userRoleEnum("role").notNull().default("individual"),
   // Admin Control Center access. Orthogonal to `role`: an admin may also be a
   // dealer/individual. Server-side admin guard gates every admin endpoint on
