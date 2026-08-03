@@ -526,6 +526,20 @@ export const users = pgTable("users", {
    * them is the kind of small untruth this codebase does not allow.
    */
   lastSeenAt: timestamp("last_seen_at"),
+  /**
+   * Whether this account lets the people it is talking to see its presence.
+   *
+   * In a marketplace that runs on negotiation, presence is not a neutral fact.
+   * Someone who can see that you read their listing two hours ago and did not
+   * reply knows something about your position that you did not choose to tell
+   * them. Every serious messenger lets a person switch that off, and a
+   * marketplace messenger needs it more than a social one does, not less.
+   *
+   * Defaults to true so nothing changes for existing accounts, and it is a
+   * one-way gate: with this false the server must not report any presence for
+   * the account — not a coarser state, not a stale one. Off means off.
+   */
+  showPresence: boolean("show_presence").notNull().default(true),
   role: userRoleEnum("role").notNull().default("individual"),
   // Admin Control Center access. Orthogonal to `role`: an admin may also be a
   // dealer/individual. Server-side admin guard gates every admin endpoint on
