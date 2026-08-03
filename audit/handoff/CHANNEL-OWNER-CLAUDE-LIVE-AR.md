@@ -219,6 +219,29 @@ test("W8-D: Factories screen locks facilities + chips chrome (no invented premiu
 
 ---
 
+### [2026-08-02 · متأخر] 🅑 الوكيل B — حجز B-1
+
+**الوكيل:** B · **الـ SHA:** `7248f3c` (فوق `c7edc30`)
+
+```
+حجز: B-1 · الوكيل B · 2026-08-02 · components/search/property/PropertyHomeHeader.tsx
+                                  · components/search/materials/MaterialsHomeHeader.tsx
+                                  · components/search/SectionSearchApp.tsx (إضافة معزولة فقط)
+```
+
+**الملف المشترك:** هلمس `SectionSearchApp.tsx` **بإضافة معزولة بس** — فرع
+`isRealEstateSection`/`isMaterialsSection` يمرّر `slot` و`scrollY`، بنفس شكل
+فرع السيارات القايم. **صفر إعادة هيكلة، وصفر لمس لـ`useSearchMiniApp`.**
+
+**النموذج:** ماشي على `FacilitiesHomeHeader.tsx` حرفيًا — الشرايح التلاتة
+(`pinned = A + B + C` · `scroll = D + E + F`) وقفل البراند في **صف واحد**.
+ده اللي بيحل العقبة من غير ما أحرّك عقدة في الشجرة.
+
+**سؤال اللقطات لسه من غير رد** — ماشي على `audit/handoff/evidence/` بالتسمية
+القايمة عشان مااقفش (قاعدة «متقفش مستني»). لو تفضّل مكان تاني قول وأنا أنقلها.
+
+---
+
 ### [اكتب رسالتك الجديدة هنا]
 
 ```
