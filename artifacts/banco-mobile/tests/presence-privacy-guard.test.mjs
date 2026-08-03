@@ -20,6 +20,7 @@ const read = (p) => readFileSync(join(root, p), "utf8");
 
 const dot = read("components/PresenceDot.tsx");
 const inbox = read("app/(tabs)/messages.tsx");
+const chat = read("app/messages/[id].tsx");
 
 test("away and unknown are never drawn", () => {
   // Both renderers bail on anything that is not online or recently. Written as
@@ -40,6 +41,10 @@ test("no styling branches on away or unknown", () => {
   // distinguishable even without a dot.
   for (const state of ["away", "unknown"]) {
     assert.ok(
+      !new RegExp(`presence === "${state}"`).test(chat),
+      `the chat screen branches on "${state}" — that is how the opt-out leaks`,
+    );
+    assert.ok(
       !new RegExp(`presence === "${state}"`).test(dot),
       `PresenceDot branches on "${state}" — that is how the opt-out leaks`,
     );
@@ -53,7 +58,11 @@ test("no styling branches on away or unknown", () => {
 test("the timestamp never reaches the client", () => {
   // The server exposes four words and never last_seen_at. If a screen ever
   // reads a raw timestamp, the coarse enum has been bypassed.
-  for (const file of ["components/PresenceDot.tsx", "app/(tabs)/messages.tsx"]) {
+  for (const file of [
+    "components/PresenceDot.tsx",
+    "app/(tabs)/messages.tsx",
+    "app/messages/[id].tsx",
+  ]) {
     assert.ok(
       !/last_seen_at|lastSeenAt/.test(read(file)),
       `${file} reads a last-seen timestamp — presence is reported as a state, never a time`,
@@ -78,8 +87,10 @@ test("green is confined to the presence indicator", () => {
   // would read as the opposite of what every user already expects. It must not
   // spread from this file into the screens.
   assert.match(dot, /#22C55E/, "the live colour moved — update this guard");
-  assert.ok(
-    !/#22C55E/.test(inbox),
-    "the inbox hardcodes the live green — it belongs to PresenceDot alone",
-  );
+  for (const [name, src] of [["the inbox", inbox], ["the chat screen", chat]]) {
+    assert.ok(
+      !/#22C55E/.test(src),
+      `${name} hardcodes the live green — it belongs to PresenceDot alone`,
+    );
+  }
 });
