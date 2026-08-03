@@ -66,6 +66,13 @@ import { VehicleGlyph, type VehicleGlyphName } from "./VehicleGlyph";
 
 const BANCO_LOGO = require("../../../assets/images/banco-logo.png");
 const BOOM_LOGO = require("../../../assets/images/boom-logo.png");
+/** The owner's own render, extracted from the design he sent and sitting in the
+ *  repo unused since 2026-08-02. The header's note said depth is "BUILT, never
+ *  photographed" because the brief banned raster — but the brief's own hero is
+ *  a photoreal plate of a jet, a yacht, a helicopter, a truck, a supercar and a
+ *  motorcycle, which no vector can be. The SVG ambience stays and this sits on
+ *  top of it: the drawn light is what makes the plate read as lit. */
+const HERO_PLATE = require("../../../assets/images/section-hero/car.png");
 
 /** Owner brief (2026-08-02): layered dark ground, one accent, premium depth.
  *
@@ -330,6 +337,25 @@ export function CarsHomeHeader({
     return { opacity: p };
   });
 
+  /** The hero band gives back its whole height on the way down and takes it
+   *  back on the way up — "يختفي ويرجع مع الاسكرول".
+   *
+   *  It used to live in the scrolling slice, handed to the list as its header,
+   *  and that is why the owner never saw it: the loading and empty states paint
+   *  over the list as an opaque absoluteFill, so on a screen with no results —
+   *  which is every screen without a network — the hero was covered. Pinned and
+   *  collapsing shows it, and still gives the results the room back. */
+  const heroCollapse = useAnimatedStyle(() => {
+    const p = scrollY
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [1, 0], Extrapolation.CLAMP)
+      : 1;
+    return {
+      opacity: p,
+      height: HERO_MIN_HEIGHT * p,
+      marginBottom: GAP * p,
+    };
+  });
+
   // Shadow deepens as the header takes over from the content behind it. iOS
   // reads opacity/radius, Android reads elevation — both are animatable here.
   const liftCollapse = useAnimatedStyle(() => {
@@ -481,8 +507,8 @@ export function CarsHomeHeader({
               of them is drawn here in react-native-svg. No raster, so it is
               resolution-free and cannot band, clip or blur on any Android
               density — which is the whole reason the brief bans PNG. ── */}
-      {showScroll ? (
-      <View style={styles.hero} testID="cars-hero">
+      {showPinned ? (
+      <Animated.View style={[styles.hero, heroCollapse]} testID="cars-hero">
         <View style={styles.heroGlow} pointerEvents="none">
           {/* Four layers, back to front:
                 1 ground   a vertical lift off #090909 so the band is not flat
@@ -535,13 +561,20 @@ export function CarsHomeHeader({
           </Svg>
         </View>
 
+        <Image
+          source={HERO_PLATE}
+          style={[styles.heroPlate, isRTL ? { left: 0 } : { right: 0 }]}
+          contentFit="contain"
+          contentPosition={isRTL ? "left center" : "right center"}
+          pointerEvents="none"
+          transition={220}
+        />
+
         <View style={[styles.heroCopy, { alignItems: alignStart }]}>
-          <AppText style={[styles.heroTitleTop, { textAlign }]} numberOfLines={1}>
-            {t("search.discover.section.carHeroTitleTop")}
-          </AppText>
-          <AppText style={[styles.heroTitleBottom, { textAlign }]} numberOfLines={1}>
-            {t("search.discover.section.carHeroTitleBottom")}
-          </AppText>
+          {/* "GLOBAL VEHICLE MARKETPLACE" removed by the owner, 2026-08-03:
+              «دي غلط، ملهاش عوزة ولا قيمة — الهيدر بيدل عن كل ده». The wordmark
+              above already says it. The i18n keys stay in place, unused, so the
+              line can come back with one edit if he changes his mind. */}
           <AppText style={[styles.heroSubtitle, { textAlign }]} numberOfLines={2}>
             {t("search.discover.section.carHeroSubtitle")}
           </AppText>
@@ -560,7 +593,7 @@ export function CarsHomeHeader({
             ))}
           </View>
         </View>
-      </View>
+      </Animated.View>
       ) : null}
 
       {/* ── Band C — one search row. Map + save sit inline so the top bar can
@@ -659,7 +692,10 @@ export function CarsHomeHeader({
 
       {/* ── Band D — quick vehicle categories. Absent until live inventory can
               actually be filtered by vehicle type (see CAR_CATEGORIES). ── */}
-      {showScroll && categories.length > 0 ? (
+      {/* PINNED. It is a browse control, and the empty-state overlay covers
+          whatever the list carries — the row a buyer with no results needs to
+          change what they are looking at is the row that must not vanish. */}
+      {showPinned && categories.length > 0 ? (
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -701,7 +737,10 @@ export function CarsHomeHeader({
       ) : null}
 
       {/* ── Band E — stats. Absent when the parent has no real numbers. ── */}
-      {showScroll && stats.length > 0 ? (
+      {/* PINNED and collapsing, like the hero above it: identity that the
+          owner must actually see, rather than identity hidden under a loading
+          state. */}
+      {showPinned && stats.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -853,7 +892,8 @@ const styles = StyleSheet.create({
 
   // Band B
   hero: {
-    minHeight: HERO_MIN_HEIGHT,
+    // No minHeight: `heroCollapse` animates the height between HERO_MIN_HEIGHT
+    // and 0, and a floor here would stop it ever closing.
     justifyContent: "center",
     paddingHorizontal: 20,
     paddingVertical: 20,
@@ -862,7 +902,21 @@ const styles = StyleSheet.create({
   heroGlow: {
     ...StyleSheet.absoluteFillObject,
   },
+  /** Sits on the trailing half and never takes a tap. `contain` keeps the
+   *  plate's own proportions — the vehicles must not stretch — and the copy
+   *  column keeps its own width so the two never overlap on a narrow screen. */
+  heroPlate: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: "50%",
+    opacity: 0.95,
+  },
   heroCopy: {
+    // Half the band, so the plate on the trailing side can never overlap a
+    // word. It did, on the first render with the plate wired.
+    width: "50%",
+    zIndex: 1,
     gap: 6,
   },
   heroTitleTop: {

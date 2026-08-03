@@ -2587,7 +2587,11 @@ export function SectionSearchApp({
           onRefresh={retry}
           overlay={overlay}
           contentPaddingBottom={insets.bottom + 150}
-          listHeader={carScrollHeader ?? facilitiesScrollHeader}
+          // Cars keep every band pinned now — the hero, the type strip and the
+          // stats were all being covered by the empty-state overlay when they
+          // rode in the list header, which is why none of them were ever on
+          // screen. Only Facilities still hands the list a scrolling half.
+          listHeader={facilitiesScrollHeader}
           // Cars and Facilities both animate their collapse, so both need the
           // offset. Every other section leaves this undefined and the list
           // attaches no scroll handler at all.
