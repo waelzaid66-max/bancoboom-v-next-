@@ -389,8 +389,9 @@ export function CarsHomeHeader({
           is what the first attempt did, is not the same header at all. A scrim
           rides on top so white text keeps its contrast over the bright parts of
           the plate. It never takes a tap. ── */}
-      {false ? (
-        <View style={styles.plateWrap} pointerEvents="none">
+      {showPinned ? (
+        <View style={styles.shellPlate} pointerEvents="none">
+          <View style={styles.shellPlateImg}>
           <Image
             source={HERO_PLATE}
             style={StyleSheet.absoluteFill}
@@ -400,21 +401,20 @@ export function CarsHomeHeader({
           />
           <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
             <Defs>
-              <LinearGradient id="carPlateScrim" x1="0" y1="0" x2="1" y2="0">
-                <Stop offset="0" stopColor={VOID} stopOpacity="0.86" />
-                <Stop offset="0.45" stopColor={VOID} stopOpacity="0.30" />
-                <Stop offset="1" stopColor={VOID} stopOpacity="0" />
-              </LinearGradient>
+              {/* Vertical only. The wordmark sits at the top and the search
+                  pill and the type tiles at the bottom, so those two ends are
+                  the parts that need seating; the middle is where the vehicles
+                  are and it stays clear. */}
               <LinearGradient id="carPlateFoot" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={VOID} stopOpacity="0.60" />
-                <Stop offset="0.35" stopColor={VOID} stopOpacity="0.08" />
-                <Stop offset="0.88" stopColor={VOID} stopOpacity="0.50" />
-                <Stop offset="1" stopColor={VOID} stopOpacity="0.92" />
+                <Stop offset="0" stopColor={VOID} stopOpacity="0.85" />
+                <Stop offset="0.22" stopColor={VOID} stopOpacity="0.08" />
+                <Stop offset="0.78" stopColor={VOID} stopOpacity="0.08" />
+                <Stop offset="1" stopColor={VOID} stopOpacity="0.85" />
               </LinearGradient>
             </Defs>
-            <Rect x="0" y="0" width="100%" height="100%" fill="url(#carPlateScrim)" />
             <Rect x="0" y="0" width="100%" height="100%" fill="url(#carPlateFoot)" />
           </Svg>
+          </View>
         </View>
       ) : null}
 
@@ -548,32 +548,7 @@ export function CarsHomeHeader({
               density — which is the whole reason the brief bans PNG. ── */}
       {showPinned ? (
       <Animated.View style={[styles.hero, heroCollapse]} testID="cars-hero">
-        {/* The plate fills the HERO BAND, not the whole shell: 390×244 is 1.6:1
-            against the plate's 2.7:1, a mild crop, where stretching it over the
-            near-square shell threw most of the scene away. */}
-        <View style={styles.plateWrap} pointerEvents="none">
-          <Image
-            source={HERO_PLATE}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            contentPosition="center"
-            transition={220}
-          />
-          <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
-            <Defs>
-              {/* The copy is gone, so this no longer has to darken half the
-                  frame to seat white text. All it does now is blend the plate's
-                  edges into the shell, top and bottom. */}
-              <LinearGradient id="carPlateScrim2" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={VOID} stopOpacity="0.55" />
-                <Stop offset="0.28" stopColor={VOID} stopOpacity="0.05" />
-                <Stop offset="0.80" stopColor={VOID} stopOpacity="0.10" />
-                <Stop offset="1" stopColor={VOID} stopOpacity="0.72" />
-              </LinearGradient>
-            </Defs>
-            <Rect x="0" y="0" width="100%" height="100%" fill="url(#carPlateScrim2)" />
-          </Svg>
-        </View>
+
         <View style={[styles.heroGlow, { opacity: 0.55 }]} pointerEvents="none">
           {/* Four layers, back to front:
                 1 ground   a vertical lift off #090909 so the band is not flat
@@ -953,6 +928,32 @@ const styles = StyleSheet.create({
    *  is a 2.16:1 banner and a phone header is nearer square, so `cover` across
    *  the full height throws most of the scene away. Sitting it low keeps the
    *  vehicles whole and leaves the copy the lit half above them. */
+  /** The plate under the WHOLE pinned shell — top bar included, as in the
+   *  render. Clipped to the shell's rounded bottom, never takes a tap. */
+  /** Full width at the plate's own proportions, under the top bar and the hero
+   *  together, anchored to the bottom of that region.
+   *
+   *  Covering the whole shell was tried twice and fails for one reason: the
+   *  render is a 2.16:1 banner and a phone header is nearer 0.66:1, so `cover`
+   *  over the full height scales the crop past 2x and only a yacht survives.
+   *  Keeping the plate whole is the trade that preserves the scene. */
+  shellPlate: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: HEADER_EXPANDED + HERO_MIN_HEIGHT,
+    justifyContent: "flex-end",
+    borderBottomLeftRadius: BOTTOM_RADIUS,
+    borderBottomRightRadius: BOTTOM_RADIUS,
+    overflow: "hidden",
+  },
+  /** Keeps its own 1216×453 so nothing in the scene is thrown away. */
+  shellPlateImg: {
+    width: "100%",
+    aspectRatio: 1216 / 453,
+    overflow: "hidden",
+  },
   plateWrap: {
     ...StyleSheet.absoluteFillObject,
     borderBottomLeftRadius: BOTTOM_RADIUS,
