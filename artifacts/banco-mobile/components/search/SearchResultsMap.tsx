@@ -1,12 +1,14 @@
 import { FeedItem, getMapClusters } from "@workspace/api-client-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Linking, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import type { WebViewMessageEvent } from "react-native-webview";
 
 import { apiCategoryFor } from "@/components/CategoryTabs";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
+import { miniAppNavClearance } from "@/components/MiniAppBottomNav";
 import {
   buildMapClusterParams,
   type MapViewport,
@@ -60,6 +62,10 @@ export function SearchResultsMap({
   CardComponent,
 }: SearchResultsMapProps) {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
+  // The bar overlaps the map rather than displacing it, so the map's own
+  // bottom-anchored controls have to be told to step around it.
+  const navClearance = miniAppNavClearance(insets.bottom);
   const { t } = useI18n();
   const webRef = useRef<WebView>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -97,11 +103,16 @@ export function SearchResultsMap({
               radiusKm: criteria.nearRadiusKm,
             }
           : undefined,
+        navClearance,
       ),
-    // Rebuild when plotted set, theme, market country, or near-me area changes.
+    // Rebuild when plotted set, theme, market country, near-me area — or the
+    // bottom clearance — changes. The clearance moves when the safe-area inset
+    // does (rotation, a foldable unfolding), and a stale one puts the locate
+    // button back under the bar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       sig,
+      navClearance,
       colors.primary,
       colors.primaryForeground,
       colors.card,

@@ -30,6 +30,32 @@ const isAndroid = Platform.OS === "android";
 const isIOS = Platform.OS === "ios";
 const isWeb = Platform.OS === "web";
 
+/**
+ * The capsule's height, and the clearance anything under it must leave.
+ *
+ * Exported because this bar is `position: absolute` — content beneath it is
+ * not pushed out of the way, it is COVERED, so whatever draws near the bottom
+ * has to be told how much room to leave. The map learned this the hard way:
+ * Leaflet anchors its bottom controls to the map container, the container runs
+ * under this bar, and the locate button shipped half-buried with the OSM
+ * attribution under it.
+ *
+ * Read off the styles at the foot of this file, not guessed:
+ *   capsule paddingVertical 8 × 2   = 16
+ *   iconSlot 30 + gap 2 + label 13  = 45
+ *   tab paddingVertical 2 × 2       =  4
+ */
+export const MINI_APP_NAV_HEIGHT = 65;
+
+/**
+ * Total bottom clearance so this bar covers nothing. Takes the safe-area
+ * inset; the float gap is added here so no caller has to remember it, and so
+ * it can never drift from the `bottom` the bar actually renders at.
+ */
+export function miniAppNavClearance(insetsBottom: number): number {
+  return insetsBottom + (isWeb ? 10 : 8) + MINI_APP_NAV_HEIGHT;
+}
+
 // The five app destinations, mirroring the real (tabs) tab bar. `href` targets
 // the group-transparent tab routes so tapping from a pushed mini-app screen pops
 // back into the owning tab (expo-router resolves "/" → (tabs)/index, etc.).

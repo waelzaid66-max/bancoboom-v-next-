@@ -7,6 +7,7 @@ import { AppText } from "@/components/AppText";
 import { Feather } from "@/components/icons";
 import { SmartAssetCard } from "@/components/SmartAssetCard";
 import { useColors } from "@/hooks/useColors";
+import { miniAppNavClearance } from "@/components/MiniAppBottomNav";
 import { useI18n } from "@/context/LanguageContext";
 
 export type MapPreviewCardProps = {
@@ -74,8 +75,18 @@ export function MapOverlayChrome({
         </AppText>
       </View>
 
+      {/* The card's bottom used to be a bare 132 that happened to clear the
+          bottom bar. It derives from the bar now, so the day that capsule
+          changes height this moves with it instead of quietly sliding under it.
+          The +59 keeps the gap that was already tuned above the bar — same
+          pixels today, no magic number tomorrow. */}
       {selected ? (
-        <View style={[styles.cardWrap, { bottom: insets.bottom + 132 }]}>
+        <View
+          style={[
+            styles.cardWrap,
+            { bottom: miniAppNavClearance(insets.bottom) + 59 },
+          ]}
+        >
           <Pressable
             onPress={onClose}
             hitSlop={10}

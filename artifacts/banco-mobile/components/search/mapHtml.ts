@@ -113,7 +113,24 @@ export function buildMapHtml(
   // "Near me" area: soft radius circle + centre dot (MAP-03 restore). Optional —
   // omitted callers render as before.
   near?: { lat: number; lng: number; radiusKm: number },
+  /**
+   * How much of the map's bottom edge is hidden behind native chrome, in px.
+   *
+   * The map fills its container, and on every mini-app that container runs
+   * UNDERNEATH `MiniAppBottomNav` — an absolute bar at `insets.bottom + 8`.
+   * Leaflet anchors bottom controls to the container, not to what a person can
+   * actually see, so the locate button and the attribution were drawn beneath
+   * that bar: half a button, and a copyright line nobody could read. Only the
+   * native side knows the number, so the native side has to hand it down.
+   *
+   * Defaults to 0 — exactly the old behaviour for a caller with no chrome.
+   */
+  bottomInset?: number,
 ): string {
+  // Clamped: a NaN or a negative from a caller would push controls off-screen
+  // instead of clear of the bar, and the ceiling keeps a bad inset from
+  // shoving them up into the middle of the map.
+  const safeBottom = Math.max(0, Math.min(Number(bottomInset) || 0, 240));
   // JSON is safe inside a <script> except for a literal "</script>"; escaping
   // "<" to its unicode form neutralizes that without changing the parsed data.
   const json = JSON.stringify(markers).replace(/</g, "\\u003c");
@@ -224,9 +241,26 @@ export function buildMapHtml(
   .marker-cluster-small,
   .marker-cluster-medium,
   .marker-cluster-large { background: rgba(0,0,0,0.18); }
+  /* Everything Leaflet anchors to the BOTTOM of the container gets lifted
+     clear of the native bar that overlaps it. One rule, both controls, so a
+     future bottom control inherits the clearance instead of rediscovering the
+     bug. leaflet-bottom is Leaflet's own corner wrapper, which is why the rule
+     sits on it rather than on each control. */
+  .leaflet-bottom { margin-bottom: ${safeBottom}px; }
+  /* The attribution is a legal notice, not decoration — OSM's licence requires
+     it to be legible, so it moves with everything else rather than staying
+     buried. Kept small and dimmed, never hidden. */
+  .leaflet-control-attribution {
+    font-size: 10px;
+    opacity: 0.75;
+    padding: 2px 6px;
+    border-radius: 6px 0 0 0;
+  }
   .locate-btn {
-    width: 40px; height: 40px; background: ${theme.card};
-    border: 1px solid ${theme.border}; border-radius: 10px;
+    /* 44px, not 40: this is a real touch target, and 44 is the floor both
+       Apple and Android ask for. It was under it. */
+    width: 44px; height: 44px; background: ${theme.card};
+    border: 1px solid ${theme.border}; border-radius: 12px;
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 1px 5px rgba(0,0,0,0.35); cursor: pointer; margin-bottom: 8px;
   }

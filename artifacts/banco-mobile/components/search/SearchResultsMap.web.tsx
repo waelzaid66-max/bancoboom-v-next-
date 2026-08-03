@@ -2,9 +2,12 @@ import { FeedItem, getMapClusters } from "@workspace/api-client-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Linking, StyleSheet, View } from "react-native";
 
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { apiCategoryFor } from "@/components/CategoryTabs";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
+import { miniAppNavClearance } from "@/components/MiniAppBottomNav";
 import {
   buildMapClusterParams,
   type MapViewport,
@@ -61,6 +64,10 @@ export function SearchResultsMap({
   CardComponent,
 }: SearchResultsMapProps) {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
+  // The bar overlaps the map rather than displacing it, so the map's own
+  // bottom-anchored controls have to be told to step around it.
+  const navClearance = miniAppNavClearance(insets.bottom);
   const { t } = useI18n();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [serverTotal, setServerTotal] = useState<number | null>(null);
@@ -93,10 +100,15 @@ export function SearchResultsMap({
               radiusKm: criteria.nearRadiusKm,
             }
           : undefined,
+        navClearance,
       ),
+    // The clearance belongs here: it moves when the safe-area inset does — a
+    // rotation, a foldable opening — and a stale one puts the locate button
+    // straight back under the bar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       sig,
+      navClearance,
       colors.primary,
       colors.primaryForeground,
       colors.card,
