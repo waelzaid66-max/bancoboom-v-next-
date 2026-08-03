@@ -716,7 +716,7 @@ export default function ThreadScreen() {
           styles.bubble,
           {
             maxWidth: bubbleMaxWidth,
-            backgroundColor: mine ? colors.primary : colors.card,
+            backgroundColor: mine ? colors.bubbleMine : colors.card,
             borderColor: failed ? colors.destructive : colors.border,
             borderWidth: mine && !failed ? 0 : StyleSheet.hairlineWidth,
             borderBottomRightRadius: mine ? 4 : 16,

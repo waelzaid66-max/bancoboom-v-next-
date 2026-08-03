@@ -8,6 +8,11 @@ const BANCO_DARK = {
   background: "#000000",
   foreground: "#FFFFFF",
   card: "#111111",
+  /** Own chat bubble. The full brand red (#E8002D) is an alert colour — as a
+   *  whole-bubble fill it shouts on every line you send. This is the same red
+   *  family taken deep, so ownership still reads at a glance without the page
+   *  turning into a wall of signal red. */
+  bubbleMine: "#3A0F19",
   cardForeground: "#FFFFFF",
   primary: "#E8002D",
   primaryForeground: "#FFFFFF",
@@ -29,6 +34,8 @@ const BANCO_LIGHT = {
   background: "#FFFFFF",
   foreground: "#0A0A0A",
   card: "#FFFFFF",
+  /** Own chat bubble — deep enough to carry white text on a light page. */
+  bubbleMine: "#9E1B2F",
   cardForeground: "#0A0A0A",
   primary: "#E8002D",
   primaryForeground: "#FFFFFF",
