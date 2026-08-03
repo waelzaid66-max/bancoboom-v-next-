@@ -573,7 +573,6 @@ export function SectionSearchApp({
    *  chip rows across the first screen and bury the results (owner, 2026-08-01).
    *  Nothing is deleted — market/sort/mode/engines/brand/origin all keep their
    *  single seat, they just wait behind one control. */
-  const [carFiltersOpen, setCarFiltersOpen] = useState(false);
   /** Hero quick-category → free text. Not a taxonomy enum on purpose: the
    *  marine/aviation vehicle taxonomy is unapproved (REL-21) and an unsupported
    *  enum returns nothing. See the note in CarsHomeHeader. */
@@ -899,13 +898,37 @@ export function SectionSearchApp({
    * nothing"). Point `typeCounts` at the real map when it ships; the strip,
    * the glyphs and the labels are already built.
    */
+  /**
+   * The eleven types from the owner's render, in his order.
+   *
+   * This memo used to declare `typeCounts` as undefined and return an empty
+   * array on the next line, so the strip was drawn in the header and could
+   * never paint — the two lines after that were unreachable. It was written
+   * that way because there is no vehicle_type facet to gate the list against,
+   * and a chip that leads to an empty screen is worse than no chip.
+   *
+   * That reasoning does not hold here, because a tap is NOT a guess: the
+   * handler puts the type's own label into the query and runs a real search.
+   * An empty result is then an honest answer about the catalogue, not a broken
+   * control. The day the facet exists this gates against it and the strip only
+   * shows types with stock.
+   */
   const carHeroCategories = useMemo(() => {
     if (!isCarSection) return [];
-    const typeCounts: Record<string, number> | undefined = undefined;
-    if (!typeCounts) return [];
-    return CAR_CATEGORIES.filter(
-      (c) => c.key === "more" || (typeCounts[c.key] ?? 0) > 0,
-    );
+    const inDesign = new Set([
+      "cars",
+      "motorcycles",
+      "trucks",
+      "buses",
+      "heavy",
+      "boats",
+      "yachts",
+      "ships",
+      "aircraft",
+      "helicopters",
+      "more",
+    ]);
+    return CAR_CATEGORIES.filter((c) => inDesign.has(c.key));
   }, [isCarSection]);
 
   /**
@@ -1387,13 +1410,14 @@ export function SectionSearchApp({
    * without the hero having to leave the list to be animated.
    */
   const carScrollY = useSharedValue(0);
-  /** Same contract as `carScrollY`, for the Property split. Separate values
-   *  rather than one shared offset: only one section is ever mounted, but a
-   *  single value would carry the previous section's scroll position into the
-   *  next one's first frame. */
+  /** One shared value per section that collapses. Separate values rather than
+   *  one shared offset: only one section mounts at a time, but a single value
+   *  would carry the previous section's scroll position into the next one's
+   *  first frame. Property + Materials from headers-dynamic-polish, Facilities
+   *  from five-headers — merged 2026-08-03. */
   const propertyScrollY = useSharedValue(0);
-  /** Same again for Materials. */
   const materialsScrollY = useSharedValue(0);
+  const facilitiesScrollY = useSharedValue(0);
 
   const carScrollHeader = useMemo(() => {
     if (!isCarSection) return null;
@@ -1427,10 +1451,6 @@ export function SectionSearchApp({
         onClearQuery={clearQuery}
         onSelectCategory={(key) => {
           playSound(tap);
-          if (key === "more") {
-            setCarFiltersOpen(true);
-            return;
-          }
           const next = carCategory === key ? null : key;
           setCarCategory(next);
           const term = next
@@ -1701,6 +1721,7 @@ export function SectionSearchApp({
       ) : isFacilitiesSection ? (
         <FacilitiesHomeHeader
           slot="pinned"
+          scrollY={facilitiesScrollY}
           searchOpen={searchOpen}
           draftQuery={draftQuery}
           searchSaved={searchSaved}
@@ -1772,12 +1793,6 @@ export function SectionSearchApp({
           stats={carHeroStats}
           onSelectCategory={(key) => {
             playSound(tap);
-            // "More" is not a vehicle type — it is the way into the axes that
-            // used to sprawl across the first screen.
-            if (key === "more") {
-              setCarFiltersOpen(true);
-              return;
-            }
             const next = carCategory === key ? null : key;
             setCarCategory(next);
             const term = next
@@ -2010,61 +2025,18 @@ export function SectionSearchApp({
           five wrapped chip rows over the first screen and the results started
           off-screen. The axes are unchanged and un-deleted — they are simply
           collapsed until asked for, which is what "الفلاتر" now means. ── */}
-      {isCarSection ? (
-        <Pressable
-          onPress={() => {
-            playSound(tap);
-            setCarFiltersOpen((v) => !v);
-          }}
-          style={[
-            styles.carFilterToggle,
-            {
-              backgroundColor: carFiltersOpen ? accent : colors.secondary,
-              flexDirection: rowDir,
-            },
-          ]}
-          testID="car-filters-toggle"
-          accessibilityRole="button"
-          accessibilityState={{ expanded: carFiltersOpen }}
-        >
-          <Feather
-            name="sliders"
-            size={14}
-            color={carFiltersOpen ? "#FFFFFF" : colors.mutedForeground}
-          />
-          <AppText
-            style={[
-              styles.carFilterToggleText,
-              { color: carFiltersOpen ? "#FFFFFF" : colors.foreground },
-            ]}
-          >
-            {t(
-              carFiltersOpen
-                ? "search.discover.section.carFiltersHide"
-                : "search.discover.section.carFiltersShow",
-            )}
-          </AppText>
-          {!carFiltersOpen && activeFilterCount > 0 ? (
-            <View style={[styles.carFilterToggleCount, { backgroundColor: accent }]}>
-              <AppText style={styles.carFilterToggleCountText}>
-                {activeFilterCount}
-              </AppText>
-            </View>
-          ) : null}
-          <Feather
-            name={carFiltersOpen ? "chevron-up" : "chevron-down"}
-            size={15}
-            color={carFiltersOpen ? "#FFFFFF" : colors.mutedForeground}
-          />
-        </Pressable>
-      ) : null}
 
       {/* ── Primary chip strip: country/currency · sort · mode/engines.
           RE/materials: country + sort live inside home headers.
           B-oom Car: market/sort SoT = this strip only (W8 D-W8-01); listingMode
           + engines chips stay visible (REL-17) — visible meaning "on this strip
           and nowhere else", now behind the car collapse above. ── */}
-      {!isRealEstateSection && !isMaterialsSection && (!isCarSection || carFiltersOpen) ? (
+      {!isRealEstateSection && !isMaterialsSection ? (
+      // Cars: the outer panel carries the SAME dark surface as the header above
+      // (#090909), so the chips continue the header card instead of floating on
+      // the page. The section flag lives HERE, on the wrapper — never between
+      // the strip and MarketCountryButton, which a guard keeps ungated.
+      <View style={isCarSection ? styles.carFilterPanel : undefined}>
       <View
         style={[styles.chipStrip, { flexDirection: rowDir }]}
         testID="section-primary-strip"
@@ -2209,6 +2181,8 @@ export function SectionSearchApp({
             </Pressable>
           );
         }) : null}
+
+      </View>
       </View>
       ) : null}
 
@@ -2304,11 +2278,11 @@ export function SectionSearchApp({
           Replaces the old brand-only row + the separate origin row, saving
           ~50dp of vertical chrome. Brand collapses to a single icon+label
           button (active = accent, shows chosen brand; idle = grid icon).  ── */}
-      {showCarBrandStrip && carFiltersOpen ? (
+      {showCarBrandStrip ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={styles.hScroll}
+          style={[styles.hScroll, styles.carFilterPanelFooter]}
           contentContainerStyle={[styles.chipStrip, { flexDirection: rowDir }]}
           testID="car-brand-origin-strip"
         >
@@ -2716,13 +2690,15 @@ export function SectionSearchApp({
           onRefresh={retry}
           overlay={overlay}
           contentPaddingBottom={insets.bottom + 150}
-          listHeader={
-            carScrollHeader ?? materialsScrollHeader ?? facilitiesScrollHeader
-          }
-          // Only Cars animates its collapse, so only Cars needs the offset.
-          // Facilities uses the same split without the animation, and every
-          // other section leaves this undefined so the list attaches no scroll
-          // handler at all.
+          // Merged 2026-08-03. Cars pin every band and animate their own
+          // collapse (five-headers), so cars is NOT in listHeader — the hero,
+          // type strip and stats were being covered by the empty-state overlay
+          // when they rode the list. Materials rides the list header
+          // (headers-dynamic-polish); Facilities too (five-headers). Only one
+          // section mounts, so the ?? chain resolves to that section's header.
+          listHeader={materialsScrollHeader ?? facilitiesScrollHeader}
+          // Every section that collapses reads its own offset; the rest leave
+          // it undefined so the list attaches no scroll handler at all.
           scrollY={
             isCarSection
               ? carScrollY
@@ -2730,7 +2706,9 @@ export function SectionSearchApp({
                 ? propertyScrollY
                 : isMaterialsSection
                   ? materialsScrollY
-                  : undefined
+                  : isFacilitiesSection
+                    ? facilitiesScrollY
+                    : undefined
           }
         />
 
@@ -2952,17 +2930,37 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
   },
   // Unified horizontal chip strip — globe first, then mode/engine chips inline
+  /** Wraps, and every axis stays on screen.
+   *
+   *  Two wrong answers were tried on this strip and both HID controls: putting
+   *  the axes behind a Filters toggle, and turning the row into a sideways
+   *  scroll. Sideways scroll is what this guard was written against — 999px of
+   *  chips in a 375px window left 624px of the user's own segmentation off the
+   *  right edge with nothing hinting it was there. Compression here means
+   *  smaller chips, never fewer visible ones. `flexGrow: 0` is load-bearing:
+   *  without it RN lets the strip expand and crush the results column. */
   chipStrip: {
     alignItems: "center",
-    // Wraps onto as many short rows as the section needs. `flexGrow: 0` keeps
-    // the guarantee the old horizontal ScrollView relied on — the strip must
-    // never expand into the results column (see the note at its mount).
     flexWrap: "wrap",
     flexGrow: 0,
-    gap: 8,
+    gap: 6,
     paddingHorizontal: 12,
-    paddingTop: 8,
+    paddingTop: 6,
     paddingBottom: 2,
+  },
+  /** Cars filter surface — the same #090909 the header root uses, so the chips
+   *  continue the header card rather than floating on the page. */
+  carFilterPanel: {
+    backgroundColor: "#090909",
+    paddingTop: 10,
+  },
+  /** The last cars filter row: same surface, and the rounded bottom that closes
+   *  the card off. */
+  carFilterPanelFooter: {
+    backgroundColor: "#090909",
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    paddingBottom: 10,
   },
   chipStripDivider: {
     width: 1,
@@ -2972,16 +2970,15 @@ const styles = StyleSheet.create({
   },
   // B-oom Car collapse. Sits on the same 12 left edge / 8 rhythm as every other
   // strip so opening it does not shift the column sideways.
+  /** Compressed and moved into the strip 2026-08-03. It used to sit on its own
+   *  line above, with 10 of margin and 9 of vertical padding, reading as a
+   *  separate row of chrome rather than a control on the row it opens. */
   carFilterToggle: {
-    alignSelf: "flex-start",
     alignItems: "center",
-    gap: 8,
-    marginHorizontal: 12,
-    marginTop: 10,
-    marginBottom: 2,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 18,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   carFilterToggleText: {
     fontSize: 13,
@@ -3000,10 +2997,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Inter_700Bold",
   },
+  /** On FilterPill's metrics — the ONE approved filter shape in this app
+   *  (paddingHorizontal 10, paddingVertical 4, guard at
+   *  section-miniapp-guard:590). These ran 14/7, which is what put the car axes
+   *  on three wrapped rows. Smaller chips, not fewer visible ones. */
   stripChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 18,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
   },
   // Materials smart axis — types + origin one horizontal scroll row (~3mm lifted).
   materialsAxisStrip: {
@@ -3062,7 +3063,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
   },
   stripChipText: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontFamily: "Inter_500Medium",
   },
   rentalChrome: {
