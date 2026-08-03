@@ -14,7 +14,7 @@ export interface MapMarker {
   lng: number;
   /** Pre-formatted, already-localized price (FeedItem.price_display). */
   label: string;
-  /** Furnished/daily rental → the pin gets a 📅 "bookable" prefix. */
+  /** Furnished/daily rental → the pin gets a vector calendar prefix. */
   bookable?: boolean;
   /** API section (car / real_estate / industrial) — tints the pin with the
    *  section's identity color so every section's map wears its own world. */
@@ -33,7 +33,7 @@ export interface MapClusterMarker {
   count: number;
   listing_id: string | null;
   label?: string;
-  /** Single-listing furnished/daily rental → 📅 "bookable" prefix on the pin. */
+  /** Single-listing furnished/daily rental → vector calendar prefix on the pin. */
   bookable?: boolean;
   /** Section tint for single-listing pins (falls back to the app primary). */
   cat?: string;
@@ -201,6 +201,14 @@ export function buildMapHtml(
   .leaflet-container {
     background: ${theme.card};
     font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  }
+  /* The bookable mark sits on the text baseline and takes the pill's colour,
+     so one rule covers every section tint. */
+  .pill-glyph {
+    width: 11px; height: 11px;
+    vertical-align: -1px;
+    margin-inline-end: 4px;
+    display: inline-block;
   }
   .pin .pill {
     position: absolute;
@@ -542,6 +550,25 @@ ${nearScript}
     var pts = [];
     // Section class is allow-listed (server enum values only) so a stray value
     // can never inject markup or an unexpected CSS class.
+    /**
+     * The "bookable" mark, as vector.
+     *
+     * It was a calendar EMOJI — the only glyph on this page not drawn by us. An
+     * emoji renders from whatever font the device happens to ship, so the same
+     * pin was a flat outline on one Android and a full-colour sticker on
+     * another, and on a handset with a thin emoji font it could fall back to a
+     * box. It also carried its own colours into a pill whose whole job is to
+     * wear the section's identity.
+     *
+     * currentColor means it inherits the pill's text colour, so it stays
+     * correct on every section tint without a second rule.
+     */
+    var BOOKABLE_SVG =
+      '<svg class="pill-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<rect x="3" y="5" width="18" height="16" rx="2"></rect>' +
+      '<path d="M3 10h18M8 3v4M16 3v4"></path></svg>';
+
     function pillClass(cat, bookable) {
       var cls = "pill";
       if (typeof cat === "string" && /^[a-z_]+$/.test(cat)) cls += " " + cat;
@@ -552,7 +579,7 @@ ${nearScript}
       if (typeof d.lat !== "number" || typeof d.lng !== "number") return;
       var icon = L.divIcon({
         className: "pin",
-        html: '<div class="' + pillClass(d.cat, d.bookable) + '">' + (d.bookable ? "📅 " : "") + esc(d.label) + "</div>",
+        html: '<div class="' + pillClass(d.cat, d.bookable) + '">' + (d.bookable ? BOOKABLE_SVG : "") + esc(d.label) + "</div>",
         iconSize: [0, 0]
       });
       var m = L.marker([d.lat, d.lng], { icon: icon });
@@ -592,7 +619,7 @@ ${nearScript}
             })(c.lat, c.lng);
           } else {
             var inner = c.label
-              ? '<div class="' + pillClass(c.cat, c.bookable) + '">' + (c.bookable ? "📅 " : "") + esc(c.label) + "</div>"
+              ? '<div class="' + pillClass(c.cat, c.bookable) + '">' + (c.bookable ? BOOKABLE_SVG : "") + esc(c.label) + "</div>"
               : '<div class="sdot"></div>';
             marker = L.marker([c.lat, c.lng], {
               icon: L.divIcon({

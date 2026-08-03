@@ -271,3 +271,65 @@ test("the generated page actually parses — the compiler never sees it", () => 
   assert.ok(html.includes("ارسم منطقة"), "translated labels did not reach the page");
   assert.match(html, /var DrawControl/, "the draw control did not reach the page");
 });
+
+test("every glyph on the map page is drawn by us — no fonts, no emoji", () => {
+  // The owner's brief: replace anything not compatible across Expo, Android
+  // and iOS. An emoji is exactly that — it renders from whatever font the
+  // handset ships, so the same pin was a flat outline on one Android and a
+  // colour sticker on another, and a thin emoji font could fall back to a box.
+  // It also dragged its own colours into a pill whose job is to wear the
+  // section tint.
+  const ts = require("typescript");
+  const js = ts.transpileModule(mapHtml, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+  }).outputText;
+  const box = { exports: {} };
+  new Function("exports", "require", js)(box.exports, () => ({
+    LEAFLET_CSS: "",
+    LEAFLET_JS: "",
+    MARKER_CLUSTER_CSS: "",
+    MARKER_CLUSTER_DEFAULT_CSS: "",
+    MARKER_CLUSTER_JS: "",
+  }));
+  // A bookable pin is the case that had the emoji, so it is the case built.
+  const html = box.exports.buildMapHtml(
+    [{ id: "a", lat: 30, lng: 31, label: "1M", bookable: true, cat: "car" }],
+    {
+      primary: "#CC1E24",
+      primaryForeground: "#FFFFFF",
+      card: "#111111",
+      foreground: "#FFFFFF",
+      border: "#222222",
+    },
+  );
+
+  const emoji = html.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu) ?? [];
+  assert.deepEqual(
+    [...new Set(emoji)],
+    [],
+    "an emoji reached the map page — draw it as inline SVG instead",
+  );
+  assert.doesNotMatch(html, /@font-face/i, "no webfont belongs in this page");
+  assert.doesNotMatch(
+    html,
+    /font-family:[^;]*(icon|fontawesome|ionicon|material)/i,
+    "an icon font in a WebView is a missing glyph waiting to happen",
+  );
+  // The only raster the page may reference is the OSM tile URL — that is map
+  // DATA, not chrome, and the libraries themselves are vendored locally.
+  const rasters = [...html.matchAll(/[^\s"']*\.(png|jpe?g|gif|webp)/gi)].map((m) => m[0]);
+  for (const r of rasters) {
+    assert.match(
+      r,
+      /tile\.openstreetmap\.org/,
+      `unexpected raster on the map page: ${r}`,
+    );
+  }
+  assert.ok(
+    (html.match(/<svg/g) ?? []).length >= 5,
+    "the map's own glyphs are inline SVG and there should be several",
+  );
+});
