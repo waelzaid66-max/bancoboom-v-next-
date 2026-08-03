@@ -25,6 +25,8 @@ import { AppText } from "@/components/AppText";
 import { FilterPill } from "@/components/search/FilterPill";
 import { LocationPicker } from "@/components/LocationPicker";
 import { SkeletonCard } from "@/components/SkeletonCard";
+import { useSharedValue } from "react-native-reanimated";
+
 import { StayCard, STAYS_ACCENT } from "@/components/StayCard";
 import { StaysHomeHeader, type StayTypeTab } from "@/components/search/stays/StaysHomeHeader";
 import { SearchResultsSurface } from "@/components/search/SearchResultsSurface";
@@ -306,6 +308,13 @@ export function BookingStaysApp() {
       cancelled = true;
     };
   }, [applyPatch, retry, items.length, phase, criteria.marketCountry]);
+
+  /**
+   * How far the results list has scrolled. Published by SearchResultsSurface,
+   * read by the pinned header to collapse 94 → 60. Lives on the UI thread, so
+   * scrolling drives no React render here.
+   */
+  const staysScrollY = useSharedValue(0);
 
   // ── Map view (?map=1 deep-link latch, same MOB-07 contract as RE) ──
   const params = useLocalSearchParams<{ map?: string | string[] }>();
@@ -692,6 +701,8 @@ export function BookingStaysApp() {
           Owns back/save/search/filter/type-tab bands on a void (#000) canvas.
           Parent keeps all search state; header is purely presentational. ── */}
       <StaysHomeHeader
+        slot="pinned"
+        scrollY={staysScrollY}
         searchOpen={searchOpen}
         draftQuery={draftQuery}
         searchSaved={searchSaved}
@@ -932,6 +943,7 @@ export function BookingStaysApp() {
           overlay={overlay}
           CardComponent={StayCard}
           contentPaddingBottom={insets.bottom + 150}
+          scrollY={staysScrollY}
         />
 
         {mapMode && inResultsView ? (

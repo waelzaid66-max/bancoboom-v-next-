@@ -30,15 +30,21 @@
  *
  * Band layout follows Cars exactly:
  *   A  top bar   back · wordmark + powered-by · map · save        [pinned]
- *   B  tagline   identity text only                               [scroll]
+ *   B  tagline   identity text, fades on collapse                 [pinned]
  *   C  search    one pill, filter inline                          [pinned]
  *   D  type tabs All / Studio / Apartment / Villa / Chalet        [pinned]
  *
- * 🔒 Bands C and D are PINNED and must stay that way. The results overlay is an
- * opaque StyleSheet.absoluteFill covering ListHeaderComponent, so a browse
- * control placed in the scrolling slot disappears exactly when results go
- * empty — which is what broke this section in 80b1a17 and was reverted in
- * fdbb4ff. Only band B, which is text, may scroll away.
+ * 🔒 ALL FOUR BANDS ARE PINNED, and the collapse is what gives the screen back
+ * rather than handing anything to the list. The results overlay is an opaque
+ * StyleSheet.absoluteFill covering ListHeaderComponent, so whatever goes in the
+ * scrolling slot disappears exactly when results are empty or loading. That is
+ * what broke this section in 80b1a17 and was reverted in fdbb4ff.
+ *
+ * The tagline was tried in the scrolling slot and measured: it vanished from
+ * every loading and empty render, so the section lost "Banco Owners Open
+ * Market" precisely when it had nothing else to say. It is pinned and animates
+ * its own height to zero on scroll instead — same vertical back, identity
+ * never dropped.
  *
  * STILL OPEN, deliberately not decided here:
  *   • Stays has no accent of its own — STAYS_ACCENT is sectionAccent("real_estate").
@@ -94,6 +100,8 @@ const LOGO_SCALE_MIN = 0.82;
  *  under it — an accessibility defect, not a matter of taste. */
 const TAP = 48;
 const SEARCH_H = 54;
+/** Tagline row height, animated to zero on collapse. */
+const TAGLINE_H = 18;
 const PAD_H = 16;
 
 export type StayTypeTab = {
@@ -182,8 +190,11 @@ export function StaysHomeHeader({
   const rowDir = isRTL ? "row-reverse" : "row";
   const textAlign = isRTL ? "right" : "left";
 
+  // Every band here is either a control or identity that must never vanish, so
+  // all of them are pinned and "scroll" paints nothing. The prop stays on the
+  // family contract: the day this section gets a hero plate, that is what goes
+  // in the scrolling slot — and nothing else.
   const showPinned = slot === "all" || slot === "pinned";
-  const showScroll = slot === "all" || slot === "scroll";
 
   // The top row gives back 34dp as it collapses. Height only — the search pill
   // below keeps its own 54 whether the header is open or shut.
@@ -209,6 +220,20 @@ export function StaysHomeHeader({
       ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL * 0.6], [1, 0], Extrapolation.CLAMP)
       : 1;
     return { opacity: p };
+  });
+
+  // The tagline gives back its own height on the way down. Height as well as
+  // opacity, so the rows below actually move up instead of leaving a gap.
+  const taglineCollapse = useAnimatedStyle(() => {
+    const p = scrollY
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL * 0.5], [1, 0], Extrapolation.CLAMP)
+      : 1;
+    return {
+      opacity: p,
+      height: TAGLINE_H * p,
+      marginTop: 6 * p,
+      marginBottom: 6 * p,
+    };
   });
 
   return (
@@ -294,22 +319,22 @@ export function StaysHomeHeader({
           </Pressable>
         </View>
       </Animated.View>
-      </>
-      ) : null}
 
-      {/* Band B — tagline. Identity text, and the ONLY band that may scroll. */}
-      {showScroll ? (
-        <View style={styles.taglineRow}>
-          <View style={styles.taglineRule} />
-          <AppText style={styles.tagline} numberOfLines={1}>
-            {t("search.discover.section.staysTagline")}
-          </AppText>
-          <View style={styles.taglineRule} />
-        </View>
-      ) : null}
+      {/* Band B — tagline.
+          PINNED, and it fades on collapse rather than being handed to the list.
+          Putting it in the scrolling slot was tried and measured: the loading
+          and empty overlays are opaque and cover ListHeaderComponent, so the
+          section lost "Banco Owners Open Market" entirely whenever there were
+          no results. Fading it on scroll gives the same vertical back without
+          ever dropping the identity. */}
+      <Animated.View style={[styles.taglineRow, taglineCollapse]}>
+        <View style={styles.taglineRule} />
+        <AppText style={styles.tagline} numberOfLines={1}>
+          {t("search.discover.section.staysTagline")}
+        </AppText>
+        <View style={styles.taglineRule} />
+      </Animated.View>
 
-      {showPinned ? (
-      <>
       {/* Band C — search pill (filter lives on the right, mock-aligned) */}
       {searchOpen ? (
         <View style={[styles.searchPill, { flexDirection: rowDir }]}>
@@ -509,8 +534,7 @@ const styles = StyleSheet.create({
     gap: 10,
     maxWidth: "100%",
     paddingHorizontal: 8,
-    marginTop: 6,
-    marginBottom: 6,
+    overflow: "hidden",
   },
   taglineRule: {
     flex: 1,
