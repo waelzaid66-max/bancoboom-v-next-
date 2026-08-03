@@ -898,13 +898,37 @@ export function SectionSearchApp({
    * nothing"). Point `typeCounts` at the real map when it ships; the strip,
    * the glyphs and the labels are already built.
    */
+  /**
+   * The eleven types from the owner's render, in his order.
+   *
+   * This memo used to declare `typeCounts` as undefined and return an empty
+   * array on the next line, so the strip was drawn in the header and could
+   * never paint — the two lines after that were unreachable. It was written
+   * that way because there is no vehicle_type facet to gate the list against,
+   * and a chip that leads to an empty screen is worse than no chip.
+   *
+   * That reasoning does not hold here, because a tap is NOT a guess: the
+   * handler puts the type's own label into the query and runs a real search.
+   * An empty result is then an honest answer about the catalogue, not a broken
+   * control. The day the facet exists this gates against it and the strip only
+   * shows types with stock.
+   */
   const carHeroCategories = useMemo(() => {
     if (!isCarSection) return [];
-    const typeCounts: Record<string, number> | undefined = undefined;
-    if (!typeCounts) return [];
-    return CAR_CATEGORIES.filter(
-      (c) => c.key === "more" || (typeCounts[c.key] ?? 0) > 0,
-    );
+    const inDesign = new Set([
+      "cars",
+      "motorcycles",
+      "trucks",
+      "buses",
+      "heavy",
+      "boats",
+      "yachts",
+      "ships",
+      "aircraft",
+      "helicopters",
+      "more",
+    ]);
+    return CAR_CATEGORIES.filter((c) => inDesign.has(c.key));
   }, [isCarSection]);
 
   /**
