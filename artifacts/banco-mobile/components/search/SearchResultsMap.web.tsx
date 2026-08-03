@@ -68,7 +68,7 @@ export function SearchResultsMap({
   // The bar overlaps the map rather than displacing it, so the map's own
   // bottom-anchored controls have to be told to step around it.
   const navClearance = miniAppNavClearance(insets.bottom);
-  const { t } = useI18n();
+  const { t, isRTL } = useI18n();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [serverTotal, setServerTotal] = useState<number | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -101,6 +101,12 @@ export function SearchResultsMap({
             }
           : undefined,
         navClearance,
+        {
+          draw: t("search.mapDrawArea"),
+          done: t("search.mapDrawDone"),
+          undo: t("search.mapDrawUndo"),
+          clear: t("search.mapDrawClear"),
+        },
       ),
     // The clearance belongs here: it moves when the safe-area inset does — a
     // rotation, a foldable opening — and a stale one puts the locate button
@@ -109,6 +115,8 @@ export function SearchResultsMap({
     [
       sig,
       navClearance,
+      // A language switch changes the button titles, so the page is rebuilt.
+      isRTL,
       colors.primary,
       colors.primaryForeground,
       colors.card,

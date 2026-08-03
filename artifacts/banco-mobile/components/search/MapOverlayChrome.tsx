@@ -21,6 +21,14 @@ export type MapPreviewCardProps = {
 interface MapOverlayChromeProps {
   /** How many results are actually plotted (the honest mapped count). */
   count: number;
+  /**
+   * Set when a search area is drawn. `exact` is false whenever a cluster falls
+   * inside the shape — a cluster sits at the centroid of what it holds, so it
+   * can contain listings outside the shape, and the total becomes a floor
+   * rather than a count. The caption says which it is; it never rounds the
+   * distinction away.
+   */
+  areaCount?: { total: number; exact: boolean } | null;
   /** The pin the user tapped, or null when nothing is selected. */
   selected: FeedItem | null;
   onClose: () => void;
@@ -42,6 +50,7 @@ interface MapOverlayChromeProps {
  */
 export function MapOverlayChrome({
   count,
+  areaCount,
   selected,
   onClose,
   onOpenListing,
@@ -69,9 +78,29 @@ export function MapOverlayChrome({
         ]}
         pointerEvents="none"
       >
-        <Feather name="map-pin" size={13} color={colors.primary} />
+        <Feather
+          // "edit-2" (a pen) not "pen-tool": the icon registry maps a curated
+          // subset to lucide SVGs, and an unmapped name renders the fallback
+          // warning glyph on Android. The guard catches it; taking a name the
+          // registry already carries is better than widening the registry for
+          // one caption.
+          name={areaCount ? "edit-2" : "map-pin"}
+          size={13}
+          color={colors.primary}
+        />
         <AppText style={[styles.captionText, { color: colors.foreground }]}>
-          {t("search.mappedResults", { count })}
+          {/* With a shape drawn the caption reports the shape, not the screen.
+              And it only says a bare number when it can prove one: a cluster
+              inside the shape may hold listings outside it, so a count that
+              includes one is a floor and is written as such. */}
+          {areaCount
+            ? t(
+                areaCount.exact
+                  ? "search.mapAreaCount"
+                  : "search.mapAreaCountAtLeast",
+                { count: areaCount.total },
+              )
+            : t("search.mappedResults", { count })}
         </AppText>
       </View>
 

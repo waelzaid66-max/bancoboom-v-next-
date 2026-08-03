@@ -63,7 +63,17 @@ export type MapBridgeMessage =
   | { type: "select"; id: string }
   | { type: "viewport"; bounds: MapViewportBounds; zoom: number }
   /** Locate-me failed (permission deny / timeout / unavailable) — host shows Alert. */
-  | { type: "locate_error"; reason: "denied" | "unavailable" | "timeout" };
+  | { type: "locate_error"; reason: "denied" | "unavailable" | "timeout" }
+  /**
+   * The buyer finished drawing a search area, or cleared it (`points: []`).
+   *
+   * Only the corners cross the bridge — the host re-derives the box and runs
+   * the inside/outside test itself, in `lib/geoArea.ts`, where it is testable.
+   * The page draws; it does not decide what counts.
+   */
+  | { type: "area"; points: { lat: number; lng: number }[] }
+  /** Draw mode opened or closed, so the host can swap its own chrome. */
+  | { type: "draw_mode"; active: boolean };
 
 const OSM_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
@@ -126,7 +136,22 @@ export function buildMapHtml(
    * Defaults to 0 — exactly the old behaviour for a caller with no chrome.
    */
   bottomInset?: number,
+  /**
+   * Titles for the draw controls, already translated by the host.
+   *
+   * The page has no access to the i18n tree, and hard-coding English inside it
+   * would put four untranslatable strings into an app that ships Arabic first.
+   * They arrive as accessible names on the buttons, so a screen reader in
+   * either language reads them correctly.
+   */
+  labels?: { draw: string; done: string; undo: string; clear: string },
 ): string {
+  const drawLabels = {
+    draw: labels?.draw ?? "Draw area",
+    done: labels?.done ?? "Done",
+    undo: labels?.undo ?? "Undo",
+    clear: labels?.clear ?? "Clear area",
+  };
   // Clamped: a NaN or a negative from a caller would push controls off-screen
   // instead of clear of the bar, and the ceiling keeps a bad inset from
   // shoving them up into the middle of the map.
@@ -264,6 +289,36 @@ export function buildMapHtml(
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 1px 5px rgba(0,0,0,0.35); cursor: pointer; margin-bottom: 8px;
   }
+  /* Draw-area controls. Same 44px floor, same card surface as locate, so the
+     map's controls read as one set rather than two designs sharing a screen. */
+  .map-btns { display: flex; flex-direction: column; gap: 8px; }
+  .map-btn {
+    width: 44px; height: 44px; background: ${theme.card};
+    border: 1px solid ${theme.border}; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.35); cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .map-btn svg { width: 20px; height: 20px; stroke: ${theme.foreground}; fill: none; }
+  .map-btn-go { background: ${theme.primary}; border-color: ${theme.primary}; }
+  .map-btn-go svg { stroke: ${theme.primaryForeground}; }
+  /* Not enough corners yet. Dimmed rather than removed, so the control the
+     buyer is working towards stays where they last saw it. */
+  .map-btn-go.is-off { opacity: 0.45; }
+  .map-btn-clear svg { stroke: ${theme.primary}; }
+  /* A dropped corner. Small, high contrast, and pointer-events off so tapping
+     one lands on the map underneath and adds the NEXT corner rather than
+     doing nothing — the failure that makes hand-rolled drawing feel broken. */
+  .draw-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: ${theme.primary}; border: 2px solid ${theme.primaryForeground};
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  /* Crosshair while drawing, so it is obvious the next tap places a corner
+     rather than dismissing something. */
+  .leaflet-container.drawing { cursor: crosshair; }
   .locate-btn svg { width: 20px; height: 20px; stroke: ${theme.primary}; }
   .me-dot {
     width: 16px; height: 16px; background: #2F80ED; border: 3px solid #fff;
@@ -338,6 +393,147 @@ ${nearScript}
       }
     });
     map.addControl(new LocateControl());
+
+    // ── Draw a search area ────────────────────────────────────────────────
+    //
+    // Hand-rolled on Leaflet primitives rather than pulling in Leaflet.draw.
+    // The libraries here are VENDORED into assets/map-vendor because CDNs are
+    // blocked, so every dependency is a file somebody has to keep in sync —
+    // and this needs a polygon, a click handler and an undo. That is smaller
+    // than the wiring it would take to vendor a plugin for it.
+    //
+    // Tap to drop a corner, tap "done" to close the shape. Deliberately taps
+    // and not a freehand drag: a drag is how the map is PANNED, and stealing
+    // that gesture is how a map stops feeling like a map.
+    //
+    // The page draws and reports. It does not decide what is inside — the host
+    // does that in lib/geoArea.ts, where the maths is testable.
+    var drawing = false;
+    var drawPts = [];
+    var drawLine = null;
+    var drawShape = null;
+    var drawDots = [];
+    var committedArea = null;
+
+    function clearDrawScratch() {
+      if (drawLine) { map.removeLayer(drawLine); drawLine = null; }
+      for (var i = 0; i < drawDots.length; i++) { map.removeLayer(drawDots[i]); }
+      drawDots = [];
+      drawPts = [];
+    }
+
+    function clearArea() {
+      clearDrawScratch();
+      if (drawShape) { map.removeLayer(drawShape); drawShape = null; }
+      committedArea = null;
+      post({ type: "area", points: [] });
+    }
+
+    function redrawScratch() {
+      if (drawLine) { map.removeLayer(drawLine); drawLine = null; }
+      if (drawPts.length > 1) {
+        drawLine = L.polyline(drawPts, {
+          color: ${JSON.stringify(theme.primary)},
+          weight: 3,
+          dashArray: "6 5",
+        }).addTo(map);
+      }
+    }
+
+    function addDrawPoint(latlng) {
+      drawPts.push([latlng.lat, latlng.lng]);
+      var dot = L.marker(latlng, {
+        icon: L.divIcon({ className: "", html: '<div class="draw-dot"></div>', iconSize: [12, 12] }),
+        keyboard: false,
+      }).addTo(map);
+      drawDots.push(dot);
+      redrawScratch();
+      syncDrawUi();
+    }
+
+    function commitArea() {
+      // Under three corners encloses nothing. The host refuses it too — this
+      // just avoids sending a shape we already know is not one.
+      if (drawPts.length < 3) return;
+      var pts = drawPts.slice();
+      clearDrawScratch();
+      if (drawShape) { map.removeLayer(drawShape); }
+      drawShape = L.polygon(pts, {
+        color: ${JSON.stringify(theme.primary)},
+        weight: 2,
+        fillColor: ${JSON.stringify(theme.primary)},
+        fillOpacity: 0.12,
+      }).addTo(map);
+      committedArea = pts.map(function (p) { return { lat: p[0], lng: p[1] }; });
+      setDrawing(false);
+      // The host filters and re-injects. The page never decides what is
+      // inside — one implementation of that maths, in a file with tests.
+      post({ type: "area", points: committedArea });
+    }
+
+    function setDrawing(on) {
+      drawing = !!on;
+      if (!drawing) { clearDrawScratch(); }
+      // Dragging stays ON while drawing so the buyer can still reach the rest
+      // of the city mid-shape; corners are taps, so the two never collide.
+      L.DomUtil[drawing ? "addClass" : "removeClass"](map.getContainer(), "drawing");
+      post({ type: "draw_mode", active: drawing });
+      syncDrawUi();
+    }
+
+    map.on("click", function (e) {
+      if (drawing) { addDrawPoint(e.latlng); }
+    });
+
+    // The draw controls live TOP-left, opposite the zoom pair and clear of the
+    // bottom bar entirely — the one corner nothing else competes for.
+    var drawBtn = null, doneBtn = null, undoBtn = null, clearBtn = null;
+    function syncDrawUi() {
+      if (!drawBtn) return;
+      drawBtn.style.display = drawing ? "none" : "flex";
+      doneBtn.style.display = drawing ? "flex" : "none";
+      undoBtn.style.display = drawing && drawPts.length > 0 ? "flex" : "none";
+      clearBtn.style.display = !drawing && drawShape ? "flex" : "none";
+      // "Done" only becomes real at three corners. Disabled rather than hidden
+      // so the buyer can see the target they are working towards.
+      doneBtn.className = "map-btn map-btn-go" + (drawPts.length < 3 ? " is-off" : "");
+      doneBtn.setAttribute("aria-disabled", drawPts.length < 3 ? "true" : "false");
+    }
+    var DrawControl = L.Control.extend({
+      options: { position: "topleft" },
+      onAdd: function () {
+        var wrap = L.DomUtil.create("div", "map-btns");
+        function mk(cls, title, svg, onTap) {
+          var b = L.DomUtil.create("div", cls, wrap);
+          b.setAttribute("title", title);
+          b.setAttribute("role", "button");
+          b.innerHTML = svg;
+          L.DomEvent.disableClickPropagation(b);
+          b.onclick = onTap;
+          return b;
+        }
+        // Every icon is inline SVG — no icon font anywhere near this page, so
+        // nothing can fall back to a missing glyph on an Android WebView.
+        var PEN = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M7 16l9.5-9.5a2.1 2.1 0 1 1 3 3L10 19H7z"/></svg>';
+        var CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>';
+        var UNDO = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12H8"/></svg>';
+        var CROSS = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+        drawBtn = mk("map-btn", ${JSON.stringify(drawLabels.draw)}, PEN, function () { setDrawing(true); });
+        doneBtn = mk("map-btn map-btn-go", ${JSON.stringify(drawLabels.done)}, CHECK, function () { commitArea(); });
+        undoBtn = mk("map-btn", ${JSON.stringify(drawLabels.undo)}, UNDO, function () {
+          if (!drawPts.length) return;
+          drawPts.pop();
+          var d = drawDots.pop();
+          if (d) map.removeLayer(d);
+          redrawScratch();
+          syncDrawUi();
+        });
+        clearBtn = mk("map-btn map-btn-clear", ${JSON.stringify(drawLabels.clear)}, CROSS, function () { clearArea(); });
+        syncDrawUi();
+        return wrap;
+      }
+    });
+    map.addControl(new DrawControl());
 
     // Layer 1 — the loaded page, shown instantly so the map is never blank.
     var group = L.markerClusterGroup
