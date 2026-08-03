@@ -402,7 +402,7 @@ PropertyHomeHeader.tsx:270   <View style={styles.brandBlock}> ← أخ، مش ا
 | البند | القيمة |
 |---|---|
 | الملف | `components/search/car/CarsHomeHeader.tsx` (750 سطر) |
-| الأصل | — (اتشالت، كانت غير مستخدمة) ✅ |
+| الأصل | `assets/images/section-hero/car.png` (1216×453) ✅ |
 | الحالة | ✅ خلص ومقيس |
 
 **البنية — 5 نطاقات:**
@@ -461,7 +461,7 @@ PropertyHomeHeader.tsx:270   <View style={styles.brandBlock}> ← أخ، مش ا
 |---|---|
 | الملف | `components/search/materials/MaterialsHomeHeader.tsx` (477 سطر) |
 | الارتفاع | ~180dp + 105dp شرائط |
-| الأصل | — (اتشالت، كانت غير مستخدمة) ✅ |
+| الأصل | `assets/images/section-hero/car.png` (1216×453) ✅ |
 
 **العلة البصرية:** الصف التاني **متزاحم يمين وفراغ كبير شمال** — `ragged wrap`.
 
