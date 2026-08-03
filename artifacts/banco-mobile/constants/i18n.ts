@@ -460,9 +460,12 @@ const en = {
     menuLeads: "Interested Buyers",
     menuBusiness: "Business & Supply",
     menuGetVerified: "Verify your business",
-    menuAssistant: "BANCO Assistant",
+    menuAssistant: "B — your BANCO assistant",
     menuSettings: "Settings",
-    aiButton: "AI",
+    // The spoken name of the sparkles button in the home bar — the only text a
+    // screen reader has for it. It says B for the same reason the menu row
+    // does: the assistant answers to one name on every surface.
+    aiButton: "B — your BANCO assistant",
     feedTitle: "All Listings",
     industrialBridge: {
       title: "Sourcing for your business?",
@@ -2834,9 +2837,9 @@ const ar: typeof en = {
     menuLeads: "المشترون المهتمون",
     menuBusiness: "الأعمال والتوريد",
     menuGetVerified: "وثّق نشاطك التجاري",
-    menuAssistant: "مساعد BANCO",
+    menuAssistant: "B — مساعدك في بانكو",
     menuSettings: "الإعدادات",
-    aiButton: "AI",
+    aiButton: "B — مساعدك في بانكو",
     feedTitle: "كل الإعلانات",
     industrialBridge: {
       title: "بتوّرد لشغلك؟",
