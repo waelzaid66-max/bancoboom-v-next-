@@ -190,20 +190,12 @@ export function StaysHomeHeader({
             style={styles.wordmarkBoom}
             contentFit="contain"
           />
-          <View style={styles.brandTextCol}>
-            <AppText
-              style={[styles.wordmarkStay, styles.wordmarkStayCompact]}
-              numberOfLines={1}
-            >
-              STAY
-            </AppText>
-            <AppText
-              style={[styles.tagline, styles.taglineCompact, { textAlign }]}
-              numberOfLines={1}
-            >
-              {t("search.discover.section.staysTagline")}
-            </AppText>
-          </View>
+          <AppText
+            style={[styles.wordmarkStay, styles.wordmarkStayCompact]}
+            numberOfLines={1}
+          >
+            STAY
+          </AppText>
 
           <View style={styles.brandSpacer} />
 
@@ -304,6 +296,22 @@ export function StaysHomeHeader({
       )
       ) : null}
 
+      {/* Band D0 — tagline · SCROLLS AWAY. Measured at 320 and 390dp, the pinned
+          row could not hold logo + STAY + tagline + powered-by: the tagline
+          rendered "Banco Owne…" and POWERED BY rendered "POW…". A truncated
+          brand line says less than no brand line. It is descriptive rather than
+          identity, so it moves to the band that has the full width — and gets
+          back the two rules that centred it. */}
+      {showScroll ? (
+        <View style={styles.taglineRow}>
+          <View style={styles.taglineRule} />
+          <AppText style={styles.tagline} numberOfLines={1}>
+            {t("search.discover.section.staysTagline")}
+          </AppText>
+          <View style={styles.taglineRule} />
+        </View>
+      ) : null}
+
       {/* Band D — property type tabs · SCROLLS AWAY with the results */}
       {showScroll ? (
       <ScrollView
@@ -360,6 +368,9 @@ const styles = StyleSheet.create({
   // the split would land on; nothing references them at runtime today.
   brandLockup: {
     alignItems: "center",
+    // Wrap rather than truncate. At 320dp the row cannot hold every element;
+    // two short rows read correctly where "S.." and "P..." do not.
+    flexWrap: "wrap",
     gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 4,
