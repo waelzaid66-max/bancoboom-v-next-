@@ -18,8 +18,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
+import { sectionAccent } from "@/lib/sectionTheme";
 
-const RED = "#E53935";
+/** Car import is the CAR world, so its accent is the CAR token — bound, never
+ *  written as a literal. #E53935 was Material Design's default red: a sixth
+ *  family the app never chose, sitting ΔE ≈ 19 from the logo. Owner ruling
+ *  2026-08-02: colours track the identity of the app as a whole. */
+const RED = sectionAccent("car");
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 

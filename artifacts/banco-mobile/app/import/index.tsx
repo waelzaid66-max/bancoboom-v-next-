@@ -28,10 +28,15 @@ import { AppText } from "@/components/AppText";
 import { MiniAppBottomNav } from "@/components/MiniAppBottomNav";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
+import { SECTION_HERO_RAMP, sectionAccent } from "@/lib/sectionTheme";
 
 import { SOURCES as AUCTION_SOURCES } from "./auctions";
 
-const RED = "#E53935";
+/** Car import is the CAR world, so its accent is the CAR token — bound, never
+ *  written as a literal. #E53935 was Material Design's default red: a sixth
+ *  family the app never chose, sitting ΔE ≈ 19 from the logo. Owner ruling
+ *  2026-08-02: colours track the identity of the app as a whole. */
+const RED = sectionAccent("car");
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -255,7 +260,7 @@ export default function CarImportHubScreen() {
         {/* Hero — section-scoped identity card (BANCO dark + red accent). */}
         <View style={styles.heroWrap} testID="import-hub-hero">
           <LinearGradient
-            colors={["#1A0A0C", "#2A0E12", "#151518"]}
+            colors={SECTION_HERO_RAMP.car}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.heroGradient}
