@@ -119,15 +119,23 @@ type PropertyHomeHeaderProps = {
   /**
    * Which slice to paint — the Facilities model, applied here.
    *
-   *   "pinned"  A top bar · B brand lockup · C search   → held above the list
-   *   "scroll"  D type strip · E offer axis             → handed to the list
-   *   "all"     everything in the original order        → what a caller that
-   *                                                       does not split gets
+   *   "pinned"  everything — top bar · brand lockup · search · offer · types
+   *   "scroll"  nothing today
+   *   "all"     identical to "pinned"
    *
    * The blocker on this header was never the animation: BANCO lived in a brand
    * block BELOW the top bar, so splitting at the top bar alone would have sent
    * the brand down under the filter chips. Pinning the lockup WITH the top bar
    * solves it without moving a single node in the tree.
+   *
+   * Why "scroll" is empty. The offer axis and the type strip are the only two
+   * bands that could go, and they are browse CONTROLS. The non-results overlay
+   * is an absoluteFill on an opaque background, so it covers the list and its
+   * ListHeaderComponent together — a control handed down there disappears in
+   * precisely the state a buyer needs it, staring at zero results and wanting
+   * to widen. The prop stays because the height win here comes from the lockup
+   * collapsing on scroll, and because the day this header grows a hero or a
+   * counts strip, that is what "scroll" is for.
    */
   slot?: "all" | "pinned" | "scroll";
   /**
@@ -509,9 +517,14 @@ export function PropertyHomeHeader({
       ) : null}
 
       {/* Offer axis + Wanted (listingMode) — Wanted composes with sale/rent.
-              Scrolls: it is a refinement, and a buyer who is reading results
-              has already made this choice. */}
-      {showScroll ? (
+              PINNED, and this is not a preference.
+              The non-results overlay is an absoluteFill on an opaque
+              background, so it covers the list AND its ListHeaderComponent. A
+              browse control handed to the list therefore vanishes in exactly
+              the state a buyer most needs it: zero results, wanting to widen.
+              The accepted pattern in this repo only ever hands DOWN identity —
+              the cars hero, the B-CORE tagline — never a control. */}
+      {showPinned ? (
       <View
         style={[styles.offerRow, { flexDirection: rowDir }]}
         testID="re-offer-strip"
@@ -549,8 +562,9 @@ export function PropertyHomeHeader({
       </View>
       ) : null}
 
-      {/* Band D — primary types only (market lives next to BANCO above search). */}
-      {showScroll ? (
+      {/* Band D — primary types only (market lives next to BANCO above search).
+              Pinned for the same reason as the offer axis above. */}
+      {showPinned ? (
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -584,8 +598,8 @@ export function PropertyHomeHeader({
       ) : null}
 
       {/* The picker is a modal, so it belongs to whichever slice owns the strip
-          that opens it — Band D, which scrolls. */}
-      {showScroll ? (
+          that opens it — Band D, which is pinned. */}
+      {showPinned ? (
       <Modal
         visible={typePicker != null}
         transparent
