@@ -1959,6 +1959,11 @@ export function SectionSearchApp({
           + engines chips stay visible (REL-17) — visible meaning "on this strip
           and nowhere else", now behind the car collapse above. ── */}
       {!isRealEstateSection && !isMaterialsSection ? (
+      // Cars: the outer panel carries the SAME dark surface as the header above
+      // (#090909), so the chips continue the header card instead of floating on
+      // the page. The section flag lives HERE, on the wrapper — never between
+      // the strip and MarketCountryButton, which a guard keeps ungated.
+      <View style={isCarSection ? styles.carFilterPanel : undefined}>
       <View
         style={[styles.chipStrip, { flexDirection: rowDir }]}
         testID="section-primary-strip"
@@ -2105,6 +2110,7 @@ export function SectionSearchApp({
         }) : null}
 
       </View>
+      </View>
       ) : null}
 
       {/* ── RE property-type axis (Stay-parallel) — never mixed into offer row.
@@ -2203,7 +2209,7 @@ export function SectionSearchApp({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={styles.hScroll}
+          style={[styles.hScroll, styles.carFilterPanelFooter]}
           contentContainerStyle={[styles.chipStrip, { flexDirection: rowDir }]}
           testID="car-brand-origin-strip"
         >
@@ -2859,6 +2865,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 6,
     paddingBottom: 2,
+  },
+  /** Cars filter surface — the same #090909 the header root uses, so the chips
+   *  continue the header card rather than floating on the page. */
+  carFilterPanel: {
+    backgroundColor: "#090909",
+    paddingTop: 10,
+  },
+  /** The last cars filter row: same surface, and the rounded bottom that closes
+   *  the card off. */
+  carFilterPanelFooter: {
+    backgroundColor: "#090909",
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    paddingBottom: 10,
   },
   chipStripDivider: {
     width: 1,
