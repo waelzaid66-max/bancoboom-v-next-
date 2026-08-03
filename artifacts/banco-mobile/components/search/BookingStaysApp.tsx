@@ -692,6 +692,7 @@ export function BookingStaysApp() {
           Owns back/save/search/filter/type-tab bands on a void (#000) canvas.
           Parent keeps all search state; header is purely presentational. ── */}
       <StaysHomeHeader
+        slot="pinned"
         searchOpen={searchOpen}
         draftQuery={draftQuery}
         searchSaved={searchSaved}
@@ -919,6 +920,42 @@ export function BookingStaysApp() {
 
       <View style={styles.resultsArea}>
         <SearchResultsSurface
+          // BookingStaysApp is independent of SectionSearchApp, so it wires the
+          // scrolling half of its own header. The type tabs used to sit above
+          // the list and hold a fixed slice of the screen forever; inside
+          // ListHeaderComponent they scroll away with the results.
+          listHeader={
+            <StaysHomeHeader
+              slot="scroll"
+              searchOpen={searchOpen}
+              draftQuery={draftQuery}
+              searchSaved={searchSaved}
+              activeFilterCount={activeFilterCount}
+              activeStayType={activeStayType}
+              typeTabs={typeTabs}
+              inputRef={inputRef}
+              onBack={goBack}
+              onSaveSearch={handleSaveSearch}
+              onOpenMap={() => {
+                playSound("key");
+                Haptics.selectionAsync();
+                openOrLatchMap({ inResultsView, setMapMode, setWantMap });
+              }}
+              onOpenFilters={() => {
+                playSound("key");
+                setShowFilters((v) => !v);
+              }}
+              onOpenSearch={openSearch}
+              onCloseSearch={closeSearch}
+              onQueryChange={handleQueryChange}
+              onSubmitQuery={() => {
+                commitQueryNow(draftQuery);
+                if (!draftQuery.trim()) closeSearch();
+              }}
+              onClearQuery={clearQuery}
+              onSelectType={selectStayType}
+            />
+          }
           items={items}
           onCardPress={handleCardPress}
           onSave={toggleSave}
