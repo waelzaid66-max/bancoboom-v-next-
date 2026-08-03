@@ -110,6 +110,11 @@ export async function syncRoleToClerk(clerkId: string, role: string): Promise<vo
 export interface UpdateUserProfileInput {
   account_type?: "individual" | "dealer" | "company" | "financial_institution";
   phone?: string | null;
+  // Preferred language for server-written content. Mirrors the `language` member
+  // of UpdateMeSchema, which is what the only caller parses its body with — the
+  // schema accepted it from the start while this interface did not, so the body
+  // validated at runtime and the read below failed to compile.
+  language?: "ar" | "en";
   business?: {
     activity_type:
       | "car_dealer"

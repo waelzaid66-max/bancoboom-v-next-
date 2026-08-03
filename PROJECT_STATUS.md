@@ -162,7 +162,15 @@ Long Press → opens chip tray:
 ### 🔴 Critical
 | # | Issue | Fix |
 |---|-------|-----|
-| Task #18 | `financial_institution` TypeScript errors in 4 files (profile.tsx:560, AdminService.ts:104, PlanService.ts:22, UserService.ts:141) | DB migration + schema update |
+| — | _none open_ | — |
+
+> **Task #18 — CLOSED (verified 2026-08-03).** `financial_institution` is in the
+> `user_role` enum (`lib/db/src/schema/index.ts:32`) **and** in migration `0000`.
+> This row sat here as "critical" long after it was fixed; do not pick it up.
+> ```bash
+> sed -n '25,40p' lib/db/src/schema/index.ts
+> grep -rln "financial_institution" lib/db/migrations/
+> ```
 
 ### 🟡 Planned
 | # | Issue |
@@ -217,6 +225,15 @@ cd artifacts/api-server && pnpm run codegen
 ```
 
 ### Critical Rules for Future Agents
+
+> **0. Run `pnpm run typecheck` from the repo ROOT — never only `--filter @workspace/banco-mobile`.**
+> The mobile-scoped check does not compile `api-server`. `main` sat red on an
+> `api-server` type error for two days and 47+ commits, every one of them
+> reporting "typecheck clean", because that is the command everyone ran. CI has
+> now executed for the first time and is the arbiter — and note it does **not**
+> fire automatically on agent commits (neither `push` nor `pull_request`);
+> it must be started with a manual `workflow_dispatch`.
+
 1. **Never add content back between SearchDiscover section cards and Business Hub** — it was intentionally removed (Popular Brands, Trending, Car Import, Map CTA all belong elsewhere).
 2. **Always use `push-force` in post-merge scripts** — bare `push` hits TTY prompt and silently fails.
 3. **AbuseService `publicVisibilityConditions()` must be spread on EVERY public query** — shadow-banned content leaks otherwise.
