@@ -20,6 +20,25 @@ const hub = read("app/import/index.tsx");
 const auctions = read("app/import/auctions.tsx");
 const i18n = read("constants/i18n.ts");
 
+/**
+ * Every screen in the car-import world, not just the two that were caught.
+ *
+ * The first version of this guard watched the hub and the auction list, which
+ * is where the invented numbers happened to be. But the defect was never about
+ * those two files — the same class of claim, and the same off-family red, were
+ * sitting in five more. A guard that only watches where the last bug was found
+ * teaches the next one to appear next door.
+ */
+const IMPORT_SCREENS = [
+  "app/import/index.tsx",
+  "app/import/auctions.tsx",
+  "app/import/calculator.tsx",
+  "app/import/documents.tsx",
+  "app/import/request.tsx",
+  "app/import/order/[id].tsx",
+  "components/import/OrderDocuments.tsx",
+];
+
 test("the hub advertises no count that was typed in by hand", () => {
   // The stats array is the only place the hub puts numbers in front of a user.
   const stats = hub.match(/const stats:[\s\S]*?\n {2}\];/);
@@ -71,10 +90,60 @@ test("the import screens promise nothing else the repo cannot back", () => {
     "Guaranteed",
     "مضمون 100",
   ];
-  for (const phrase of banned) {
-    assert.ok(
-      !hub.includes(phrase) && !auctions.includes(phrase),
-      `"${phrase}" is a promise with no enforcement behind it`
+  for (const file of IMPORT_SCREENS) {
+    const src = read(file);
+    for (const phrase of banned) {
+      assert.ok(
+        !src.includes(phrase),
+        `${file}: "${phrase}" is a promise with no enforcement behind it`
+      );
+    }
+  }
+});
+
+test("no import screen writes its own red", () => {
+  // The section accent is a TOKEN. Written as a literal it drifts: six of these
+  // files had picked up #E53935 — Material Design's default red, ΔE ≈ 19 from
+  // the brand logo — and a seventh had it buried in a StyleSheet where no audit
+  // listed it. sectionTheme.ts holds the owner-locked rule that every section
+  // colour derives from the logo red; a hex here quietly opts out of it.
+  //
+  // Comments are allowed to name the old value — that is how the reason for a
+  // change survives — so this reads code lines only.
+  for (const file of IMPORT_SCREENS) {
+    const offenders = read(file)
+      .split("\n")
+      .map((line, i) => [i + 1, line])
+      .filter(([, line]) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+      .filter(([, line]) => /#[0-9A-Fa-f]{6}\b/.test(line))
+      // White, black and pure-transparent overlays are neutrals, not identity.
+      .filter(([, line]) => !/#(FFFFFF|000000|22C55E)\b/i.test(line));
+
+    assert.deepEqual(
+      offenders,
+      [],
+      `${file} writes a colour by hand — bind it to sectionAccent()/SECTION_GRADIENT instead`
     );
   }
+});
+
+test("the shipment rail tells progress by fill, not by a rainbow", () => {
+  const order = read("app/import/order/[id].tsx");
+
+  // Six stages once carried six hues, five of them outside the red family.
+  for (const hex of ["#F97316", "#F59E0B", "#0EA5E9", "#8B5CF6"]) {
+    assert.ok(
+      !order.includes(hex),
+      `${hex} is back on the stage rail — progress is told by fill, not by hue`
+    );
+  }
+
+  // And the stage list must not grow a colour field again.
+  const stages = order.match(/const STAGES:[\s\S]*?\n\];/);
+  assert.ok(stages, "the STAGES array moved — update this guard to match");
+  assert.doesNotMatch(
+    stages[0],
+    /\bcolor\b/,
+    "a stage carries no colour of its own; stageTone() derives it from position"
+  );
 });

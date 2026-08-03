@@ -28,23 +28,55 @@ import { AppText } from "@/components/AppText";
 import { OrderDocuments } from "@/components/import/OrderDocuments";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
+import { SECTION_GRADIENT, sectionAccent } from "@/lib/sectionTheme";
 
-const RED = "#E53935";
+/** Car import is the CAR world, so its accent is the CAR token — bound, never
+ *  written as a literal. #E53935 was Material Design's default red: a sixth
+ *  family the app never chose, sitting ΔE ≈ 19 from the logo. Owner ruling
+ *  2026-08-02: colours track the identity of the app as a whole. */
+const RED = sectionAccent("car");
 
-// Mirrors import-tracking's stage strip (same icons/colors — one visual language).
+// Mirrors import-tracking's stage strip — one visual language.
 const STAGES: {
   key: string;
   stage: string;
   icon: React.ComponentProps<typeof Feather>["name"];
-  color: string;
 }[] = [
-  { key: "stageOrder", stage: "order", icon: "file-text", color: "#E53935" },
-  { key: "stageReview", stage: "review", icon: "clock", color: "#F97316" },
-  { key: "stageConfirm", stage: "confirm", icon: "check-circle", color: "#F59E0B" },
-  { key: "stageShipping", stage: "shipping", icon: "truck", color: "#0EA5E9" },
-  { key: "stageCustoms", stage: "customs", icon: "shield", color: "#8B5CF6" },
-  { key: "stageDelivered", stage: "delivered", icon: "package", color: "#22C55E" },
+  { key: "stageOrder", stage: "order", icon: "file-text" },
+  { key: "stageReview", stage: "review", icon: "clock" },
+  { key: "stageConfirm", stage: "confirm", icon: "check-circle" },
+  { key: "stageShipping", stage: "shipping", icon: "truck" },
+  { key: "stageCustoms", stage: "customs", icon: "shield" },
+  { key: "stageDelivered", stage: "delivered", icon: "package" },
 ];
+
+/**
+ * Progress is told by FILL, not by hue.
+ *
+ * Every stage used to carry its own colour: red, orange, amber, sky, violet,
+ * green. Six hues on one rail, five of them outside the family sectionTheme.ts
+ * locks the app to. They also carried nothing — the rail already says where the
+ * order is by which dots are filled, so the hue was decoration dressed as data,
+ * and it asked a buyer to learn a legend for a line they could already read.
+ *
+ * What replaces it is the section's own two-stop gradient, which existed
+ * already and needed no new value invented:
+ *      behind you   the deeper shade — done, settled
+ *      right now    the flagship red — where the order actually is
+ *      ahead        the border grey the rail was using anyway
+ *
+ * Delivered keeps its green, and earns the exception: arrival reads as green
+ * everywhere, and it fires once, at the end, so it never competes with the red
+ * for attention on the way there.
+ */
+const [STAGE_NOW, STAGE_DONE] = SECTION_GRADIENT.car;
+const STAGE_DELIVERED = "#22C55E";
+const DELIVERED_IDX = STAGES.length - 1;
+
+function stageTone(idx: number, isCurrent: boolean): string {
+  if (idx === DELIVERED_IDX) return STAGE_DELIVERED;
+  return isCurrent ? STAGE_NOW : STAGE_DONE;
+}
 
 // Buyer-side cancel is offered only before the order is confirmed; once the
 // pipeline is moving (confirm/shipping/customs) changes go through support.
@@ -211,8 +243,10 @@ export default function ImportOrderDetailScreen() {
               style={[styles.cancelledBanner, { flexDirection: rowDir }]}
               testID="import-order-cancelled"
             >
-              <Feather name="x-circle" size={16} color="#9CA3AF" />
-              <AppText style={styles.cancelledText}>
+              <Feather name="x-circle" size={16} color={colors.mutedForeground} />
+              <AppText
+                style={[styles.cancelledText, { color: colors.mutedForeground }]}
+              >
                 {t("importTrack.stageCancelled")}
               </AppText>
             </View>
@@ -232,6 +266,7 @@ export default function ImportOrderDetailScreen() {
               const reached = !cancelled && currentIdx >= 0 && idx <= currentIdx;
               const isCurrent = !cancelled && idx === currentIdx;
               const dim = colors.mutedForeground;
+              const tone = stageTone(idx, isCurrent);
               return (
                 <View key={stage.key} style={[styles.stageRow, { flexDirection: rowDir }]}>
                   <View style={styles.stageTrack}>
@@ -239,8 +274,8 @@ export default function ImportOrderDetailScreen() {
                       style={[
                         styles.stageDot,
                         {
-                          backgroundColor: reached ? stage.color : colors.background,
-                          borderColor: reached ? stage.color : colors.border,
+                          backgroundColor: reached ? tone : colors.background,
+                          borderColor: reached ? tone : colors.border,
                           borderWidth: reached ? 0 : 1,
                         },
                       ]}
@@ -256,8 +291,11 @@ export default function ImportOrderDetailScreen() {
                         style={[
                           styles.stageLine,
                           {
+                            // The segment BETWEEN two dots is travelled ground,
+                            // so it always takes the settled shade — never the
+                            // "right now" red, which belongs to one dot only.
                             backgroundColor:
-                              !cancelled && idx < currentIdx ? stage.color : colors.border,
+                              !cancelled && idx < currentIdx ? STAGE_DONE : colors.border,
                           },
                         ]}
                       />
@@ -327,11 +365,15 @@ export default function ImportOrderDetailScreen() {
               testID="import-order-cancel"
             >
               {cancelling ? (
-                <ActivityIndicator color="#EF4444" size="small" />
+                <ActivityIndicator color={colors.destructive} size="small" />
               ) : (
-                <Feather name="x-circle" size={16} color="#EF4444" />
+                <Feather name="x-circle" size={16} color={colors.destructive} />
               )}
-              <AppText style={styles.cancelBtnText}>{t("importOrder.cancelCta")}</AppText>
+              <AppText
+                style={[styles.cancelBtnText, { color: colors.destructive }]}
+              >
+                {t("importOrder.cancelCta")}
+              </AppText>
             </Pressable>
           )}
           {!cancelled && SUPPORT_STAGES.has(order.stage) && (
@@ -408,7 +450,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  cancelledText: { color: "#9CA3AF", fontSize: 13, fontFamily: "Cairo_700Bold" },
+  // Colour comes from the theme at the call site — a StyleSheet cannot read the
+  // hook, and hard-coding it here is how #9CA3AF and #EF4444 got in.
+  cancelledText: { fontSize: 13, fontFamily: "Cairo_700Bold" },
   secTitle: {
     fontSize: 15,
     fontFamily: "Cairo_700Bold",
@@ -455,7 +499,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginTop: 8,
   },
-  cancelBtnText: { color: "#EF4444", fontSize: 13.5, fontFamily: "Cairo_700Bold" },
+  cancelBtnText: { fontSize: 13.5, fontFamily: "Cairo_700Bold" },
   supportHint: {
     fontSize: 11.5,
     fontFamily: "Inter_400Regular",

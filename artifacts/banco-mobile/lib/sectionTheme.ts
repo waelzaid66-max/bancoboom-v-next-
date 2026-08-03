@@ -51,6 +51,27 @@ export const SECTION_GRADIENT: Record<SectionKey, readonly [string, string]> = {
 };
 
 /**
+ * The GROUND a section's hero sits on — not its accent.
+ *
+ * SECTION_GRADIENT above is the accent at full strength: right for a card that
+ * must shout which world it belongs to, far too loud behind a screenful of
+ * text. A hero needs the same hue at a whisper, so a section still reads as
+ * itself without the copy fighting the backdrop.
+ *
+ * These three stops were written by hand inside the import hub, where no audit
+ * would ever have found them. They live here now because that is where a
+ * section's identity is decided, and because the next hero that needs a ground
+ * should take one rather than invent one.
+ *
+ * The ramp is deliberately not derived by math from the accent: a computed tint
+ * of a red this saturated goes muddy brown at low luminance. These are chosen
+ * values that hold the hue.
+ */
+export const SECTION_HERO_RAMP: Record<"car", readonly [string, string, string]> = {
+  car: ["#1A0A0C", "#2A0E12", "#151518"],
+};
+
+/**
  * The section's motif icon (Ionicons name), drawn large + faint on the backdrop
  * so the world reads instantly even with no product photo.
  */
