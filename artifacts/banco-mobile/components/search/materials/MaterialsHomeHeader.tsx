@@ -31,16 +31,22 @@ import { PHONE_COUNTRIES } from "@/constants/countryCodes";
 import { CURRENCY_BY_MARKET } from "@/constants/listingCreateTaxonomy";
 import { useI18n } from "@/context/LanguageContext";
 import { marketCountryLabel } from "@/lib/searchTaxonomy";
-import { sectionAccent } from "@/lib/sectionTheme";
+import { SECTION_NEUTRAL, sectionAccent } from "@/lib/sectionTheme";
 
 const BANCO_LOGO = require("../../../assets/images/banco-logo.png");
 const B_MARK = require("../../../assets/images/b-mark.png");
 const HERO_PHOTO = require("../../../assets/images/categories/materials.jpg");
 
+/** Neutrals come from `SECTION_NEUTRAL` — the same values every section header
+ *  is built on. They used to be written out here, once per header, and they
+ *  drifted: Cars ran the owner's brief palette while this one stayed on an
+ *  older black and grey. A value with five homes always drifts.
+ *
+ *  The ACCENT stays per-section. That is the part that is meant to differ. */
 const ACCENT = sectionAccent("materials");
-const VOID = "#000000";
-const SNOW = "#FFFFFF";
-const ASH = "#8E8E93";
+const VOID = SECTION_NEUTRAL.void;
+const SNOW = SECTION_NEUTRAL.snow;
+const ASH = SECTION_NEUTRAL.ash;
 
 /** Scroll travel the collapse maps over — matched to Cars and Property so all
  *  three sections answer a finger at the same rate. */
@@ -49,7 +55,7 @@ const COLLAPSE_SCROLL = 96;
  *  at 46; 46 is therefore the number, not a guess at one. */
 const LOCKUP_HEIGHT = 46;
 const LOCKUP_SCALE_MIN = 0.82;
-const HAIRLINE = "rgba(255,255,255,0.16)";
+const HAIRLINE = SECTION_NEUTRAL.hairline;
 
 type Props = {
   searchOpen: boolean;

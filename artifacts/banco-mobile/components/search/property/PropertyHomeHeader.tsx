@@ -31,17 +31,23 @@ import { AppText } from "@/components/AppText";
 import { MarketCountryButton } from "@/components/MarketCountryPicker";
 import { PROPERTY_TYPES } from "@/constants/listingCreateTaxonomy";
 import { useI18n } from "@/context/LanguageContext";
-import { sectionAccent } from "@/lib/sectionTheme";
+import { SECTION_NEUTRAL, sectionAccent } from "@/lib/sectionTheme";
 
 const BANCO_LOGO = require("../../../assets/images/banco-logo.png");
 const B_MARK = require("../../../assets/images/b-mark.png");
 const PROPERTY_MARK = require("../../../assets/images/property-mark.png");
 
+/** Neutrals come from `SECTION_NEUTRAL` — the same values every section header
+ *  is built on. They used to be written out here, once per header, and they
+ *  drifted: Cars ran the owner's brief palette while this one stayed on an
+ *  older black and grey. A value with five homes always drifts.
+ *
+ *  The ACCENT stays per-section. That is the part that is meant to differ. */
 const ACCENT = sectionAccent("real_estate"); // #B81E3C
-const VOID = "#000000";
-const SNOW = "#FFFFFF";
-const ASH = "#8E8E93";
-const HAIRLINE = "rgba(255,255,255,0.16)";
+const VOID = SECTION_NEUTRAL.void;
+const SNOW = SECTION_NEUTRAL.snow;
+const ASH = SECTION_NEUTRAL.ash;
+const HAIRLINE = SECTION_NEUTRAL.hairline;
 
 /** Scroll travel the collapse is mapped over — matched to Cars so the two
  *  sections answer a finger at the same rate. */
