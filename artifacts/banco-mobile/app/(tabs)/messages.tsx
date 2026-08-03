@@ -1,5 +1,6 @@
 import { Feather } from "@/components/icons";
 import { avatarInitial, avatarTint } from "@/lib/avatarInitial";
+import { PresenceDot } from "@/components/PresenceDot";
 import { useAuth } from "@clerk/expo";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -226,6 +227,17 @@ export default function MessagesScreen() {
               {avatarInitial(item.counterparty_name)}
             </AppText>
           )}
+          {/* Sits on the avatar, where every messenger puts it. Renders nothing
+              for away and unknown — see PresenceDot for why those two must stay
+              indistinguishable. */}
+          <View
+            style={[
+              styles.presenceAnchor,
+              { borderColor: colors.background },
+            ]}
+          >
+            <PresenceDot presence={item.counterparty_presence} />
+          </View>
         </View>
         <View style={styles.rowMiddle}>
           <View style={[styles.rowTop, { flexDirection: rowDir }]}>
@@ -391,6 +403,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   thumb: { width: 52, height: 52 },
+  presenceAnchor: {
+    position: "absolute",
+    bottom: -1,
+    end: -1,
+    borderRadius: 999,
+    borderWidth: 2,
+  },
   thumbInitial: {
     fontSize: 22,
     lineHeight: 26,

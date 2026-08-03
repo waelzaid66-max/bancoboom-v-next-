@@ -168,6 +168,11 @@ const en = {
       genThanks: "Thank you for reaching out.",
     },
   chat: {
+    presence: {
+      online: "Online",
+      recently: "Active recently",
+      away: "Away",
+    },
     photoPermTitle: "Media access needed",
     photoPermBody: "Allow library access to send a photo or video.",
     photoAccessConfirm: "Choose media",
@@ -2537,6 +2542,11 @@ const ar: typeof en = {
       genThanks: "شكرًا لتواصلك.",
     },
   chat: {
+    presence: {
+      online: "متاح الآن",
+      recently: "نشط قريب",
+      away: "بعيد",
+    },
     photoPermTitle: "محتاج إذن الوسائط",
     photoPermBody: "اسمح بالوصول للمعرض عشان تبعت صورة أو فيديو.",
     photoAccessConfirm: "اختَر وسائط",
