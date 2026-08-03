@@ -1296,6 +1296,7 @@ export default function ThreadScreen() {
                 backgroundColor: !draft.trim()
                   ? colors.secondary
                   : colors.primary,
+                borderColor: !draft.trim() ? colors.border : colors.primary,
               },
             ]}
             testID="message-send"
@@ -1720,6 +1721,12 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
+    // Its siblings in this row (attachBtn) carry a 1px border, and the send
+    // button did not. Idle, it filled with colors.secondary #1A1A1A on a
+    // #000000 page — about 1.15:1, so the circle simply was not there. The
+    // icon was drawing correctly the whole time; the button around it was
+    // invisible.
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
