@@ -356,6 +356,23 @@ export function CarsHomeHeader({
     };
   });
 
+  // The plate is the scene, and it must collapse WITH the header — this is the
+  // fix for the bug where it sat at a fixed height while everything else shrank,
+  // so scrolling never gave its space back. Its height tracks the header's real
+  // height at every offset: expanded it spans the top bar plus the hero
+  // (HEADER_EXPANDED + HERO_MIN_HEIGHT), collapsed it is just the top bar
+  // (HEADER_COLLAPSED). The image inside is bottom-anchored and clipped, so the
+  // vehicles are the last thing to leave as it closes.
+  const plateExpanded = HEADER_EXPANDED + HERO_MIN_HEIGHT;
+  const plateCollapse = useAnimatedStyle(() => {
+    const p = scrollY
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
+      : 0;
+    return {
+      height: plateExpanded + (HEADER_COLLAPSED - plateExpanded) * p,
+    };
+  });
+
   // Shadow deepens as the header takes over from the content behind it. iOS
   // reads opacity/radius, Android reads elevation — both are animatable here.
   const liftCollapse = useAnimatedStyle(() => {
@@ -390,7 +407,7 @@ export function CarsHomeHeader({
           rides on top so white text keeps its contrast over the bright parts of
           the plate. It never takes a tap. ── */}
       {showPinned ? (
-        <View style={styles.shellPlate} pointerEvents="none">
+        <Animated.View style={[styles.shellPlate, plateCollapse]} pointerEvents="none">
           <View style={styles.shellPlateImg}>
           <Image
             source={HERO_PLATE}
@@ -415,7 +432,7 @@ export function CarsHomeHeader({
             <Rect x="0" y="0" width="100%" height="100%" fill="url(#carPlateFoot)" />
           </Svg>
           </View>
-        </View>
+        </Animated.View>
       ) : null}
 
       {/* "No flat background" — the pinned bar gets the same treatment as the
@@ -942,7 +959,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    height: HEADER_EXPANDED + HERO_MIN_HEIGHT,
+    // Height is driven by `plateCollapse` — it tracks the header's real height
+    // as it collapses, so the plate gives its space back on scroll instead of
+    // floating at a fixed size.
     justifyContent: "flex-end",
     borderBottomLeftRadius: BOTTOM_RADIUS,
     borderBottomRightRadius: BOTTOM_RADIUS,
