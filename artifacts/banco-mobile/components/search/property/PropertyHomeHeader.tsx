@@ -297,15 +297,23 @@ export function PropertyHomeHeader({
           <View style={styles.taglineRule} />
         </View>
 
-        <AppText style={styles.poweredLabel} numberOfLines={1}>
-          {t("booking.poweredBy")}
-        </AppText>
+        {/* POWERED BY sits INSIDE this row, immediately before the mark it
+            qualifies. It used to be its own <AppText> above the row, which is
+            the "POWERED BY eats its own line" defect the owner reported from
+            his screenshots: eight-point type claiming a full line of vertical
+            space above the logo it belongs to. Reading order is preserved in
+            both directions because the row flips with `isRTL`, so the label
+            still leads the mark rather than trailing it.
+            FacilitiesHomeHeader is the reference for this shape. */}
         <View
           style={[
             styles.poweredRow,
             { flexDirection: isRTL ? "row-reverse" : "row" },
           ]}
         >
+          <AppText style={styles.poweredLabelInline} numberOfLines={1}>
+            {t("booking.poweredBy")}
+          </AppText>
           <Image
             source={BANCO_LOGO}
             style={styles.poweredLogo}
@@ -605,13 +613,14 @@ const styles = StyleSheet.create({
     color: ASH,
     textAlign: "center",
   },
-  poweredLabel: {
+  // Inline variant: same type as before, without the `marginBottom` that only
+  // made sense when this sat on a line of its own.
+  poweredLabelInline: {
     fontSize: 8,
     fontFamily: "Inter_500Medium",
     color: ASH,
     letterSpacing: 1.1,
     textTransform: "uppercase",
-    marginBottom: 1,
   },
   poweredRow: {
     alignItems: "center",
