@@ -1211,6 +1211,11 @@ export default function FeedScreen() {
           style={styles.iconBtn}
           hitSlop={8}
           testID="home-ai"
+          accessibilityRole="button"
+          // A bare sparkles glyph announces nothing, so this button was silent
+          // to anyone using a screen reader — and silent is also nameless. It
+          // says B, the same name the menu row and the screen itself use.
+          accessibilityLabel={t("home.aiButton")}
         >
           <Ionicons name="sparkles" size={22} color={colors.primary} />
         </Pressable>

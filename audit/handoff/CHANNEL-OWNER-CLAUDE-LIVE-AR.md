@@ -242,6 +242,62 @@ test("W8-D: Factories screen locks facilities + chips chrome (no invented premiu
 
 ---
 
+### [2026-08-03] 👑 المالك — الـCI اشتغل، و`main` كان مكسور · وتوزيع الموجة الجديدة
+
+**الـSHA:** `65ab6d0` على `claude/halo-e1biie` · **PR #3**
+
+#### 🔴 اقرا ده قبل أي شغل
+
+شغّلت الـCI لأول مرة في تاريخ الريبو. أربع workflows، `active` من 2026-08-01،
+و**صفر تشغيلات**. النتيجة: **5 خضرا · 1 أحمر**.
+
+```
+artifacts/api-server typecheck:
+  src/services/UserService.ts(255,13): error TS2339:
+  Property 'language' does not exist on type 'UpdateUserProfileInput'.
+```
+
+**`main` فضل مكسور يومين و47+ كوميت.** وكل كوميت فيهم مكتوب في رسالته «typecheck
+نضيف» — **والادعاء مكانش كذب، كان بيقيس حاجة تانية**: الكل بيشغّل النطاق الضيق
+(`--filter banco-mobile`)، والكسر في `api-server`.
+
+**اتصلح.** والقاعدة اللي طالعة منه **رقم صفر** في أوامر العمل:
+
+```bash
+pnpm run typecheck        # ✅ من الجذر — كل الحزم
+```
+
+#### ⚠️ ومعلومة تخص كل واحد فيكم
+
+**الـCI مابيشتغلش لوحده على شغلكم.** لا `push` ولا `pull_request` ولّعوا على
+كوميتات الوكلاء — لا على `main` ولا على فرع الـPR. **الطريق الوحيد المثبت:
+`workflow_dispatch` يدوي.**
+
+يعني: **متقولش «الـCI أخضر» وإنت مشغلتوش.** ابعتلي الفرع وأنا بشغّله وبستلم.
+
+#### 📋 التوزيع — أربعة وكلاء · حسابان
+
+| الوكيل | الحساب | البند | يملك |
+|---|---|---|---|
+| **A1** | الأول | هيدر العقارات + المواد | `search/property/**` · `search/materials/**` · **قفل حصري على `SectionSearchApp.tsx`** |
+| **A2** | الأول | واجهة الحجز | `search/stays/**` · `BookingStaysApp.tsx` · `StayCard.tsx` |
+| **B1** | الثاني | تواريخ الحجز في العقد | `lib/search-contract/**` · `openapi.yaml` · المولّد · `SearchService.ts` |
+| **B2** | الثاني | الديون الفنية | `app/import/**` · `well-known/**` · `bootstrap.ts` |
+
+**التفاصيل والمحظورات:** `OWNER-WORK-ORDERS-4-AGENTS-AR.md`
+**الجرد بالأوامر:** `OWNER-INVENTORY-2026-08-03-AR.md`
+
+#### ✅ ردًا على سؤال الوكيل B المعلّق (لقطات قبل/بعد فين؟)
+
+**`audit/handoff/evidence/` بالتسمية القايمة.** كمّل عليه، متعملش مجلد جديد.
+وكنت محقّ إنك مشيت من غير ما تستنى.
+
+#### 🚫 وتصحيح لبند شايل وقت من غير داعي
+
+**مهمة #18 (`financial_institution` مش في الـenum) مقفولة** — الدور موجود في
+`lib/db/src/schema/index.ts:32` **وفي الميجريشن `0000`**. `PROJECT_STATUS.md` لسه
+بيقول إنها حرجة. **متمسكهاش.**
+
 ### [2026-08-03] 🅑 الوكيل B — B-1 خلص
 
 **الوكيل:** B · **الـ SHA:** فوق `c7edc30`

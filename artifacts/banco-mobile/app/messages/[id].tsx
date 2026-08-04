@@ -22,7 +22,7 @@ import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -46,6 +46,7 @@ import { PermissionRationaleModal } from "@/components/PermissionRationaleModal"
 import { useI18n } from "@/context/LanguageContext";
 import { useSession } from "@/context/SessionContext";
 import { quickReplyKeys, type ChatParty } from "@/constants/quickReplies";
+import { PresenceLabel, type Presence } from "@/components/PresenceDot";
 import { useColors } from "@/hooks/useColors";
 import { uploadMediaAsset, isVideoAsset } from "@/lib/upload";
 import {
@@ -127,6 +128,25 @@ export default function ThreadScreen() {
    *  role; without one the safe read is buyer, since that is who opens a chat
    *  about someone else's listing. */
   const chatParty: ChatParty = params.role === "seller" ? "seller" : "buyer";
+
+  /**
+   * Presence for the person on the other side of THIS thread.
+   *
+   * Read from the conversations list already in the query cache rather than
+   * fetched again. The inbox is how a user reaches a thread, so the list is
+   * warm by the time this screen mounts, and the server has already applied
+   * every privacy gate to it — the client is reading a decision, not making
+   * one. Undefined when the cache is cold (a deep link straight into a chat),
+   * and undefined renders nothing, which is the correct answer for "we do not
+   * know yet" rather than a guess at away.
+   */
+  const chatPresence = useMemo<Presence | undefined>(() => {
+    const cached = qc.getQueryData<{ data?: { id: string; counterparty_presence?: string }[] }>(
+      getListConversationsQueryKey(),
+    );
+    const row = cached?.data?.find((c) => c.id === conversationId);
+    return row?.counterparty_presence as Presence | undefined;
+  }, [qc, conversationId]);
 
   const [draft, setDraft] = useState("");
 
@@ -1058,12 +1078,21 @@ export default function ThreadScreen() {
             color={colors.foreground}
           />
         </Pressable>
-        <AppText
-          style={[styles.headerTitle, { color: colors.foreground }]}
-          numberOfLines={1}
-        >
-          {params.name || t("messages.title")}
-        </AppText>
+        {/* Name, and under it how present the other side is.
+            This is the moment presence actually earns its place: standing in
+            the thread deciding whether a reply is worth waiting for. The label
+            renders nothing for away and unknown, so the column collapses back
+            to just the name — see PresenceDot for why those two must stay
+            indistinguishable. */}
+        <View style={styles.headerTitleCol}>
+          <AppText
+            style={[styles.headerTitle, { color: colors.foreground }]}
+            numberOfLines={1}
+          >
+            {params.name || t("messages.title")}
+          </AppText>
+          <PresenceLabel presence={chatPresence} />
+        </View>
         {canMarkSold ? (
           <Pressable
             onPress={handleMarkSold}
@@ -1704,7 +1733,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   backBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  headerTitle: { flex: 1, fontSize: 17, fontFamily: "Inter_600SemiBold", textAlign: "center" },
+  headerTitleCol: { flex: 1, alignItems: "center" },
+  headerTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", textAlign: "center" },
   soldBtn: {
     alignItems: "center",
     gap: 5,
