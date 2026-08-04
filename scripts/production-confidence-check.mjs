@@ -456,13 +456,35 @@ function checkWellKnownTemplates() {
     fail("well-known Dockerfile.web", "must COPY assetlinks.json into the nginx image");
     return;
   }
+  // The nginx stage must take these two files from the renderer's output. When
+  // it copied them straight from the build context, an unfilled template shipped
+  // as a parseable HTTP 200 whose fingerprint field read REPLACE_* — nothing
+  // failed anywhere, Apple and Google simply never verified.
+  if (!fs.existsSync(path.join(ROOT, "deploy/coolify/well-known/render-well-known.mjs"))) {
+    fail("well-known renderer", "deploy/coolify/well-known/render-well-known.mjs is missing");
+    return;
+  }
+  for (const name of ["apple-app-site-association", "assetlinks.json"]) {
+    if (!dfText.includes(`COPY --from=builder /well-known/${name}`)) {
+      fail(
+        "well-known Dockerfile.web",
+        `${name} must be copied from the renderer output (/well-known), not from the build context`,
+      );
+      return;
+    }
+  }
+  if (!dfText.includes("WELL_KNOWN_STRICT")) {
+    fail("well-known Dockerfile.web", "WELL_KNOWN_STRICT build arg missing — a store build could not refuse");
+    return;
+  }
   const placeholdersPresent =
     aasaText.includes("REPLACE_APPLE_TEAM_ID") ||
     assetText.includes("REPLACE_PLAY_APP_SIGNING_SHA256");
   pass(
     "well-known templates",
     placeholdersPresent
-      ? "shipped (OPS must replace REPLACE_* before store verify)"
+      ? "templates carry REPLACE_* (correct — owner-only credentials stay out of Git); " +
+        "build with --build-arg APPLE_TEAM_ID/PLAY_APP_SIGNING_SHA256 + WELL_KNOWN_STRICT=1 to verify"
       : "shipped with filled values",
   );
 }
