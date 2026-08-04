@@ -240,7 +240,10 @@ export default function ImportOrderDetailScreen() {
           {/* Cancelled banner */}
           {cancelled && (
             <View
-              style={[styles.cancelledBanner, { flexDirection: rowDir }]}
+              style={[
+                styles.cancelledBanner,
+                { flexDirection: rowDir, backgroundColor: colors.muted },
+              ]}
               testID="import-order-cancelled"
             >
               <Feather name="x-circle" size={16} color={colors.mutedForeground} />
@@ -360,7 +363,18 @@ export default function ImportOrderDetailScreen() {
             <Pressable
               onPress={confirmCancel}
               disabled={cancelling}
-              style={[styles.cancelBtn, { opacity: cancelling ? 0.6 : 1, flexDirection: rowDir }]}
+              style={[
+                styles.cancelBtn,
+                {
+                  opacity: cancelling ? 0.6 : 1,
+                  flexDirection: rowDir,
+                  // Was a flat rgba(239,68,68,.5) — Tailwind red-500, which is
+                  // neither theme's destructive (#FF3B30 dark / #DC2626 light).
+                  // The label beside it was already themed, so the button drew
+                  // its border in one red and its text in another.
+                  borderColor: `${colors.destructive}80`,
+                },
+              ]}
               accessibilityRole="button"
               testID="import-order-cancel"
             >
@@ -445,7 +459,6 @@ const styles = StyleSheet.create({
   cancelledBanner: {
     alignItems: "center",
     gap: 8,
-    backgroundColor: "rgba(156,163,175,0.12)",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -494,7 +507,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     borderWidth: 1,
-    borderColor: "rgba(239,68,68,0.5)",
     borderRadius: 12,
     paddingVertical: 12,
     marginTop: 8,

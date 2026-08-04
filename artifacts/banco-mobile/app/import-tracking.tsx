@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
+import { SECTION_GRADIENT, sectionAccent, sectionAccentAlpha } from "@/lib/sectionTheme";
 import { useUser } from "@clerk/expo";
 import {
   useListMyImportOrders,
@@ -24,15 +25,39 @@ import {
 const STAGES: {
   key: string;
   icon: React.ComponentProps<typeof Feather>["name"];
-  color: string;
 }[] = [
-  { key: "stageOrder",    icon: "file-text",   color: "#E53935" },
-  { key: "stageReview",   icon: "clock",        color: "#F97316" },
-  { key: "stageConfirm",  icon: "check-circle", color: "#F59E0B" },
-  { key: "stageShipping", icon: "truck",        color: "#0EA5E9" },
-  { key: "stageCustoms",  icon: "shield",       color: "#8B5CF6" },
-  { key: "stageDelivered",icon: "package",      color: "#22C55E" },
+  { key: "stageOrder",    icon: "file-text" },
+  { key: "stageReview",   icon: "clock" },
+  { key: "stageConfirm",  icon: "check-circle" },
+  { key: "stageShipping", icon: "truck" },
+  { key: "stageCustoms",  icon: "shield" },
+  { key: "stageDelivered",icon: "package" },
 ];
+
+/**
+ * The rail's tone — derived from position, never stored on the stage.
+ *
+ * `app/import/order/[id].tsx` retired the six-hue rail (red · orange · amber ·
+ * sky · violet · green) and says in its header that it "mirrors
+ * import-tracking's stage strip — one visual language". It did not: this file
+ * kept the rainbow, so the two screens of the same feature disagreed, and the
+ * guard written to hold the line only ever read the other one.
+ *
+ * Same rule here, same two stops, no new value invented:
+ *      behind you   the deeper shade — done, settled
+ *      right now    the flagship red — where the order actually is
+ * Delivered keeps green for the reason it kept it there: arrival reads as green
+ * everywhere, and it fires once, at the end.
+ */
+const [STAGE_NOW, STAGE_DONE] = SECTION_GRADIENT.car;
+const STAGE_DELIVERED = "#22C55E";
+const STAGE_CANCELLED = "#9CA3AF";
+const DELIVERED_IDX = STAGES.length - 1;
+
+function stageTone(idx: number, isCurrent: boolean): string {
+  if (idx === DELIVERED_IDX) return STAGE_DELIVERED;
+  return isCurrent ? STAGE_NOW : STAGE_DONE;
+}
 
 // DB stage value → STAGES index (cancelled is handled separately).
 const STAGE_INDEX: Record<string, number> = {
@@ -134,7 +159,7 @@ export default function ImportTrackingScreen() {
           testID="import-hub-cta"
         >
           <View style={styles.hubIcon}>
-            <Feather name="grid" size={18} color="#E53935" />
+            <Feather name="grid" size={18} color={sectionAccent("car")} />
           </View>
           <View style={{ flex: 1 }}>
             <AppText style={[styles.hubTitle, { color: colors.foreground, textAlign }]}>
@@ -176,7 +201,7 @@ export default function ImportTrackingScreen() {
             ]}
             testID="import-orders-error"
           >
-            <View style={[styles.orderDot, { backgroundColor: "#9CA3AF" }]}>
+            <View style={[styles.orderDot, { backgroundColor: STAGE_CANCELLED }]}>
               <Feather name="alert-triangle" size={14} color="#FFFFFF" />
             </View>
             <View style={styles.orderBody}>
@@ -212,7 +237,8 @@ export default function ImportTrackingScreen() {
               const cancelled = o.stage === "cancelled";
               const si = STAGE_INDEX[o.stage];
               const st = si != null ? STAGES[si] : null;
-              const dotColor = cancelled ? "#9CA3AF" : st?.color ?? "#9CA3AF";
+              const dotColor =
+                cancelled || si == null ? STAGE_CANCELLED : stageTone(si, true);
               const label = cancelled
                 ? t("importTrack.stageCancelled")
                 : st
@@ -287,7 +313,10 @@ export default function ImportTrackingScreen() {
               {/* Track: dot + line */}
               <View style={styles.stageTrack}>
                 <View
-                  style={[styles.stageDot, { backgroundColor: stage.color }]}
+                  style={[
+                    styles.stageDot,
+                    { backgroundColor: stageTone(idx, false) },
+                  ]}
                 >
                   <Feather name={stage.icon} size={13} color="#FFFFFF" />
                 </View>
@@ -341,10 +370,10 @@ export default function ImportTrackingScreen() {
               <View
                 style={[
                   styles.stepNum,
-                  { backgroundColor: "rgba(229,57,53,0.12)" },
+                  { backgroundColor: sectionAccentAlpha("car", 0.12) },
                 ]}
               >
-                <AppText style={[styles.stepNumText, { color: "#E53935" }]}>
+                <AppText style={[styles.stepNumText, { color: sectionAccent("car") }]}>
                   {idx + 1}
                 </AppText>
               </View>
@@ -441,7 +470,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "rgba(229,57,53,0.12)",
+    backgroundColor: sectionAccentAlpha("car", 0.12),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -530,7 +559,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: "#E53935",
+    backgroundColor: sectionAccent("car"),
     marginTop: 12,
   },
   primaryCtaText: {
@@ -564,7 +593,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 13,
     borderRadius: 12,
-    backgroundColor: "#E53935",
+    backgroundColor: sectionAccent("car"),
     marginBottom: 4,
   },
   requestCtaText: {

@@ -28,7 +28,7 @@ import { AppText } from "@/components/AppText";
 import { MiniAppBottomNav } from "@/components/MiniAppBottomNav";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
-import { SECTION_HERO_RAMP, sectionAccent } from "@/lib/sectionTheme";
+import { SECTION_HERO_RAMP, sectionAccent, sectionAccentAlpha } from "@/lib/sectionTheme";
 
 import { SOURCES as AUCTION_SOURCES } from "./auctions";
 
@@ -462,9 +462,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(229,57,53,0.22)",
+    backgroundColor: sectionAccentAlpha("car", 0.22),
     borderWidth: 1,
-    borderColor: "rgba(229,57,53,0.45)",
+    borderColor: sectionAccentAlpha("car", 0.45),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -526,7 +526,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(229,57,53,0.12)",
+    backgroundColor: sectionAccentAlpha("car", 0.12),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: "rgba(229,57,53,0.12)",
+    backgroundColor: sectionAccentAlpha("car", 0.12),
     alignItems: "center",
     justifyContent: "center",
   },

@@ -5,6 +5,7 @@ import { Feather } from "@/components/icons";
 import { AppText } from "@/components/AppText";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
+import { sectionAccent, sectionAccentAlpha } from "@/lib/sectionTheme";
 import { marketCountryMapCenter } from "@/lib/searchTaxonomy";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -25,6 +26,18 @@ type BridgeMsg =
   | { type: "ready" }
   | { type: "center"; lat: number; lng: number }
   | { type: "error" };
+
+/**
+ * The crosshair is the one mark the user aims with, so it is identity, not
+ * chrome. `components/search/mapHtml.ts` moved every map pin onto the section
+ * tokens ("keep in lockstep", it says) — this picker was missed and kept
+ * Material's `#E53935`, which is ΔE ≈ 19 from the logo red. Being inside a
+ * WebView HTML string is exactly why: no audit that greps `.tsx` colour props
+ * reads the inside of a template literal.
+ */
+const ACCENT = sectionAccent("car");
+const CROSSHAIR = ACCENT;
+const CROSSHAIR_FILL = sectionAccentAlpha("car", 0.2);
 
 function buildPinPickerHtml(center: Pin & { zoom: number }): string {
   const { lat, lng, zoom } = center;
@@ -51,8 +64,8 @@ function buildPinPickerHtml(center: Pin & { zoom: number }): string {
 <div id="map"></div>
 <div class="crosshair" aria-hidden="true">
   <svg viewBox="0 0 44 44" fill="none">
-    <path d="M22 4v10M22 30v10M4 22h10M30 22h10" stroke="#E53935" stroke-width="2.5" stroke-linecap="round"/>
-    <circle cx="22" cy="22" r="7" stroke="#E53935" stroke-width="2.5" fill="rgba(229,57,53,.2)"/>
+    <path d="M22 4v10M22 30v10M4 22h10M30 22h10" stroke="${CROSSHAIR}" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cx="22" cy="22" r="7" stroke="${CROSSHAIR}" stroke-width="2.5" fill="${CROSSHAIR_FILL}"/>
   </svg>
 </div>
 <div class="hint" id="hint"></div>
@@ -164,7 +177,7 @@ export function MapPinPicker({
           <View style={styles.mapWrap}>
             {!ready ? (
               <View style={styles.loading}>
-                <ActivityIndicator color="#E53935" />
+                <ActivityIndicator color={ACCENT} />
               </View>
             ) : null}
             {visible ? (
@@ -191,7 +204,7 @@ export function MapPinPicker({
             style={[
               styles.confirm,
               {
-                backgroundColor: center ? "#E53935" : colors.secondary,
+                backgroundColor: center ? ACCENT : colors.secondary,
                 opacity: center ? 1 : 0.5,
               },
             ]}
