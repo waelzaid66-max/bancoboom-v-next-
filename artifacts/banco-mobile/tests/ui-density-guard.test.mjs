@@ -52,6 +52,37 @@ test("create wizard footerNextBtn still shares the row (flex:1)", () => {
   );
 });
 
+test("create market + currency share one row (density: two compact controls, not two full rows)", () => {
+  // Both are content-sized (maxWidth 180). Stacked in their own field-blocks they
+  // cost ~55dp for two buttons that together span < 240dp. This locks them onto a
+  // shared flex row so the compression can't silently regress to a vertical stack.
+  // NB: styleBlock() only matches multi-line style bodies (closing on "\n  },").
+  // marketCurrencyRow is a single-line style, so match its braces directly —
+  // "[^}]*" stops at the first "}", i.e. exactly this style's own body, and never
+  // bleeds into a neighbouring style that happens to also say flexWrap: "wrap".
+  const rowDef = createSrc.match(/marketCurrencyRow:\s*\{([^}]*)\}/);
+  assert.ok(rowDef, "marketCurrencyRow style must exist");
+  assert.match(
+    rowDef[1],
+    /flexWrap:\s*["']wrap["']/,
+    "the row must wrap so a long market label drops currency to the next line, never clips",
+  );
+
+  // The market button and its picker are content-sized; both must live inside the
+  // shared row. Anchor on the market testID and require the currency control to
+  // follow within the same JSX row block (before the next top-level field opens).
+  const marketAt = createSrc.indexOf('testID="create-market-country-btn"');
+  assert.ok(marketAt > 0, "create-market-country-btn must exist");
+  const rowOpen = createSrc.lastIndexOf("marketCurrencyRow", marketAt);
+  assert.ok(rowOpen > 0, "market button must sit inside marketCurrencyRow");
+  const between = createSrc.slice(rowOpen, marketAt + 1200);
+  assert.match(
+    between,
+    /create-currency/,
+    "currency control must share the market row (compact side-by-side), not a stacked field-block",
+  );
+});
+
 test("profile FI open-banks CTA is not width 100%", () => {
   const at = profileSrc.indexOf('testID="profile-open-banks"');
   assert.ok(at > 0, "profile-open-banks must exist");

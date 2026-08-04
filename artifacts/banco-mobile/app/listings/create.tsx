@@ -1844,44 +1844,53 @@ export default function CreateListingScreen() {
           {/* Multi-market: compact MarketCountryButton + picker (same chrome as
               Search/Stay) — never dump the 21 launch markets as a chip cloud.
               Currency is a separate compact control so sellers can still override
-              to USD/EUR (search collapses currency into the country button). */}
-          <View>
-            <FieldLabel
-              label={t("create.fields.marketCountry")}
-              colors={colors}
-              rowDir={rowDir}
-            />
-            <MarketCountryButton
-              selected={marketCountry}
-              showCurrency={false}
-              testID="create-market-country-btn"
-              onPress={() => {
-                Haptics.selectionAsync();
-                setMarketPickerOpen(true);
-              }}
-            />
-          </View>
+              to USD/EUR (search collapses currency into the country button).
 
-          {!isRequest ? (
-            <View>
+              Market and currency SHARE one row. Both controls are content-sized
+              (maxWidth 180) — stacked in their own full-width field-blocks they
+              left a wide empty gutter beside each and cost the form ~55dp of the
+              seller's scroll for two buttons that together span < 240dp even on a
+              320dp screen. Side by side they hug the start; when this is a
+              buy-request, currency is hidden and market sits alone, unchanged. */}
+          <View style={[styles.marketCurrencyRow, { flexDirection: rowDir }]}>
+            <View style={styles.marketCurrencyCol}>
               <FieldLabel
-                label={t("create.fields.currency")}
+                label={t("create.fields.marketCountry")}
                 colors={colors}
                 rowDir={rowDir}
               />
-              <ListingCurrencyButton
-                value={listingCurrency}
-                marketCountry={marketCountry}
-                testIDPrefix="create-currency"
-                onChange={(code) => {
+              <MarketCountryButton
+                selected={marketCountry}
+                showCurrency={false}
+                testID="create-market-country-btn"
+                onPress={() => {
                   Haptics.selectionAsync();
-                  setCurrencyOverride(
-                    code === currencyForMarket(marketCountry) ? null : code,
-                  );
+                  setMarketPickerOpen(true);
                 }}
               />
             </View>
-          ) : null}
+
+            {!isRequest ? (
+              <View style={styles.marketCurrencyCol}>
+                <FieldLabel
+                  label={t("create.fields.currency")}
+                  colors={colors}
+                  rowDir={rowDir}
+                />
+                <ListingCurrencyButton
+                  value={listingCurrency}
+                  marketCountry={marketCountry}
+                  testIDPrefix="create-currency"
+                  onChange={(code) => {
+                    Haptics.selectionAsync();
+                    setCurrencyOverride(
+                      code === currencyForMarket(marketCountry) ? null : code,
+                    );
+                  }}
+                />
+              </View>
+            ) : null}
+          </View>
 
           {(category === "car" || category === "industrial") && (
             <View>
@@ -3248,6 +3257,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
+  // Market + currency on one row. `gap` spaces the two content-sized controls;
+  // `alignItems: flex-start` keeps a taller control from stretching its neighbour.
+  // Columns wrap (flexWrap) so a very long market label on a narrow phone drops
+  // currency to the next line rather than clipping — never overflow off-screen.
+  marketCurrencyRow: { flexWrap: "wrap", gap: 16, alignItems: "flex-start" },
+  marketCurrencyCol: { flexShrink: 1 },
   optionRow: { flexWrap: "wrap", gap: 8 },
   optionChip: {
     paddingHorizontal: 16,
