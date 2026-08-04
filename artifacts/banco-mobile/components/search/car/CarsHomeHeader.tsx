@@ -235,6 +235,16 @@ type Props = {
    * loose. Optional: a caller that passes nothing gets the row it had.
    */
   marketSlot?: React.ReactNode;
+  /**
+   * True when the parent paints its own filter bands directly under this header
+   * (Cars renders the country/offer/condition/brand axes below the pinned
+   * header). The header then drops its rounded bottom edge and its shadow so it
+   * flows flat into those bands and the whole thing reads as ONE card — the
+   * closing radius and the lift shadow move to the last filter row. Without it
+   * the header closes itself off, which left the filters looking like a second
+   * detached card sitting under the header.
+   */
+  continuesBelow?: boolean;
   slot?: "all" | "pinned" | "scroll";
   /**
    * How far the results list has scrolled, published by SearchResultsSurface.
@@ -286,6 +296,7 @@ export function CarsHomeHeader({
   marketSlot,
   slot = "all",
   scrollY,
+  continuesBelow = false,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { t, isRTL } = useI18n();
@@ -393,9 +404,13 @@ export function CarsHomeHeader({
         { paddingTop: slot === "scroll" ? 0 : topPad },
         // The rounded bottom edge and the lift belong to the pinned bar — it is
         // the piece that sits OVER the results. The scrolling half is inside the
-        // list, where a shadow would trail the hero down the screen.
-        showPinned && !showScroll ? styles.pinnedShell : null,
-        showPinned && !showScroll ? liftCollapse : null,
+        // list, where a shadow would trail the hero down the screen. When the
+        // parent paints filter bands right below (Cars), the header keeps only
+        // its layering and hands the closing radius + shadow to the last filter
+        // row, so header and filters read as one card instead of two.
+        showPinned && !showScroll && !continuesBelow ? styles.pinnedShell : null,
+        showPinned && !showScroll && !continuesBelow ? liftCollapse : null,
+        showPinned && !showScroll && continuesBelow ? styles.pinnedShellOpen : null,
       ]}
       testID={slot === "scroll" ? "cars-hero-band" : "cars-home-header"}
     >
@@ -814,6 +829,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     // z-index above the results so the rounded edge reads as an overlap, not a
     // seam. Android needs both this and elevation to order correctly.
+    zIndex: 10,
+  },
+  /** Cars: the filter bands continue this header, so it keeps only its layering
+   *  — no rounded bottom, no shadow. A radius or a lift here would draw a line
+   *  across the middle of the card, right where the stats meet the filters. The
+   *  closing radius and shadow live on the last filter row instead. */
+  pinnedShellOpen: {
     zIndex: 10,
   },
   /** The gradient plate, clipped to the shell's rounded corners. The clipping

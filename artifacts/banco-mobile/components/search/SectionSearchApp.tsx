@@ -1703,6 +1703,11 @@ export function SectionSearchApp({
       ) : isCarSection ? (
         <CarsHomeHeader
           slot="pinned"
+          // The filter bands below are painted here, in this component, right
+          // under the pinned header. Telling the header they continue it drops
+          // its rounded bottom + shadow so the two stop reading as separate
+          // cards — the closing edge moves to the last filter row.
+          continuesBelow
           scrollY={carScrollY}
           searchOpen={searchOpen}
           draftQuery={draftQuery}
@@ -2895,12 +2900,20 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   /** The last cars filter row: same surface, and the rounded bottom that closes
-   *  the card off. */
+   *  the card off. This row is now the bottom edge of the whole header+filters
+   *  card, so it also carries the soft shadow the pinned header used to own —
+   *  the card floats over the results from here, its one closing edge. */
   carFilterPanelFooter: {
     backgroundColor: SECTION_NEUTRAL.void,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
     paddingBottom: 10,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+    zIndex: 10,
   },
   chipStripDivider: {
     width: 1,
