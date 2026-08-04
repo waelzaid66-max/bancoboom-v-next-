@@ -1981,8 +1981,18 @@ export function SectionSearchApp({
       // the page. The section flag lives HERE, on the wrapper — never between
       // the strip and MarketCountryButton, which a guard keeps ungated.
       <View style={isCarSection ? styles.carFilterPanel : undefined}>
-      <View
-        style={[styles.chipStrip, { flexDirection: rowDir }]}
+      {/* One clean horizontal strip instead of a wrapping block. The axes used
+          to wrap into ragged two- and three-line rows that read as loose chips
+          dumped under the header; on a horizontal scroll they stay a single
+          strip inside the header design, the way the type strip and the brand
+          strip already do. Nothing is removed — every axis is still here and
+          reachable, just on one line with the divider marking the compartments
+          (market · sort │ offer · condition). */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.hScroll}
+        contentContainerStyle={[styles.chipStripRow, { flexDirection: rowDir }]}
         testID="section-primary-strip"
       >
         <MarketCountryButton
@@ -2026,12 +2036,13 @@ export function SectionSearchApp({
             color={criteria.sort !== "recommended" ? "#FFFFFF" : colors.mutedForeground}
           />
         </Pressable>
-        {(showListingMode || showEngineChips || showIndustrialChips) ? (
+        {showListingMode ? (
           <View style={[styles.chipStripDivider, { backgroundColor: colors.border }]} />
         ) : null}
-        {/* Offer + engine axes: the SECTION decides the shape, this only renders
-            it. Cars ask for chips (REL-17) so new/used/import/instalment stay
-            visible. A section whose axis is set once may ask for a pill. */}
+        {/* Offer axis stays on the primary strip next to market + sort. The
+            engine/condition chips (new/used/import/instalment) moved to their
+            own strip below so they lead their own line and are not pushed off
+            the right edge behind the offer pill — visible, not hidden. */}
         {showListingMode ? (
           axisShape(chrome, "listingMode") === "pill" ? (
             <FilterPillSelect
@@ -2070,6 +2081,19 @@ export function SectionSearchApp({
             })
           )
         ) : null}
+      </ScrollView>
+      {/* Condition/engine strip — its own clean line so new/used/import/
+          instalment lead the row instead of scrolling off behind the offer
+          pill. Same compartment surface as the strip above; a section that
+          wants its axis as a single pill still gets one, here. */}
+      {(showEngineChips || showIndustrialChips) ? (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.hScroll}
+        contentContainerStyle={[styles.chipStripRow, { flexDirection: rowDir }]}
+        testID="section-engine-strip"
+      >
         {showEngineChips ? (
           axisShape(chrome, "engines") === "pill" ? (
             <FilterPillSelect
@@ -2125,8 +2149,8 @@ export function SectionSearchApp({
             </Pressable>
           );
         }) : null}
-
-      </View>
+      </ScrollView>
+      ) : null}
       </View>
       ) : null}
 
@@ -2887,6 +2911,19 @@ const styles = StyleSheet.create({
   chipStrip: {
     alignItems: "center",
     flexWrap: "wrap",
+    flexGrow: 0,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 2,
+  },
+  /** Single-line variant of chipStrip for the primary axis strip. No wrap: it
+   *  is the content of a horizontal scroll, so the axes stay on one clean line
+   *  (market · sort · offer · condition) instead of wrapping into ragged rows.
+   *  Same rhythm/padding as chipStrip so the compartment lines up with the
+   *  bands above and below it. */
+  chipStripRow: {
+    alignItems: "center",
     flexGrow: 0,
     gap: 6,
     paddingHorizontal: 12,
