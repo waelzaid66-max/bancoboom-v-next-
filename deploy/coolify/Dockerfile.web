@@ -21,6 +21,15 @@
 #     --build-arg VITE_CLERK_PUBLISHABLE_KEY=pk_live_... \
 #     --build-arg VITE_API_BASE_URL=https://api.yourdomain.com \
 #     -t banco-web-static .
+#
+# For a build that must serve VERIFIED deep links, add the two store
+# credentials and the strict flag — the build then fails rather than shipping
+# unverifiable .well-known files:
+#   docker build -f deploy/coolify/Dockerfile.web \
+#     --build-arg APPLE_TEAM_ID=ABCDE12345 \
+#     --build-arg PLAY_APP_SIGNING_SHA256=AA:BB:...:99 \
+#     --build-arg WELL_KNOWN_STRICT=1 \
+#     -t banco-web-static .
 ###############################################################################
 
 FROM node:24-bookworm-slim AS builder
@@ -38,6 +47,15 @@ ARG VITE_ADMIN_URL=""
 ARG VITE_WEB_URL=""
 ARG VITE_APP_ANDROID_URL=""
 ARG VITE_APP_IOS_URL=""
+
+# ---- Universal Links / App Links credentials (owner-only, never in Git) ------
+# Empty by default, so a landing/market/admin build is never blocked by a store
+# credential it does not need. Supply both — plus WELL_KNOWN_STRICT=1 — on any
+# build meant to serve verified deep links, and the build REFUSES instead of
+# silently shipping REPLACE_* placeholders to /.well-known/.
+ARG APPLE_TEAM_ID=""
+ARG PLAY_APP_SIGNING_SHA256=""
+ARG WELL_KNOWN_STRICT="0"
 
 ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY \
     VITE_CLERK_PROXY_URL=$VITE_CLERK_PROXY_URL \
@@ -67,6 +85,21 @@ RUN BASE_PATH=/market/ pnpm --filter @workspace/dealer-os run build
 # Build admin-os at /admin/ base path.
 RUN BASE_PATH=/admin/ pnpm --filter @workspace/admin-os run build
 
+# Render the .well-known association files from their templates.
+# The templates in Git keep their REPLACE_* placeholders — the Team ID and the
+# Play signing fingerprint are owner-only credentials and are never committed.
+# This step substitutes them, validates the formats (a mistyped fingerprint is a
+# store-verification failure with no error message anywhere), and refuses to
+# emit anything still containing a REPLACE_ token. Without the credentials it
+# passes the templates through with a loud warning, unless WELL_KNOWN_STRICT=1,
+# in which case the build stops here rather than shipping an unverifiable file.
+RUN APPLE_TEAM_ID="$APPLE_TEAM_ID" \
+    PLAY_APP_SIGNING_SHA256="$PLAY_APP_SIGNING_SHA256" \
+    node deploy/coolify/well-known/render-well-known.mjs \
+      --src deploy/coolify/well-known \
+      --out /well-known \
+      $( [ "$WELL_KNOWN_STRICT" = "1" ] && echo --strict )
+
 # ---- serve: Nginx + pre-built static assets ---------------------------------
 FROM nginx:1.27-alpine AS runner
 RUN rm -rf /usr/share/nginx/html/*
@@ -79,10 +112,13 @@ COPY --from=builder /app/artifacts/landing/dist/public/   /usr/share/nginx/html/
 COPY --from=builder /app/artifacts/dealer-os/dist/public/ /usr/share/nginx/html/market/
 COPY --from=builder /app/artifacts/admin-os/dist/public/  /usr/share/nginx/html/admin/
 
-# Universal Links / App Links verification files (placeholders until OPS fills
-# Apple Team ID + Play signing SHA-256 — see deploy/coolify/well-known/README.md).
-COPY deploy/coolify/well-known/apple-app-site-association /usr/share/nginx/html/.well-known/apple-app-site-association
-COPY deploy/coolify/well-known/assetlinks.json            /usr/share/nginx/html/.well-known/assetlinks.json
+# Universal Links / App Links verification files.
+# Copied from the RENDERER OUTPUT, never from the build context — copying the
+# context directly is what let an unfilled template ship as a valid-looking
+# HTTP 200 with REPLACE_PLAY_APP_SIGNING_SHA256 in the fingerprint field.
+# See deploy/coolify/well-known/README.md.
+COPY --from=builder /well-known/apple-app-site-association /usr/share/nginx/html/.well-known/apple-app-site-association
+COPY --from=builder /well-known/assetlinks.json            /usr/share/nginx/html/.well-known/assetlinks.json
 
 COPY deploy/coolify/nginx.conf /etc/nginx/conf.d/default.conf
 

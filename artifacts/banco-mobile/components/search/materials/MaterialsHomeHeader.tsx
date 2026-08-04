@@ -19,23 +19,43 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  type SharedValue,
+} from "react-native-reanimated";
 
 import { AppText } from "@/components/AppText";
 import { PHONE_COUNTRIES } from "@/constants/countryCodes";
 import { CURRENCY_BY_MARKET } from "@/constants/listingCreateTaxonomy";
 import { useI18n } from "@/context/LanguageContext";
 import { marketCountryLabel } from "@/lib/searchTaxonomy";
-import { sectionAccent } from "@/lib/sectionTheme";
+import { SECTION_NEUTRAL, sectionAccent } from "@/lib/sectionTheme";
 
 const BANCO_LOGO = require("../../../assets/images/banco-logo.png");
 const B_MARK = require("../../../assets/images/b-mark.png");
 const HERO_PHOTO = require("../../../assets/images/categories/materials.jpg");
 
+/** Neutrals come from `SECTION_NEUTRAL` — the same values every section header
+ *  is built on. They used to be written out here, once per header, and they
+ *  drifted: Cars ran the owner's brief palette while this one stayed on an
+ *  older black and grey. A value with five homes always drifts.
+ *
+ *  The ACCENT stays per-section. That is the part that is meant to differ. */
 const ACCENT = sectionAccent("materials");
-const VOID = "#000000";
-const SNOW = "#FFFFFF";
-const ASH = "#8E8E93";
-const HAIRLINE = "rgba(255,255,255,0.16)";
+const VOID = SECTION_NEUTRAL.void;
+const SNOW = SECTION_NEUTRAL.snow;
+const ASH = SECTION_NEUTRAL.ash;
+
+/** Scroll travel the collapse maps over — matched to Cars and Property so all
+ *  three sections answer a finger at the same rate. */
+const COLLAPSE_SCROLL = 96;
+/** The lockup's resting height as one row. The seal is the tallest thing in it
+ *  at 46; 46 is therefore the number, not a guess at one. */
+const LOCKUP_HEIGHT = 46;
+const LOCKUP_SCALE_MIN = 0.82;
+const HAIRLINE = SECTION_NEUTRAL.hairline;
 
 type Props = {
   searchOpen: boolean;
@@ -56,6 +76,16 @@ type Props = {
   onClearQuery: () => void;
   onOpenMarket: () => void;
   onCycleSort: () => void;
+  /**
+   * Which slice to paint — the Facilities model.
+   *
+   *   "pinned"  A top bar · B brand lockup · C search  → held above the list
+   *   "scroll"  D tagline                              → handed to the list
+   *   "all"     everything, original order             → the unsplit default
+   */
+  slot?: "all" | "pinned" | "scroll";
+  /** List offset, published by SearchResultsSurface. Pinned slice only. */
+  scrollY?: SharedValue<number>;
 };
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
@@ -86,6 +116,8 @@ export function MaterialsHomeHeader({
   onClearQuery,
   onOpenMarket,
   onCycleSort,
+  slot = "all",
+  scrollY,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { t, isRTL } = useI18n();
@@ -106,11 +138,45 @@ export function MaterialsHomeHeader({
     };
   }, [marketCountry, isRTL]);
 
+  const showPinned = slot === "all" || slot === "pinned";
+  const showScroll = slot === "all" || slot === "scroll";
+
+  // Collapse, same contract as Cars and Property: read the shared offset on the
+  // UI thread, interpolate, never re-render. Straight mapping — no spring, so
+  // nothing can overshoot into the top bar.
+  const lockupCollapse = useAnimatedStyle(() => {
+    const p = scrollY
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
+      : 0;
+    return {
+      opacity: 1 - p,
+      height: LOCKUP_HEIGHT * (1 - p),
+      transform: [{ scale: 1 + (LOCKUP_SCALE_MIN - 1) * p }],
+    };
+  });
+
+  const liftCollapse = useAnimatedStyle(() => {
+    const p = scrollY
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
+      : 0;
+    return {
+      shadowOpacity: 0.18 + 0.34 * p,
+      shadowRadius: 8 + 12 * p,
+      elevation: 2 + 10 * p,
+    };
+  });
+
   return (
-    <View
-      style={[styles.root, { paddingTop: Math.max(0, topPad - 6) }]}
-      testID="materials-core-header"
+    <Animated.View
+      style={[
+        styles.root,
+        { paddingTop: slot === "scroll" ? 0 : Math.max(0, topPad - 6) },
+        showPinned && !showScroll ? styles.pinnedShell : null,
+        showPinned && !showScroll ? liftCollapse : null,
+      ]}
+      testID={slot === "scroll" ? "materials-scroll-band" : "materials-core-header"}
     >
+      {showPinned ? (
       <View style={[styles.topBar, { flexDirection: rowDir }]}>
         <Pressable
           onPress={onBack}
@@ -162,13 +228,23 @@ export function MaterialsHomeHeader({
           />
         </Pressable>
       </View>
+      ) : null}
 
-      <View style={styles.brandBlock} testID="materials-core-brand">
-        <View
+      {/* Brand lockup — ONE row, pinned.
+              It was three: the wordmark row, a ruled tagline, then a powered-by
+              row carrying BANCO and the market weld. Nothing is dropped —
+              powered-by and market weld to the trailing end of this same row,
+              and the tagline moves down into the scrolling slice, where prose
+              belongs and where it no longer holds a slice of the viewport for
+              the whole session. Every testID and handler stays. */}
+      {showPinned ? (
+        <Animated.View
           style={[
-            styles.wordmarkRow,
-            { flexDirection: isRTL ? "row-reverse" : "row" },
+            styles.brandLockup,
+            { flexDirection: rowDir },
+            slot === "all" ? null : lockupCollapse,
           ]}
+          testID="materials-core-brand"
         >
           <Image source={B_MARK} style={styles.wordmarkB} contentFit="contain" />
           <View style={styles.wordmarkTextCol}>
@@ -189,32 +265,32 @@ export function MaterialsHomeHeader({
               <Image source={B_MARK} style={styles.heroSealB} contentFit="contain" />
             </View>
           </View>
-        </View>
 
-        <View style={styles.taglineRow}>
-          <View style={styles.taglineRule} />
-          <AppText style={styles.tagline} numberOfLines={1}>
-            {t("search.discover.section.materialsTagline")}
-          </AppText>
-          <View style={styles.taglineRule} />
-        </View>
+          <View style={styles.brandSpacer} />
 
-        <View
-          style={[
-            styles.bancoMarketWeld,
-            { flexDirection: isRTL ? "row-reverse" : "row" },
-          ]}
-          testID="materials-powered-market-row"
-        >
-          <AppText style={styles.poweredLabelInline} numberOfLines={1}>
-            {t("booking.poweredBy")}
-          </AppText>
-          <Image
-            source={BANCO_LOGO}
-            style={styles.poweredLogo}
-            contentFit="contain"
-            tintColor={ACCENT}
-          />
+          <View
+            style={[
+              styles.bancoMarketWeld,
+              { flexDirection: rowDir },
+            ]}
+            testID="materials-powered-market-row"
+          >
+          {/* Caption ABOVE the mark, not beside it. Side by side the pair cost
+              enough of the row that "POWERED BY" truncated to "POWE…" once the
+              three rows became one — and a clipped caption reads as breakage,
+              not as compression. Stacked, it is what it always was: a caption
+              on the logo. */}
+          <View style={styles.poweredCol}>
+            <AppText style={styles.poweredLabelInline} numberOfLines={1}>
+              {t("booking.poweredBy")}
+            </AppText>
+            <Image
+              source={BANCO_LOGO}
+              style={styles.poweredLogo}
+              contentFit="contain"
+              tintColor={ACCENT}
+            />
+          </View>
           <Pressable
             onPress={onOpenMarket}
             style={[styles.marketWeld, { flexDirection: rowDir }]}
@@ -232,11 +308,17 @@ export function MaterialsHomeHeader({
             </AppText>
             <Feather name="chevron-down" size={10} color={ASH} />
           </Pressable>
-        </View>
-      </View>
+          </View>
+        </Animated.View>
+      ) : null}
 
-      {/* Search + Filters → FilterSheet (the open/close refinements sheet) */}
-      {searchOpen ? (
+      {/* Search + Filters → FilterSheet (the open/close refinements sheet).
+              Pinned, and it has to be: the empty and error states render as an
+              absolute overlay on the results, so anything living inside the
+              list is unreachable in exactly the states a user most needs to
+              change their query from. */}
+      {showPinned ? (
+      searchOpen ? (
         <View style={[styles.searchPill, { flexDirection: rowDir }]}>
           <Ionicons name="search" size={16} color={ACCENT} />
           <TextInput
@@ -311,8 +393,22 @@ export function MaterialsHomeHeader({
             ) : null}
           </Pressable>
         </View>
-      )}
-    </View>
+      )
+      ) : null}
+
+      {/* Tagline — moved down out of the pinned lockup. It is prose, not a
+              control, so it reads once at the top of the results and then
+              leaves with them instead of holding the viewport all session. */}
+      {showScroll ? (
+        <View style={[styles.taglineRow, { flexDirection: rowDir }]}>
+          <View style={styles.taglineRule} />
+          <AppText style={styles.tagline} numberOfLines={1}>
+            {t("search.discover.section.materialsTagline")}
+          </AppText>
+          <View style={styles.taglineRule} />
+        </View>
+      ) : null}
+    </Animated.View>
   );
 }
 
@@ -323,6 +419,14 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: HAIRLINE,
+  },
+  /** Only the pinned slice — it is the piece that sits OVER the results, so it
+   *  is the piece that casts a shadow. The scrolling slice is inside the list,
+   *  where a shadow would trail the tagline down the screen. */
+  pinnedShell: {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    zIndex: 10,
   },
   topBar: { alignItems: "center", minHeight: 24, gap: 2 },
   topSpacer: { flex: 1 },
@@ -343,8 +447,19 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
   },
   sortHitActive: { backgroundColor: ACCENT, borderColor: ACCENT },
-  brandBlock: { alignItems: "center", marginBottom: 2 },
-  wordmarkRow: { alignItems: "center", gap: 6, marginBottom: 0 },
+  /** One row, replacing the three-row brandBlock. `overflow: hidden` is what
+   *  lets the animated height close it cleanly rather than squashing what is
+   *  inside it on the way down. */
+  brandLockup: {
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 2,
+    overflow: "hidden",
+  },
+  /** Identity leads, controls trail — the reading order the block had when it
+   *  was three stacked rows. */
+  brandSpacer: { flex: 1 },
+  poweredCol: { alignItems: "center", flexShrink: 0 },
   wordmarkB: { width: 34, height: 42 },
   wordmarkTextCol: { gap: 0, flexShrink: 1 },
   heroSeal: {

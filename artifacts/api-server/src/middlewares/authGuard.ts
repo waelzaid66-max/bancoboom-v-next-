@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
 import { users } from "@workspace/db/schema";
+import { touchPresence } from "../lib/presence";
 import { and, eq, isNull } from "drizzle-orm";
 import { errorResponse } from "../validators/schemas";
 import { hasPermission, type Permission, type StaffRole } from "../lib/permissions";
@@ -60,6 +61,9 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
       if (user) {
         req.dbUserId = user.id;
         req.userRole = user.role;
+        // Records that this account is active. Fire-and-forget and throttled —
+        // it cannot delay this response or fail it. See lib/presence.ts.
+        touchPresence(user.id);
       }
       next();
     })

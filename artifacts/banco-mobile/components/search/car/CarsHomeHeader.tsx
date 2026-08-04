@@ -61,11 +61,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "@/components/AppText";
 import { useI18n } from "@/context/LanguageContext";
-import { sectionAccent } from "@/lib/sectionTheme";
+import { SECTION_NEUTRAL, sectionAccent } from "@/lib/sectionTheme";
 import { VehicleGlyph, type VehicleGlyphName } from "./VehicleGlyph";
 
 const BANCO_LOGO = require("../../../assets/images/banco-logo.png");
 const BOOM_LOGO = require("../../../assets/images/boom-logo.png");
+/** The owner's own render, extracted from the design he sent and sitting in the
+ *  repo unused since 2026-08-02. The header's note said depth is "BUILT, never
+ *  photographed" because the brief banned raster — but the brief's own hero is
+ *  a photoreal plate of a jet, a yacht, a helicopter, a truck, a supercar and a
+ *  motorcycle, which no vector can be. The SVG ambience stays and this sits on
+ *  top of it: the drawn light is what makes the plate read as lit. */
+const HERO_PLATE = require("../../../assets/images/section-hero/car.png");
 
 /** Owner brief (2026-08-02): layered dark ground, one accent, premium depth.
  *
@@ -87,19 +94,19 @@ const BOOM_LOGO = require("../../../assets/images/boom-logo.png");
  *  therefore stays BOUND to `sectionAccent("car")` — never a literal here — and
  *  the glow and the bright accent are DERIVED from it, so the header never shows
  *  two unrelated reds. */
-const VOID = "#090909";
-const SECONDARY = "#121212";
-const SURFACE = "#181818";
+const VOID = SECTION_NEUTRAL.void;
+const SECONDARY = SECTION_NEUTRAL.secondary;
+const SURFACE = SECTION_NEUTRAL.surface;
 const ACCENT = sectionAccent("car");
 /** The brief's glow is its red at 18%. Ours is the identity red at 18%. */
 const GLOW = "rgba(204,30,36,0.18)";
 /** The brief's #FF2B2B lifted from OUR red instead of theirs — same job (the
  *  brighter tint for active states), same family as everything around it. */
 const ACCENT_BRIGHT = "#FF3A40";
-const SNOW = "#FFFFFF";
-const ASH = "#A5A5A5";
-const STEEL = "#C7C7CC";
-const HAIRLINE = "rgba(255,255,255,0.06)";
+const SNOW = SECTION_NEUTRAL.snow;
+const ASH = SECTION_NEUTRAL.ash;
+const STEEL = SECTION_NEUTRAL.steel;
+const HAIRLINE = SECTION_NEUTRAL.hairline;
 
 const HERO_MIN_HEIGHT = 244;
 
@@ -217,6 +224,17 @@ type Props = {
    *   "scroll" → hero + categories + stats. Handed to the list as its header so
    *              it scrolls off and gives the screen back.
    */
+  /**
+   * Market country + currency control, owned and rendered by the parent.
+   *
+   * It arrives as a node rather than as data because this header holds no state
+   * and knows nothing about markets. Before this it lived in the collapsed chip
+   * strip below the header, which is what the owner meant by the country and
+   * currency choices "not being compressed" — Property and Factories already
+   * carry theirs in the header, and Cars was the section still leaving it
+   * loose. Optional: a caller that passes nothing gets the row it had.
+   */
+  marketSlot?: React.ReactNode;
   slot?: "all" | "pinned" | "scroll";
   /**
    * How far the results list has scrolled, published by SearchResultsSurface.
@@ -265,6 +283,7 @@ export function CarsHomeHeader({
   onSelectCategory,
   onOpenNotifications,
   onOpenProfile,
+  marketSlot,
   slot = "all",
   scrollY,
 }: Props) {
@@ -318,6 +337,42 @@ export function CarsHomeHeader({
     return { opacity: p };
   });
 
+  /** The hero band gives back its whole height on the way down and takes it
+   *  back on the way up — "يختفي ويرجع مع الاسكرول".
+   *
+   *  It used to live in the scrolling slice, handed to the list as its header,
+   *  and that is why the owner never saw it: the loading and empty states paint
+   *  over the list as an opaque absoluteFill, so on a screen with no results —
+   *  which is every screen without a network — the hero was covered. Pinned and
+   *  collapsing shows it, and still gives the results the room back. */
+  const heroCollapse = useAnimatedStyle(() => {
+    const p = scrollY
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [1, 0], Extrapolation.CLAMP)
+      : 1;
+    return {
+      opacity: p,
+      height: HERO_MIN_HEIGHT * p,
+      marginBottom: GAP * p,
+    };
+  });
+
+  // The plate is the scene, and it must collapse WITH the header — this is the
+  // fix for the bug where it sat at a fixed height while everything else shrank,
+  // so scrolling never gave its space back. Its height tracks the header's real
+  // height at every offset: expanded it spans the top bar plus the hero
+  // (HEADER_EXPANDED + HERO_MIN_HEIGHT), collapsed it is just the top bar
+  // (HEADER_COLLAPSED). The image inside is bottom-anchored and clipped, so the
+  // vehicles are the last thing to leave as it closes.
+  const plateExpanded = HEADER_EXPANDED + HERO_MIN_HEIGHT;
+  const plateCollapse = useAnimatedStyle(() => {
+    const p = scrollY
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
+      : 0;
+    return {
+      height: plateExpanded + (HEADER_COLLAPSED - plateExpanded) * p,
+    };
+  });
+
   // Shadow deepens as the header takes over from the content behind it. iOS
   // reads opacity/radius, Android reads elevation — both are animatable here.
   const liftCollapse = useAnimatedStyle(() => {
@@ -344,12 +399,51 @@ export function CarsHomeHeader({
       ]}
       testID={slot === "scroll" ? "cars-hero-band" : "cars-home-header"}
     >
+      {/* ── The owner's plate IS the header's background ─────────────────────
+          In his design the vehicles are not a picture beside the copy; they are
+          the scene the whole header sits on — top bar, copy, search pill and
+          the type strip all float over it. Rendering it as a side image, which
+          is what the first attempt did, is not the same header at all. A scrim
+          rides on top so white text keeps its contrast over the bright parts of
+          the plate. It never takes a tap. ── */}
+      {showPinned ? (
+        <Animated.View style={[styles.shellPlate, plateCollapse]} pointerEvents="none">
+          <View style={styles.shellPlateImg}>
+          <Image
+            source={HERO_PLATE}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            contentPosition="bottom center"
+            transition={220}
+          />
+          <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
+            <Defs>
+              {/* Vertical only. The wordmark sits at the top and the search
+                  pill and the type tiles at the bottom, so those two ends are
+                  the parts that need seating; the middle is where the vehicles
+                  are and it stays clear. */}
+              <LinearGradient id="carPlateFoot" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={VOID} stopOpacity="0.85" />
+                <Stop offset="0.22" stopColor={VOID} stopOpacity="0.08" />
+                <Stop offset="0.78" stopColor={VOID} stopOpacity="0.08" />
+                <Stop offset="1" stopColor={VOID} stopOpacity="0.85" />
+              </LinearGradient>
+            </Defs>
+            <Rect x="0" y="0" width="100%" height="100%" fill="url(#carPlateFoot)" />
+          </Svg>
+          </View>
+        </Animated.View>
+      ) : null}
+
       {/* "No flat background" — the pinned bar gets the same treatment as the
           hero, scaled down: a vertical lift so the bar has a top edge, and a
           faint red wash under the brand so the accent is present even when the
           header is collapsed to a single row. Vector, so it costs no memory and
           cannot band on a wide gamut screen. */}
-      {showPinned && !showScroll ? (
+      {/* Retired: the plate is the ground now, and a second opaque gradient on
+          top of it only hid the photograph. Kept out rather than deleted so the
+          intent stays legible in history. */}
+      {false ? (
         <View style={styles.barBackdrop} pointerEvents="none">
           <Svg width="100%" height="100%">
             <Defs>
@@ -404,14 +498,29 @@ export function CarsHomeHeader({
               style={styles.wordmarkBoom}
               contentFit="contain"
             />
-            <AppText style={styles.wordmarkCar} numberOfLines={1}>
+            {/* Scales down instead of clipping. Equal flanks keep the wordmark
+                optically centred, which leaves the centre a fixed budget — and
+                on 320dp that budget rendered "CAR" as "CA". flexShrink alone
+                cannot fix that: shrinking a Text clips it, it does not resize
+                the glyphs. */}
+            <AppText
+              style={styles.wordmarkCar}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+            >
               {t("search.discover.section.carBrand")}
             </AppText>
           </Animated.View>
           <Animated.View
             style={[styles.poweredRow, { flexDirection: rowDir }, poweredCollapse]}
           >
-            <AppText style={styles.poweredLabel} numberOfLines={1}>
+            <AppText
+              style={styles.poweredLabel}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+            >
               {t("booking.poweredBy")}
             </AppText>
             <Image
@@ -454,9 +563,10 @@ export function CarsHomeHeader({
               of them is drawn here in react-native-svg. No raster, so it is
               resolution-free and cannot band, clip or blur on any Android
               density — which is the whole reason the brief bans PNG. ── */}
-      {showScroll ? (
-      <View style={styles.hero} testID="cars-hero">
-        <View style={styles.heroGlow} pointerEvents="none">
+      {showPinned ? (
+      <Animated.View style={[styles.hero, heroCollapse]} testID="cars-hero">
+
+        <View style={[styles.heroGlow, { opacity: 0.55 }]} pointerEvents="none">
           {/* Four layers, back to front:
                 1 ground   a vertical lift off #090909 so the band is not flat
                 2 key      a soft red source off the trailing side
@@ -508,32 +618,13 @@ export function CarsHomeHeader({
           </Svg>
         </View>
 
-        <View style={[styles.heroCopy, { alignItems: alignStart }]}>
-          <AppText style={[styles.heroTitleTop, { textAlign }]} numberOfLines={1}>
-            {t("search.discover.section.carHeroTitleTop")}
-          </AppText>
-          <AppText style={[styles.heroTitleBottom, { textAlign }]} numberOfLines={1}>
-            {t("search.discover.section.carHeroTitleBottom")}
-          </AppText>
-          <AppText style={[styles.heroSubtitle, { textAlign }]} numberOfLines={2}>
-            {t("search.discover.section.carHeroSubtitle")}
-          </AppText>
-
-          <View style={[styles.featureList, { alignItems: alignStart }]}>
-            {FEATURES.map((f) => (
-              <View
-                key={f.key}
-                style={[styles.featureRow, { flexDirection: rowDir }]}
-              >
-                <Feather name={f.icon} size={13} color={STEEL} />
-                <AppText style={styles.featureText} numberOfLines={1}>
-                  {t(f.key)}
-                </AppText>
-              </View>
-            ))}
-          </View>
-        </View>
-      </View>
+        {/* Removed by the owner, 2026-08-03: «امسح الكلام دة».
+            The subtitle line and the five trust rows are gone from the hero —
+            he was explicit that the wording was getting in the way of the
+            header itself, and that the plate plus the controls are what this
+            band is. The i18n keys and FEATURES stay defined so the block can be
+            restored in one edit; nothing was deleted from the translations. */}
+      </Animated.View>
       ) : null}
 
       {/* ── Band C — one search row. Map + save sit inline so the top bar can
@@ -607,6 +698,12 @@ export function CarsHomeHeader({
           </Pressable>
         </View>
 
+        {marketSlot ? (
+          <View style={styles.marketSlot} testID="cars-header-market">
+            {marketSlot}
+          </View>
+        ) : null}
+
         <Pressable
           onPress={onOpenFilters}
           style={styles.filterButton}
@@ -626,7 +723,10 @@ export function CarsHomeHeader({
 
       {/* ── Band D — quick vehicle categories. Absent until live inventory can
               actually be filtered by vehicle type (see CAR_CATEGORIES). ── */}
-      {showScroll && categories.length > 0 ? (
+      {/* PINNED. It is a browse control, and the empty-state overlay covers
+          whatever the list carries — the row a buyer with no results needs to
+          change what they are looking at is the row that must not vanish. */}
+      {showPinned && categories.length > 0 ? (
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -668,7 +768,10 @@ export function CarsHomeHeader({
       ) : null}
 
       {/* ── Band E — stats. Absent when the parent has no real numbers. ── */}
-      {showScroll && stats.length > 0 ? (
+      {/* PINNED and collapsing, like the hero above it: identity that the
+          owner must actually see, rather than identity hidden under a loading
+          state. */}
+      {showPinned && stats.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -699,6 +802,8 @@ const styles = StyleSheet.create({
   root: {
     backgroundColor: VOID,
     paddingBottom: 8,
+    // Bands paint over the plate, so nothing here may carry its own fill.
+    position: "relative",
   },
   /** Only the pinned bar. Rounded bottom edge per the brief, and the shadow
    *  colour/offset the animated lift drives the opacity and radius of. */
@@ -743,8 +848,17 @@ const styles = StyleSheet.create({
   /** Both flanks claim the same width so the brand block between them lands on
    *  the true centre of the header. The trailing side is the wider of the two
    *  (two controls), so it sets the number. */
+  /** The LEADING flank holds one control, the trailing flank holds two.
+   *
+   *  It used to reserve two slots on both sides so the wordmark sat optically
+   *  centred. On 320dp that is arithmetic the row cannot satisfy: 320 less 32
+   *  of padding leaves 288, two flanks of 104 take 208, and the 80 left is not
+   *  enough for a 68dp mark plus "CAR" — the render clipped it to "CA" and the
+   *  BANCO mark under it to "BANC". Identity intact beats identity centred, and
+   *  `adjustsFontSizeToFit` is not an answer here because it does nothing on
+   *  web, which is the surface these captures come from. */
   topSide: {
-    minWidth: TAP * 2 + 8,
+    minWidth: TAP,
     alignItems: "center",
   },
   topActions: {
@@ -806,11 +920,13 @@ const styles = StyleSheet.create({
   poweredLogo: {
     width: 58,
     height: 14,
+    flexShrink: 1,
   },
 
   // Band B
   hero: {
-    minHeight: HERO_MIN_HEIGHT,
+    // No minHeight: `heroCollapse` animates the height between HERO_MIN_HEIGHT
+    // and 0, and a floor here would stop it ever closing.
     justifyContent: "center",
     paddingHorizontal: 20,
     paddingVertical: 20,
@@ -819,7 +935,55 @@ const styles = StyleSheet.create({
   heroGlow: {
     ...StyleSheet.absoluteFillObject,
   },
+  /** Fills the whole pinned shell, behind every band. Clipped by the shell's
+   *  rounded bottom corners, and never takes a tap. */
+  /** Anchored to the bottom of the shell, full width, at the plate's own
+   *  proportions (1216×453 ≈ 2.7:1).
+   *
+   *  Stretching it over the whole shell was the first attempt and it zoomed the
+   *  crop so hard that only a helicopter and half a truck survived: the design
+   *  is a 2.16:1 banner and a phone header is nearer square, so `cover` across
+   *  the full height throws most of the scene away. Sitting it low keeps the
+   *  vehicles whole and leaves the copy the lit half above them. */
+  /** The plate under the WHOLE pinned shell — top bar included, as in the
+   *  render. Clipped to the shell's rounded bottom, never takes a tap. */
+  /** Full width at the plate's own proportions, under the top bar and the hero
+   *  together, anchored to the bottom of that region.
+   *
+   *  Covering the whole shell was tried twice and fails for one reason: the
+   *  render is a 2.16:1 banner and a phone header is nearer 0.66:1, so `cover`
+   *  over the full height scales the crop past 2x and only a yacht survives.
+   *  Keeping the plate whole is the trade that preserves the scene. */
+  shellPlate: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    // Height is driven by `plateCollapse` — it tracks the header's real height
+    // as it collapses, so the plate gives its space back on scroll instead of
+    // floating at a fixed size.
+    justifyContent: "flex-end",
+    borderBottomLeftRadius: BOTTOM_RADIUS,
+    borderBottomRightRadius: BOTTOM_RADIUS,
+    overflow: "hidden",
+  },
+  /** Keeps its own 1216×453 so nothing in the scene is thrown away. */
+  shellPlateImg: {
+    width: "100%",
+    aspectRatio: 1216 / 453,
+    overflow: "hidden",
+  },
+  plateWrap: {
+    ...StyleSheet.absoluteFillObject,
+    borderBottomLeftRadius: BOTTOM_RADIUS,
+    borderBottomRightRadius: BOTTOM_RADIUS,
+    overflow: "hidden",
+  },
   heroCopy: {
+    // The copy holds the leading half; the plate's scrim is darkest exactly
+    // there, which is what keeps white text legible over a photograph.
+    width: "56%",
+    zIndex: 1,
     gap: 6,
   },
   heroTitleTop: {
@@ -859,6 +1023,11 @@ const styles = StyleSheet.create({
   },
 
   // Band C
+  /** Shrinks before the search pill does: the market chip is a fixed, readable
+   *  width and the pill is the element that can afford to give on 320dp. */
+  marketSlot: {
+    flexShrink: 0,
+  },
   searchRow: {
     alignItems: "center",
     gap: GAP,

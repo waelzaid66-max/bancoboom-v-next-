@@ -115,9 +115,20 @@ test("no import screen writes its own red", () => {
       .split("\n")
       .map((line, i) => [i + 1, line])
       .filter(([, line]) => !/^\s*(\/\/|\*|\/\*)/.test(line))
-      .filter(([, line]) => /#[0-9A-Fa-f]{6}\b/.test(line))
+      // Hex AND rgb()/rgba(). The first version of this guard matched hex
+      // only, and an auditor found seven `rgba(229,57,53,…)` — the same wrong
+      // red in a notation the guard could not see. A guard that reads green
+      // while the thing it guards is broken is worse than no guard, so it now
+      // matches the colour, not one way of spelling it.
+      .filter(([, line]) => /#[0-9A-Fa-f]{6}\b|\brgba?\(\s*\d/.test(line))
       // White, black and pure-transparent overlays are neutrals, not identity.
-      .filter(([, line]) => !/#(FFFFFF|000000|22C55E)\b/i.test(line));
+      // White, black and the delivered-green are neutrals or a universal
+      // status, not identity. Pure-black/white rgba overlays are scrims.
+      .filter(([, line]) => !/#(FFFFFF|000000|22C55E)\b/i.test(line))
+      .filter(
+        ([, line]) =>
+          !/\brgba?\(\s*(0\s*,\s*0\s*,\s*0|255\s*,\s*255\s*,\s*255)\b/.test(line),
+      );
 
     assert.deepEqual(
       offenders,

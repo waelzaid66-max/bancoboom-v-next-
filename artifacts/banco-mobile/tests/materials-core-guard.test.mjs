@@ -34,7 +34,18 @@ test("materials shell is thin SectionSearchApp — no fake hub home layer", () =
 });
 
 test("upper header is B-CORE identity + search Filters only (no type-circle pollution)", () => {
-  assert.match(header, /testID="materials-core-header"/);
+  // The root testID is now chosen by slot, so it is no longer spelled
+  // `testID="materials-core-header"` in one piece. What this guard actually
+  // cares about is that the name still reaches the tree — and, tightened here,
+  // that it is the PINNED slice wearing it. If the scrolling half ever claimed
+  // to be the header, every selector and every screenshot that looks for the
+  // header would start finding a band inside the results list instead.
+  assert.match(header, /"materials-core-header"/);
+  assert.match(
+    header,
+    /slot === "scroll" \? "materials-scroll-band" : "materials-core-header"/,
+    "the header testID must belong to the pinned slice, never the scrolling one",
+  );
   assert.match(header, /testID="materials-core-brand"/);
   assert.match(header, /b-mark/);
   assert.match(header, /materialsBrand|materialsHubLabel/);

@@ -633,6 +633,17 @@ components:
           type: string
         counterparty_name:
           type: string
+        counterparty_presence:
+          type: string
+          enum: [online, recently, away, unknown]
+          description: >-
+            How present the other side is, as one of four words. The underlying
+            last-seen timestamp is never exposed: an exact time is leverage in a
+            negotiation and, across borders, reveals a person's working hours
+            and rough longitude. Reported only between people who share a
+            conversation, and only when the subject has not switched presence
+            off. `unknown` covers never-observed, opted-out and long-idle alike
+            — telling them apart would leak which one is true.
         last_message_text:
           type: string
           nullable: true

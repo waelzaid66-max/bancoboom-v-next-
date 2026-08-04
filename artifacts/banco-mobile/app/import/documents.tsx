@@ -17,13 +17,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
-import { sectionAccent } from "@/lib/sectionTheme";
+import { sectionAccent, sectionAccentAlpha } from "@/lib/sectionTheme";
 
 /** Car import is the CAR world, so its accent is the CAR token — bound, never
  *  written as a literal. #E53935 was Material Design's default red: a sixth
  *  family the app never chose, sitting ΔE ≈ 19 from the logo. Owner ruling
  *  2026-08-02: colours track the identity of the app as a whole. */
 const RED = sectionAccent("car");
+/** Tints of the SAME accent. They used to be written as rgba(229,57,53,…) —
+ *  the old Material red surviving in a notation the hex guard could not see.
+ *  Derived now, so a tint can never disagree with the accent it tints. */
+const RED_TINT = (alpha: number) => sectionAccentAlpha("car", alpha);
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -157,7 +161,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(229,57,53,0.12)",
+    backgroundColor: RED_TINT(0.12),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -172,7 +176,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(229,57,53,0.10)",
+    backgroundColor: RED_TINT(0.10),
     borderRadius: 999,
     paddingHorizontal: 9,
     paddingVertical: 4,
