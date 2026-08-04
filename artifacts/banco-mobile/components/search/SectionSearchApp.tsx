@@ -1817,8 +1817,10 @@ export function SectionSearchApp({
         >
           <Feather name="search" size={18} color={draftQuery ? "#FFFFFF" : colors.foreground} />
         </Pressable>
-        {/* W9 D-W9-02: Factories (and other generic-header worlds) need a header
-            map hit — FAB alone is easy to miss. Do NOT invent FactoriesHomeHeader. */}
+        {/* W9 D-W9-02: generic-header worlds need a header map hit — the FAB
+            alone is easy to miss. Facilities has its own FacilitiesHomeHeader
+            now (imported, memoised and rendered above); this affordance still
+            serves the sections that fall back to the generic header. */}
         <Pressable
           onPress={() => {
             playSound(tap);
