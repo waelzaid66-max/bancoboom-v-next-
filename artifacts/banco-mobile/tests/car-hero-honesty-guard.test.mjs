@@ -66,23 +66,44 @@ test("stats come from live facets, and vanish when there is no number", () => {
   );
 });
 
-test("vehicle-type strip stays gated until a real facet backs it", () => {
+test("vehicle-type strip renders the parent's list, and taps stay honest", () => {
+  // CHANGED 2026-08-03 by owner instruction. This test used to require
+  // `carHeroCategories` to gate on a `typeCounts` map, which made the strip
+  // permanently empty — the memo declared the map as undefined and returned []
+  // on the next line. The reasoning was that a chip with no facet behind it
+  // leads to an empty screen.
+  //
+  // The owner has asked repeatedly for the strip to be in the header, matching
+  // the render he sent: «كل الصور في الشريط الفلاتر تتعمل اس في جي تدخل جوة
+  // الهيدر نفسو زي الصورة بالضبط». That is his call to make, not an agent's.
+  //
+  // What actually protected the user is NOT the emptiness — it is that a tap
+  // must never emit a category enum the search API cannot accept. A tap here
+  // puts the type's own label into the free-text query and runs a real search,
+  // so an empty result is an honest answer about the catalogue. That rule is
+  // asserted by the next test and is unchanged.
   const header = read(HEADER);
   assert.match(
     header,
     /categories\.length > 0 \?/,
-    "Band D must be absent while no vehicle-type inventory can be proven",
+    "Band D must still disappear when the parent hands it nothing",
   );
   assert.doesNotMatch(
     codeOnly(header),
     /\{CAR_CATEGORIES\.map/,
-    "Band D must render the parent's gated list, never the full target list",
+    "Band D must render the parent's list, never reach for the full target list itself",
   );
   const section = read(SECTION);
   assert.match(
     section,
-    /carHeroCategories[\s\S]{0,600}?typeCounts/,
-    "carHeroCategories must gate on a counts map (empty until the facet ships)",
+    /carHeroCategories[\s\S]{0,900}?CAR_CATEGORIES\.filter/,
+    "carHeroCategories must derive from CAR_CATEGORIES, never hand-build a list",
+  );
+  // No count may reach the strip: the types are a browse axis, not a tally.
+  assert.doesNotMatch(
+    codeOnly(section).match(/const carHeroCategories[\s\S]{0,900}?\}, \[/)?.[0] ?? "",
+    /count|\d{2,}/,
+    "a number inside the category memo would be a tally nothing can back",
   );
 });
 

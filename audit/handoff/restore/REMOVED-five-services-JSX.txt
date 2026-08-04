@@ -1,0 +1,146 @@
+      {/* Recent text searches — the fastest re-entry for a returning user.
+          Local-only history (SessionContext), hidden entirely when empty. */}
+      {recentQueries.length > 0 && (
+        <>
+          <SectionHeader label={t("search.discover.recent")} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[styles.chipRow, { flexDirection: rowDir }]}
+          >
+            {recentQueries.map((q) => (
+              <Pressable
+                key={q}
+                onPress={() => onSearchQuery(q)}
+                style={[
+                  styles.savedChip,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    flexDirection: rowDir,
+                  },
+                ]}
+                testID={`recent-query-${q}`}
+              >
+                <Feather name="clock" size={13} color={colors.mutedForeground} />
+                <AppText
+                  numberOfLines={1}
+                  style={[styles.savedChipText, { color: colors.foreground }]}
+                >
+                  {q}
+                </AppText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </>
+      )}
+
+      {/* Popular car brands — only when car inventory exists (or facets loading) */}
+      {showCarBrands ? (
+        <>
+          <SectionHeader label={t("search.discover.popularBrands")} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[styles.chipRow, { flexDirection: rowDir }]}
+          >
+            {QUICK_BRANDS.map((b) => (
+              <Pressable
+                key={b.value}
+                onPress={() => onBrowseBrand(b)}
+                style={[
+                  styles.brandChip,
+                  { backgroundColor: colors.secondary, borderRadius: 20 },
+                ]}
+              >
+                <AppText
+                  style={[styles.brandChipText, { color: colors.foreground }]}
+                >
+                  {brandLabel(b, isRTL)}
+                </AppText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </>
+      ) : null}
+
+      {/* Saved searches */}
+      {savedSearches.length > 0 && (
+        <>
+          <SectionHeader label={t("search.discover.saved")} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[styles.chipRow, { flexDirection: rowDir }]}
+          >
+            {savedSearches.map((s) => (
+              <Pressable
+                key={s.id}
+                onPress={() => onApplySaved(s)}
+                style={[
+                  styles.savedChip,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    flexDirection: rowDir,
+                  },
+                ]}
+              >
+                <Feather name="bookmark" size={13} color={colors.primary} />
+                <AppText
+                  numberOfLines={1}
+                  style={[styles.savedChipText, { color: colors.foreground }]}
+                >
+                  {s.q.trim() || t(`home.categories.${s.category}` as never)}
+                </AppText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </>
+      )}
+
+      {/* Trending */}
+      {(trendingLoading || trending.length > 0) && (
+        <>
+          <SectionHeader label={t("search.discover.trending")} />
+          {trendingLoading ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={[styles.cardRow, { flexDirection: rowDir }]}
+            >
+              {trending.map((item) => (
+                <CompactCard key={item.id} item={item} onPress={onOpenListing} />
+              ))}
+            </ScrollView>
+          )}
+        </>
+      )}
+
+      {/* Recently viewed */}
+      {recentlyViewed.length > 0 && (
+        <>
+          <SectionHeader label={t("search.discover.recentlyViewed")} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[styles.cardRow, { flexDirection: rowDir }]}
+          >
+            {recentlyViewed.map((item) => (
+              <CompactCard key={item.id} item={item} onPress={onOpenListing} />
+            ))}
+          </ScrollView>
+        </>
+      )}
+
+      {/* —— Business hub (B2B only — not marketplace car filters) —— */}
+      <SectionHeader label={t("search.discover.businessHub")} />
+
+      <Pressable
+        onPress={() => router.push("/business/supply-hub")}
+        style={styles.mapCtaWrap}
+        testID="discover-supply-portal"
