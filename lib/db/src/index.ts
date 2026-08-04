@@ -27,5 +27,5 @@ export const pool = new Pool({
 });
 export const db = drizzle(pool, { schema });
 
-export { ensureSchemaPatches } from "./ensureSchema";
+export { ensureSchemaPatches, ADDITIVE_NOTIFICATION_ENUM_VALUES } from "./ensureSchema";
 export * from "./schema";
