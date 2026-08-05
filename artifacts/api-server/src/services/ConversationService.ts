@@ -27,6 +27,8 @@ const objectStorageService = getObjectStorageService();
 const MESSAGE_NOTIF_COOLDOWN_MS = 3 * 60_000;
 
 type CodedError = Error & { code?: string };
+import { presenceState, type PresenceState } from "../lib/presenceState";
+
 function codedError(code: string, message: string): CodedError {
   return Object.assign(new Error(message), { code });
 }
@@ -38,6 +40,13 @@ export interface ConversationSummaryDTO {
   listing_thumb: string | null;
   counterparty_id: string;
   counterparty_name: string;
+  /**
+   * How present the other side is, as one of four words.
+   *
+   * The underlying timestamp never appears in any DTO — see lib/presenceState
+   * for why that is the security boundary rather than a formatting choice.
+   */
+  counterparty_presence: PresenceState;
   last_message_text: string | null;
   last_message_at: string | null;
   unread: number;
@@ -225,7 +234,11 @@ export async function createConversation(
   }
 
   const [seller] = await db
-    .select({ name: users.name })
+    .select({
+      name: users.name,
+      lastSeenAt: users.lastSeenAt,
+      showPresence: users.showPresence,
+    })
     .from(users)
     .where(eq(users.id, sellerId))
     .limit(1);
@@ -239,6 +252,14 @@ export async function createConversation(
     listing_thumb: thumbMap.get(listingId) ?? null,
     counterparty_id: sellerId,
     counterparty_name: seller?.name ?? "Unknown",
+    // This return IS the conversation the caller just opened, so the two share
+    // one by definition. Stated rather than implied — a missing field here
+    // would be a silent hole in a boundary the other path enforces.
+    counterparty_presence: presenceState({
+      lastSeenAt: seller?.lastSeenAt ?? null,
+      showPresence: seller?.showPresence ?? null,
+      sharesConversation: true,
+    }),
     last_message_text: conv.lastMessageText ?? null,
     last_message_at: conv.lastMessageAt ? conv.lastMessageAt.toISOString() : null,
     unread: conv.buyerUnread ?? 0,
@@ -283,11 +304,22 @@ export async function listConversations(
   );
   const nameRows = counterpartyIds.length
     ? await db
-        .select({ id: users.id, name: users.name })
+        .select({
+          id: users.id,
+          name: users.name,
+          lastSeenAt: users.lastSeenAt,
+          showPresence: users.showPresence,
+        })
         .from(users)
         .where(inArray(users.id, counterpartyIds))
     : [];
   const nameMap = new Map(nameRows.map((n) => [n.id, n.name]));
+  const presenceMap = new Map(
+    nameRows.map((n) => [
+      n.id,
+      { lastSeenAt: n.lastSeenAt, showPresence: n.showPresence },
+    ]),
+  );
 
   const listingIds = Array.from(new Set(rows.map((r) => r.listingId)));
   const thumbMap = await getThumbs(listingIds);
@@ -302,6 +334,14 @@ export async function listConversations(
       listing_thumb: thumbMap.get(r.listingId) ?? null,
       counterparty_id: cpId,
       counterparty_name: nameMap.get(cpId) ?? "Unknown",
+      // sharesConversation is true by construction — every row here IS one of
+      // the viewer's own conversations. Passed explicitly rather than assumed
+      // so the gate stays visible if this ever feeds a different caller.
+      counterparty_presence: presenceState({
+        lastSeenAt: presenceMap.get(cpId)?.lastSeenAt ?? null,
+        showPresence: presenceMap.get(cpId)?.showPresence ?? null,
+        sharesConversation: true,
+      }),
       last_message_text: r.lastMessageText ?? null,
       last_message_at: r.lastMessageAt ? r.lastMessageAt.toISOString() : null,
       unread: isBuyer ? r.buyerUnread ?? 0 : r.sellerUnread ?? 0,

@@ -3885,88 +3885,91 @@ export const useDeleteConversation = <TError = ErrorType<unknown>,
       return useMutation(getDeleteConversationMutationOptions(options));
     }
 
-export const getGetMessagesUrl = (id: string, params?: GetMessagesParams) => {
+export const getGetMessagesUrl = (id: string,
+    params?: GetMessagesParams,) => {
   const normalizedParams = new URLSearchParams();
+
   Object.entries(params || {}).forEach(([key, value]) => {
+
     if (value !== undefined) {
-      normalizedParams.append(key, value === null ? "null" : String(value));
+      normalizedParams.append(key, value === null ? 'null' : String(value))
     }
   });
+
   const stringifiedParams = normalizedParams.toString();
-  return stringifiedParams.length > 0
-    ? `/api/v1/conversations/${id}/messages?${stringifiedParams}`
-    : `/api/v1/conversations/${id}/messages`;
-};
+
+  return stringifiedParams.length > 0 ? `/api/v1/conversations/${id}/messages?${stringifiedParams}` : `/api/v1/conversations/${id}/messages`
+}
 
 /**
  * @summary Get messages in a conversation
  */
-export const getMessages = async (
-  id: string,
-  params?: GetMessagesParams,
-  options?: RequestInit,
-): Promise<GetMessages200> => {
-  return customFetch<GetMessages200>(getGetMessagesUrl(id, params), {
+export const getMessages = async (id: string,
+    params?: GetMessagesParams, options?: RequestInit): Promise<GetMessages200> => {
+
+  return customFetch<GetMessages200>(getGetMessagesUrl(id,params),
+  {
     ...options,
-    method: "GET",
-  });
-};
+    method: 'GET'
 
-export const getGetMessagesQueryKey = (id: string, params?: GetMessagesParams) => {
-  return [`/api/v1/conversations/${id}/messages`, ...(params ? [params] : [])] as const;
-};
 
-export const getGetMessagesQueryOptions = <
-  TData = Awaited<ReturnType<typeof getMessages>>,
-  TError = ErrorType<unknown>,
->(
-  id: string,
-  params?: GetMessagesParams,
-  options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getMessages>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-  },
+  }
+);}
+
+
+
+
+
+export const getGetMessagesQueryKey = (id: string,
+    params?: GetMessagesParams,) => {
+    return [
+    `/api/v1/conversations/${id}/messages`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetMessagesQueryOptions = <TData = Awaited<ReturnType<typeof getMessages>>, TError = ErrorType<unknown>>(id: string,
+    params?: GetMessagesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMessages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getGetMessagesQueryKey(id, params);
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMessages>>> = ({
-    signal,
-  }) => getMessages(id, params, { signal, ...requestOptions });
+const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  return {
-    queryKey,
-    queryFn,
-    enabled: id !== null && id !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof getMessages>>, TError, TData> & {
-    queryKey: QueryKey;
-  };
-};
+  const queryKey =  queryOptions?.queryKey ?? getGetMessagesQueryKey(id,params);
 
-export type GetMessagesQueryResult = NonNullable<Awaited<ReturnType<typeof getMessages>>>;
-export type GetMessagesQueryError = ErrorType<unknown>;
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMessages>>> = ({ signal }) => getMessages(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMessages>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMessagesQueryResult = NonNullable<Awaited<ReturnType<typeof getMessages>>>
+export type GetMessagesQueryError = ErrorType<unknown>
+
 
 /**
  * @summary Get messages in a conversation
  */
-export function useGetMessages<
-  TData = Awaited<ReturnType<typeof getMessages>>,
-  TError = ErrorType<unknown>,
->(
-  id: string,
-  params?: GetMessagesParams,
-  options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getMessages>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetMessagesQueryOptions(id, params, options);
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
+
+export function useGetMessages<TData = Awaited<ReturnType<typeof getMessages>>, TError = ErrorType<unknown>>(
+ id: string,
+    params?: GetMessagesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMessages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMessagesQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+
+
 
 
 

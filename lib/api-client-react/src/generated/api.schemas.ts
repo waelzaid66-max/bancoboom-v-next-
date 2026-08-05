@@ -507,6 +507,19 @@ export interface Lead {
   created_at?: string;
 }
 
+/**
+ * How present the other side is, as one of four words. The underlying last-seen timestamp is never exposed: an exact time is leverage in a negotiation and, across borders, reveals a person's working hours and rough longitude. Reported only between people who share a conversation, and only when the subject has not switched presence off. `unknown` covers never-observed, opted-out and long-idle alike — telling them apart would leak which one is true.
+ */
+export type ConversationSummaryCounterpartyPresence = typeof ConversationSummaryCounterpartyPresence[keyof typeof ConversationSummaryCounterpartyPresence];
+
+
+export const ConversationSummaryCounterpartyPresence = {
+  online: 'online',
+  recently: 'recently',
+  away: 'away',
+  unknown: 'unknown',
+} as const;
+
 export type ConversationSummaryViewerRole = typeof ConversationSummaryViewerRole[keyof typeof ConversationSummaryViewerRole];
 
 
@@ -522,6 +535,8 @@ export interface ConversationSummary {
   listing_thumb?: string | null;
   counterparty_id?: string;
   counterparty_name: string;
+  /** How present the other side is, as one of four words. The underlying last-seen timestamp is never exposed: an exact time is leverage in a negotiation and, across borders, reveals a person's working hours and rough longitude. Reported only between people who share a conversation, and only when the subject has not switched presence off. `unknown` covers never-observed, opted-out and long-idle alike — telling them apart would leak which one is true. */
+  counterparty_presence?: ConversationSummaryCounterpartyPresence;
   last_message_text?: string | null;
   last_message_at?: string | null;
   unread: number;
@@ -1691,14 +1706,13 @@ export type AdminPlanCreate = AdminPlanUpdate & {
 };
 
 /**
- * One occupied grid cell on the map — its centroid and how many listings it aggregates. listing_id is set ONLY when count is 1 (a single tappable pin); for multi-listing cells it is null and the client shows a count bubble.
+ * One occupied grid cell on the map — its centroid and how many listings it aggregates. listing_id is set ONLY when count is 1 (a single tappable pin); for multi-listing cells it is null and the client shows a count bubble. Single pins may also carry price_display / is_bookable / category so off-page pins keep labels without waiting for the feed page (MAP-04).
  */
 export interface MapCluster {
   lat: number;
   lng: number;
   count: number;
   listing_id: string | null;
-  /** Single-pin price label when the listing is off the loaded page (MAP-04). */
   price_display?: string | null;
   is_bookable?: boolean | null;
   category?: string | null;
@@ -3089,9 +3103,17 @@ export type UpdateListingBody = {
   description?: string;
   base_price_cash?: number;
   location?: string;
-  /** Optional precise pin (send with longitude). Overrides the area centroid for near-me search + map display. */
+  /**
+     * Optional precise pin (send with longitude). Overrides the area centroid for near-me search + map display.
+     * @minimum -90
+     * @maximum 90
+     */
   latitude?: number;
-  /** Optional precise pin (send with latitude). */
+  /**
+     * Optional precise pin (send with latitude).
+     * @minimum -180
+     * @maximum 180
+     */
   longitude?: number;
   /** Lifecycle status. Sellers set "sold" to mark the deal closed or "archived" to hide the listing. */
   status?: UpdateListingBodyStatus;
@@ -3350,7 +3372,7 @@ near_lng?: number;
  */
 radius_km?: number;
 /**
- * Result ordering. recommended (default) and newest use the created_at keyset cursor; price_asc, price_desc, popular and nearest switch to offset pagination (their cursor is an opaque numeric offset). popular ranks by lifetime interactions (views + clicks). nearest ranks by Haversine distance when near_lat/near_lng are present.
+ * Result ordering. recommended (default) and newest use the created_at keyset cursor; price_asc, price_desc, popular and nearest switch to offset pagination (their cursor is an opaque numeric offset). popular ranks by lifetime interactions (views + clicks). nearest ranks by Haversine distance when near_lat/near_lng are present; otherwise behaves like recommended.
  */
 sort?: SearchListingsSort;
 cursor?: string;
@@ -3791,18 +3813,23 @@ export type DeleteConversation200 = {
   meta: Meta;
 };
 
+export type GetMessagesParams = {
+/**
+ * Newest N messages (1–1000). Omitted = full chronological history. Mobile polls with a page size to avoid unbounded refetch.
+ * @minimum 1
+ * @maximum 1000
+ */
+limit?: number;
+/**
+ * Message id cursor — return messages strictly older than this id (same conversation). Used with limit for older-page loads.
+ */
+before?: string;
+};
+
 export type GetMessages200 = {
   data: Message[];
   error: ApiError | null;
   meta: Meta;
-};
-
-/** Optional page controls for GET /conversations/:id/messages (MSG-07). */
-export type GetMessagesParams = {
-  /** Newest N messages (1–1000). Omit for full history. */
-  limit?: number;
-  /** Load messages strictly older than this message id. */
-  before?: string;
 };
 
 /**

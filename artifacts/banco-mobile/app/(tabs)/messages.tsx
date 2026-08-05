@@ -1,4 +1,6 @@
 import { Feather } from "@/components/icons";
+import { avatarInitial, avatarTint } from "@/lib/avatarInitial";
+import { PresenceDot } from "@/components/PresenceDot";
 import { useAuth } from "@clerk/expo";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -200,7 +202,19 @@ export default function MessagesScreen() {
         ]}
         testID={`conversation-${item.id}`}
       >
-        <View style={[styles.thumbWrap, { backgroundColor: colors.secondary }]}>
+        <View
+          style={[
+            styles.thumbWrap,
+            {
+              // A conversation with no listing photo is still a conversation
+              // with a person. The old fallback — a grey picture glyph on
+              // colors.secondary — read as an empty circle on a black page.
+              backgroundColor: item.listing_thumb
+                ? colors.secondary
+                : avatarTint(item.counterparty_name),
+            },
+          ]}
+        >
           {item.listing_thumb ? (
             <Image
               source={{ uri: item.listing_thumb }}
@@ -209,8 +223,21 @@ export default function MessagesScreen() {
               cachePolicy="memory-disk"
             />
           ) : (
-            <Feather name="image" size={20} color={colors.mutedForeground} />
+            <AppText style={styles.thumbInitial} numberOfLines={1}>
+              {avatarInitial(item.counterparty_name)}
+            </AppText>
           )}
+          {/* Sits on the avatar, where every messenger puts it. Renders nothing
+              for away and unknown — see PresenceDot for why those two must stay
+              indistinguishable. */}
+          <View
+            style={[
+              styles.presenceAnchor,
+              { borderColor: colors.background },
+            ]}
+          >
+            <PresenceDot presence={item.counterparty_presence} />
+          </View>
         </View>
         <View style={styles.rowMiddle}>
           <View style={[styles.rowTop, { flexDirection: rowDir }]}>
@@ -376,6 +403,19 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   thumb: { width: 52, height: 52 },
+  presenceAnchor: {
+    position: "absolute",
+    bottom: -1,
+    end: -1,
+    borderRadius: 999,
+    borderWidth: 2,
+  },
+  thumbInitial: {
+    fontSize: 22,
+    lineHeight: 26,
+    color: "#FFFFFF",
+    fontFamily: "Inter_600SemiBold",
+  },
   rowMiddle: { flex: 1, gap: 2 },
   rowTop: { alignItems: "center", justifyContent: "space-between", gap: 8 },
   name: { fontSize: 15.5, flex: 1 },

@@ -580,13 +580,21 @@ export const UpdateListingParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const updateListingBodyLatitudeMin = -90;
+export const updateListingBodyLatitudeMax = 90;
+
+export const updateListingBodyLongitudeMin = -180;
+export const updateListingBodyLongitudeMax = 180;
+
+
+
 export const UpdateListingBody = zod.object({
   "title": zod.string().optional(),
   "description": zod.string().optional(),
   "base_price_cash": zod.number().optional(),
   "location": zod.string().optional(),
-  "latitude": zod.number().optional().describe('Optional precise pin (send with longitude). Overrides the area centroid for near-me search + map display.\n'),
-  "longitude": zod.number().optional().describe('Optional precise pin (send with latitude).\n'),
+  "latitude": zod.number().min(updateListingBodyLatitudeMin).max(updateListingBodyLatitudeMax).optional().describe('Optional precise pin (send with longitude). Overrides the area centroid for near-me search + map display.\n'),
+  "longitude": zod.number().min(updateListingBodyLongitudeMin).max(updateListingBodyLongitudeMax).optional().describe('Optional precise pin (send with latitude).'),
   "status": zod.enum(['active', 'sold', 'archived']).optional().describe('Lifecycle status. Sellers set \"sold\" to mark the deal closed or \"archived\" to hide the listing.\n'),
   "specs": zod.record(zod.string(), zod.unknown()).optional(),
   "logistics": zod.object({
@@ -1212,7 +1220,7 @@ export const SearchListingsQueryParams = zod.object({
   "near_lat": zod.coerce.number().optional().describe('Near-me anchor latitude (requires near_lng and radius_km).'),
   "near_lng": zod.coerce.number().optional().describe('Near-me anchor longitude (requires near_lat and radius_km).'),
   "radius_km": zod.coerce.number().min(searchListingsQueryRadiusKmMin).max(searchListingsQueryRadiusKmMax).optional().describe('Search radius in kilometres from the near-me anchor.'),
-  "sort": zod.enum(['recommended', 'newest', 'price_asc', 'price_desc', 'popular', 'nearest']).default(searchListingsQuerySortDefault).describe('Result ordering. recommended (default) and newest use the created_at keyset cursor; price_asc, price_desc, popular and nearest switch to offset pagination (their cursor is an opaque numeric offset). popular ranks by lifetime interactions (views + clicks). nearest ranks by Haversine distance when near_lat/near_lng are present.'),
+  "sort": zod.enum(['recommended', 'newest', 'price_asc', 'price_desc', 'popular', 'nearest']).default(searchListingsQuerySortDefault).describe('Result ordering. recommended (default) and newest use the created_at keyset cursor; price_asc, price_desc, popular and nearest switch to offset pagination (their cursor is an opaque numeric offset). popular ranks by lifetime interactions (views + clicks). nearest ranks by Haversine distance when near_lat\/near_lng are present; otherwise behaves like recommended.'),
   "cursor": zod.coerce.string().optional(),
   "limit": zod.coerce.number().default(searchListingsQueryLimitDefault)
 })
@@ -1310,8 +1318,11 @@ export const GetMapClustersResponse = zod.object({
   "lat": zod.number(),
   "lng": zod.number(),
   "count": zod.number(),
-  "listing_id": zod.string().nullable()
-}).describe('One occupied grid cell on the map — its centroid and how many listings it aggregates. listing_id is set ONLY when count is 1 (a single tappable pin); for multi-listing cells it is null and the client shows a count bubble.\n')).optional(),
+  "listing_id": zod.string().nullable(),
+  "price_display": zod.string().nullish(),
+  "is_bookable": zod.boolean().nullish(),
+  "category": zod.string().nullish()
+}).describe('One occupied grid cell on the map — its centroid and how many listings it aggregates. listing_id is set ONLY when count is 1 (a single tappable pin); for multi-listing cells it is null and the client shows a count bubble. Single pins may also carry price_display \/ is_bookable \/ category so off-page pins keep labels without waiting for the feed page (MAP-04).\n')).optional(),
   "error": zod.object({
   "code": zod.enum(['INVALID_DATA', 'NOT_FOUND', 'UNAUTHORIZED', 'INTERNAL_ERROR', 'FORBIDDEN', 'RATE_LIMITED', 'INVALID_TOKEN', 'CONFLICT', 'ACCOUNT_DELETED', 'SERVICE_UNAVAILABLE']),
   "message": zod.string()
@@ -1597,6 +1608,7 @@ export const ListConversationsResponse = zod.object({
   "listing_thumb": zod.string().nullish(),
   "counterparty_id": zod.string().optional(),
   "counterparty_name": zod.string(),
+  "counterparty_presence": zod.enum(['online', 'recently', 'away', 'unknown']).optional().describe('How present the other side is, as one of four words. The underlying last-seen timestamp is never exposed: an exact time is leverage in a negotiation and, across borders, reveals a person\'s working hours and rough longitude. Reported only between people who share a conversation, and only when the subject has not switched presence off. `unknown` covers never-observed, opted-out and long-idle alike — telling them apart would leak which one is true.'),
   "last_message_text": zod.string().nullish(),
   "last_message_at": zod.string().nullish(),
   "unread": zod.number(),
@@ -1629,6 +1641,7 @@ export const CreateConversationResponse = zod.object({
   "listing_thumb": zod.string().nullish(),
   "counterparty_id": zod.string().optional(),
   "counterparty_name": zod.string(),
+  "counterparty_presence": zod.enum(['online', 'recently', 'away', 'unknown']).optional().describe('How present the other side is, as one of four words. The underlying last-seen timestamp is never exposed: an exact time is leverage in a negotiation and, across borders, reveals a person\'s working hours and rough longitude. Reported only between people who share a conversation, and only when the subject has not switched presence off. `unknown` covers never-observed, opted-out and long-idle alike — telling them apart would leak which one is true.'),
   "last_message_text": zod.string().nullish(),
   "last_message_at": zod.string().nullish(),
   "unread": zod.number(),
@@ -1674,6 +1687,15 @@ export const DeleteConversationResponse = zod.object({
  */
 export const GetMessagesParams = zod.object({
   "id": zod.coerce.string()
+})
+
+export const getMessagesQueryLimitMax = 1000;
+
+
+
+export const GetMessagesQueryParams = zod.object({
+  "limit": zod.coerce.number().min(1).max(getMessagesQueryLimitMax).optional().describe('Newest N messages (1–1000). Omitted = full chronological history. Mobile polls with a page size to avoid unbounded refetch.\n'),
+  "before": zod.coerce.string().optional().describe('Message id cursor — return messages strictly older than this id (same conversation). Used with limit for older-page loads.\n')
 })
 
 export const GetMessagesResponse = zod.object({

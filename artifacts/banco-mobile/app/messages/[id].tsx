@@ -1,5 +1,6 @@
 import { Feather } from "@/components/icons";
 import {
+  getListing,
   useGetMessages,
   sendMessage,
   getMessages,
@@ -21,7 +22,7 @@ import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -32,6 +33,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
@@ -43,6 +45,8 @@ import { EmojiPicker } from "@/components/EmojiPicker";
 import { PermissionRationaleModal } from "@/components/PermissionRationaleModal";
 import { useI18n } from "@/context/LanguageContext";
 import { useSession } from "@/context/SessionContext";
+import { quickReplyKeys, type ChatParty } from "@/constants/quickReplies";
+import { PresenceLabel, type Presence } from "@/components/PresenceDot";
 import { useColors } from "@/hooks/useColors";
 import { uploadMediaAsset, isVideoAsset } from "@/lib/upload";
 import {
@@ -120,7 +124,63 @@ export default function ThreadScreen() {
   // + listingId so share/offer work — buyers still won't see mark-sold).
   const canMarkSold = params.role === "seller" && !!params.listingId;
 
+  /** Which side the user is on. The inbox and the listing screen both pass a
+   *  role; without one the safe read is buyer, since that is who opens a chat
+   *  about someone else's listing. */
+  const chatParty: ChatParty = params.role === "seller" ? "seller" : "buyer";
+
+  /**
+   * Presence for the person on the other side of THIS thread.
+   *
+   * Read from the conversations list already in the query cache rather than
+   * fetched again. The inbox is how a user reaches a thread, so the list is
+   * warm by the time this screen mounts, and the server has already applied
+   * every privacy gate to it — the client is reading a decision, not making
+   * one. Undefined when the cache is cold (a deep link straight into a chat),
+   * and undefined renders nothing, which is the correct answer for "we do not
+   * know yet" rather than a guess at away.
+   */
+  const chatPresence = useMemo<Presence | undefined>(() => {
+    const cached = qc.getQueryData<{ data?: { id: string; counterparty_presence?: string }[] }>(
+      getListConversationsQueryKey(),
+    );
+    const row = cached?.data?.find((c) => c.id === conversationId);
+    return row?.counterparty_presence as Presence | undefined;
+  }, [qc, conversationId]);
+
   const [draft, setDraft] = useState("");
+
+  /**
+   * The section this chat belongs to, read from the listing it is attached to.
+   *
+   * The conversation payload carries a listing_ref with id, title, thumb and
+   * price — no category — so the section is fetched once per chat rather than
+   * guessed. A chat with no listing keeps `null`, and quickReplyKeys falls back
+   * to the generic set instead of inventing a section.
+   */
+  const [chatCategory, setChatCategory] = useState<
+    "car" | "real_estate" | "industrial" | null
+  >(null);
+
+  // Best effort and fire-and-forget: a failure here costs the tailored chips
+  // and nothing else, so it must never surface an error into the chat.
+  const listingIdForCategory = params.listingId ?? null;
+  useEffect(() => {
+    if (!listingIdForCategory) return;
+    let alive = true;
+    getListing(listingIdForCategory)
+      .then((l) => {
+        const c = (l as { category?: string } | null)?.category;
+        if (!alive) return;
+        if (c === "car" || c === "real_estate" || c === "industrial") {
+          setChatCategory(c);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [listingIdForCategory]);
   // Messenger-style: the quick-emoji strip is collapsed behind a smiley toggle
   // in the composer, so the thread keeps its full height while typing.
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -716,7 +776,7 @@ export default function ThreadScreen() {
           styles.bubble,
           {
             maxWidth: bubbleMaxWidth,
-            backgroundColor: mine ? colors.primary : colors.card,
+            backgroundColor: mine ? colors.bubbleMine : colors.card,
             borderColor: failed ? colors.destructive : colors.border,
             borderWidth: mine && !failed ? 0 : StyleSheet.hairlineWidth,
             borderBottomRightRadius: mine ? 4 : 16,
@@ -1018,12 +1078,21 @@ export default function ThreadScreen() {
             color={colors.foreground}
           />
         </Pressable>
-        <AppText
-          style={[styles.headerTitle, { color: colors.foreground }]}
-          numberOfLines={1}
-        >
-          {params.name || t("messages.title")}
-        </AppText>
+        {/* Name, and under it how present the other side is.
+            This is the moment presence actually earns its place: standing in
+            the thread deciding whether a reply is worth waiting for. The label
+            renders nothing for away and unknown, so the column collapses back
+            to just the name — see PresenceDot for why those two must stay
+            indistinguishable. */}
+        <View style={styles.headerTitleCol}>
+          <AppText
+            style={[styles.headerTitle, { color: colors.foreground }]}
+            numberOfLines={1}
+          >
+            {params.name || t("messages.title")}
+          </AppText>
+          <PresenceLabel presence={chatPresence} />
+        </View>
         {canMarkSold ? (
           <Pressable
             onPress={handleMarkSold}
@@ -1202,6 +1271,47 @@ export default function ThreadScreen() {
           </View>
         ) : null}
 
+        {/* Quick replies — the opening line, written for this section.
+            They FILL the composer, never send: the words that leave the
+            account are always words the user saw and chose. They disappear the
+            moment there is a draft, so they help starting and never nag. */}
+        {!draft.trim() ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={[
+              styles.quickRow,
+              { flexDirection: isRTL ? "row-reverse" : "row" },
+            ]}
+            testID="chat-quick-replies"
+          >
+            {quickReplyKeys(chatCategory, chatParty).map((key) => (
+              <Pressable
+                key={key}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  // Fill, do not send — the user reviews and edits first.
+                  setDraft(t(key as never));
+                }}
+                style={[
+                  styles.quickChip,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+                testID={`chat-quick-${key.split(".").pop()}`}
+                accessibilityRole="button"
+              >
+                <AppText
+                  style={[styles.quickChipText, { color: colors.foreground }]}
+                  numberOfLines={1}
+                >
+                  {t(key as never)}
+                </AppText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+
         <View
           style={[
             styles.inputBar,
@@ -1296,6 +1406,7 @@ export default function ThreadScreen() {
                 backgroundColor: !draft.trim()
                   ? colors.secondary
                   : colors.primary,
+                borderColor: !draft.trim() ? colors.border : colors.primary,
               },
             ]}
             testID="message-send"
@@ -1622,7 +1733,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   backBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  headerTitle: { flex: 1, fontSize: 17, fontFamily: "Inter_600SemiBold", textAlign: "center" },
+  headerTitleCol: { flex: 1, alignItems: "center" },
+  headerTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", textAlign: "center" },
   soldBtn: {
     alignItems: "center",
     gap: 5,
@@ -1716,10 +1828,25 @@ const styles = StyleSheet.create({
     // long message aligned to the first line as it expands.
     textAlignVertical: "top",
   },
+  quickRow: { gap: 8, paddingHorizontal: 12, paddingBottom: 8 },
+  quickChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    maxWidth: 240,
+  },
+  quickChipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
   sendBtn: {
     width: 42,
     height: 42,
     borderRadius: 21,
+    // Its siblings in this row (attachBtn) carry a 1px border, and the send
+    // button did not. Idle, it filled with colors.secondary #1A1A1A on a
+    // #000000 page — about 1.15:1, so the circle simply was not there. The
+    // icon was drawing correctly the whole time; the button around it was
+    // invisible.
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
