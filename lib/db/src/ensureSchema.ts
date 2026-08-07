@@ -46,4 +46,34 @@ export async function ensureSchemaPatches(): Promise<void> {
       sql.raw(`ALTER TYPE notification_type ADD VALUE IF NOT EXISTS '${value}'`),
     );
   }
+
+  // FI lifecycle schema (migration 0004) — idempotent so lagging environments
+  // still serve lifecycle queries on boot without requiring drizzle-kit push.
+  await db.execute(sql.raw(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'fi_workspace_status') THEN
+        CREATE TYPE fi_workspace_status AS ENUM ('draft','pending_review','active','suspended');
+      END IF;
+    END$$
+  `));
+  await db.execute(sql.raw(`
+    ALTER TABLE financing_intermediaries
+      ADD COLUMN IF NOT EXISTS workspace_status fi_workspace_status NOT NULL DEFAULT 'draft',
+      ADD COLUMN IF NOT EXISTS workspace_owner_user_id text REFERENCES users(id) ON DELETE SET NULL
+  `));
+  await db.execute(sql.raw(`
+    CREATE TABLE IF NOT EXISTS fi_lifecycle_events (
+      id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      intermediary_id text NOT NULL REFERENCES financing_intermediaries(id) ON DELETE CASCADE,
+      from_status fi_workspace_status,
+      to_status fi_workspace_status NOT NULL,
+      actor_user_id text REFERENCES users(id) ON DELETE SET NULL,
+      reason text,
+      created_at timestamp DEFAULT now()
+    )
+  `));
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS fi_lifecycle_events_intermediary_idx ON fi_lifecycle_events (intermediary_id)`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS fi_lifecycle_events_created_at_idx ON fi_lifecycle_events (created_at DESC)`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS financing_intermediaries_workspace_owner_uniq ON financing_intermediaries (workspace_owner_user_id) WHERE workspace_owner_user_id IS NOT NULL`);
 }

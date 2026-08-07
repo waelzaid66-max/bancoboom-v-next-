@@ -530,7 +530,7 @@ export async function deleteAccount(clerkId: string): Promise<{ deleted: boolean
         .where(eq(financingIntermediaries.id, fi.id));
       await tx.insert(fiLifecycleEvents).values({
         intermediaryId: fi.id,
-        fromStatus: fi.workspaceStatus as string,
+        fromStatus: fi.workspaceStatus as "draft" | "pending_review" | "active" | "suspended",
         toStatus: "suspended",
         actorUserId: null,
         reason: "owner_account_deleted",
