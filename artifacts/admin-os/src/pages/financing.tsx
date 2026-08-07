@@ -18,6 +18,15 @@ import {
   type FinancingIntermediary,
   type GetFinancingRequestsParams,
 } from "@workspace/api-client-react";
+
+interface LifecycleEvent {
+  id: string;
+  from_status: string | null;
+  to_status: string;
+  actor_user_id: string | null;
+  reason: string | null;
+  created_at: string;
+}
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Download, Plus, Search, Building2, Pencil, Network } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -492,6 +501,21 @@ function InstitutionOpsDialog({
   const [seatUserId, setSeatUserId] = useState("");
   const [seatRole, setSeatRole] = useState<"manager" | "agent">("agent");
   const [seatBranchId, setSeatBranchId] = useState<string>(UNASSIGNED);
+  const [lifecycleEvents, setLifecycleEvents] = useState<LifecycleEvent[]>([]);
+  const [lifecycleLoading, setLifecycleLoading] = useState(false);
+
+  // Fetch lifecycle events whenever the dialog opens for a known institution.
+  useEffect(() => {
+    if (!open || !id) { setLifecycleEvents([]); return; }
+    setLifecycleLoading(true);
+    fetch(`/api/v1/admin/financing/intermediaries/${id}/lifecycle-events`, {
+      credentials: "include",
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => setLifecycleEvents(data?.data ?? []))
+      .catch(() => setLifecycleEvents([]))
+      .finally(() => setLifecycleLoading(false));
+  }, [open, id]);
 
   const branchesQuery = useGetFinancingBranches(id, {
     query: {
@@ -664,6 +688,41 @@ function InstitutionOpsDialog({
               {createSeat.isPending && <Loader2 className="w-3.5 h-3.5 me-2 animate-spin" />}
               {t("financingPage.addSeat")}
             </Button>
+          </section>
+
+          {/* Lifecycle Events Timeline */}
+          <section className="space-y-2">
+            <h3 className="text-sm font-medium">Lifecycle Events</h3>
+            <div className="max-h-44 overflow-y-auto space-y-1 border rounded-md p-2">
+              {lifecycleLoading ? (
+                <div className="flex items-center justify-center py-3">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : lifecycleEvents.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2 text-center">No lifecycle events yet.</p>
+              ) : (
+                lifecycleEvents.map((ev) => (
+                  <div key={ev.id} className="text-xs flex flex-col gap-0.5 border-b last:border-0 pb-1 last:pb-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium capitalize">
+                        {ev.from_status ? `${ev.from_status} → ` : ""}
+                        <span className={
+                          ev.to_status === "active" ? "text-green-600" :
+                          ev.to_status === "suspended" ? "text-red-600" :
+                          ev.to_status === "pending_review" ? "text-yellow-600" :
+                          "text-muted-foreground"
+                        }>{ev.to_status}</span>
+                      </span>
+                      <span className="text-muted-foreground ml-auto">
+                        {new Date(ev.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                    {ev.reason && <p className="text-muted-foreground">{ev.reason}</p>}
+                    {ev.actor_user_id && <p className="text-muted-foreground">By: {ev.actor_user_id}</p>}
+                  </div>
+                ))
+              )}
+            </div>
           </section>
         </div>
       </DialogContent>

@@ -45,6 +45,7 @@ import {
   createFinancingSeatHandler,
   createFinancingIntermediaryHandler,
   updateFinancingIntermediaryHandler,
+  financingLifecycleEventsHandler,
 } from "../../controllers/financingController";
 import { requireAdminRole, requirePermission } from "../../middlewares/authGuard";
 import { writeRateLimiter, publicRateLimiter } from "../../middlewares/rateLimiter";
@@ -109,6 +110,7 @@ router.get("/financing/intermediaries", publicRateLimiter, requirePermission("ma
 router.post("/financing/intermediaries", writeRateLimiter, requirePermission("manage_financing"), createFinancingIntermediaryHandler);
 router.patch("/financing/intermediaries/:id", writeRateLimiter, requirePermission("manage_financing"), updateFinancingIntermediaryHandler);
 // FI phase 2 — an institution's branches + employee seats (admin-provisioned).
+router.get("/financing/intermediaries/:id/lifecycle-events", publicRateLimiter, requirePermission("manage_financing"), financingLifecycleEventsHandler);
 router.get("/financing/intermediaries/:id/branches", publicRateLimiter, requirePermission("manage_financing"), financingBranchesHandler);
 router.post("/financing/intermediaries/:id/branches", writeRateLimiter, requirePermission("manage_financing"), createFinancingBranchHandler);
 router.get("/financing/intermediaries/:id/seats", publicRateLimiter, requirePermission("manage_financing"), financingSeatsHandler);

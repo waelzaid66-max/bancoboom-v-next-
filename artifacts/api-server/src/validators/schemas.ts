@@ -1976,6 +1976,13 @@ export const UpdateFinancingIntermediarySchema = z
     message: "At least one field must be provided",
   });
 
+export const FiWorkspaceStatusSchema = z.enum([
+  "draft",
+  "pending_review",
+  "active",
+  "suspended",
+]);
+
 export const FinancingIntermediarySchema = z
   .object({
     id: z.string(),
@@ -1987,6 +1994,9 @@ export const FinancingIntermediarySchema = z
     owner_user_id: z.string().nullable(),
     is_active: z.boolean(),
     created_at: z.string().nullable(),
+    // FI lifecycle — workspace status machine (Task 5).
+    workspace_status: FiWorkspaceStatusSchema,
+    workspace_owner_user_id: z.string().nullable(),
   })
   .strict();
 

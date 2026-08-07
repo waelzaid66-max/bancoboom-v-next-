@@ -21,7 +21,7 @@ import { getObjectStorageService } from "../lib/objectStorageProvider";
 import { checkProfileMutationRate, flagDuplicateAccount } from "./AbuseService";
 import { sendWelcomeEmail } from "./EmailService";
 import { mergeBusinessCompanyDetails } from "../lib/mergeBusinessCompanyDetails";
-import { suspendWorkspaceOnOwnerExit } from "./FinancingService";
+import { suspendWorkspaceOnOwnerExit, ensureFiWorkspace } from "./FinancingService";
 
 export async function getOrCreateUser(clerkId: string, data?: { name?: string; email?: string }) {
   const [existing] = await db
@@ -268,6 +268,16 @@ export async function updateUserProfile(
     .set(patch)
     .where(eq(users.id, user.id))
     .returning();
+
+  // FI workspace auto-provisioning: when a user's role becomes financial_institution
+  // for the first time, ensure they have a draft workspace so the lifecycle
+  // can proceed without an admin manual step. Fire-and-forget — a failure must
+  // never block the profile update response.
+  if (updated.role === "financial_institution" && user.role !== "financial_institution") {
+    void ensureFiWorkspace(updated.id).catch((err) =>
+      logger.warn({ err }, "fi workspace auto-provision failed (non-blocking)"),
+    );
+  }
 
   // Best-effort mirror of the resolved role (+ business profile) into Clerk
   // publicMetadata so client surfaces that read it stay consistent.

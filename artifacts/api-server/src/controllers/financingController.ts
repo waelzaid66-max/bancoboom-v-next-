@@ -269,6 +269,18 @@ export async function institutionUpdateRequestHandler(req: Request, res: Respons
 
 /* ── FI phase 2: branches + seats (admin) ─────────────── */
 
+/** Admin: lifecycle events for any intermediary by id (manage_financing gated via admin router). */
+export async function financingLifecycleEventsHandler(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    if (!id) return res.status(400).json(errorResponse("INVALID_DATA", "intermediary id required"));
+    const events = await FinancingService.getLifecycleEvents(id);
+    return res.json(successResponse(events));
+  } catch (err) {
+    return handleError(res, err, "[Admin lifecycle events]", "Failed to load lifecycle events");
+  }
+}
+
 export async function financingBranchesHandler(req: Request, res: Response) {
   try {
     const intermediaryId = req.params.id as string;
