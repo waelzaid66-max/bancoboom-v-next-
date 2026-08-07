@@ -9,6 +9,8 @@ import {
   notifications,
   pushTokens,
   financingSeats,
+  financingIntermediaries,
+  fiLifecycleEvents,
   stories,
   listingComments,
   sellerReviews,
@@ -21,7 +23,7 @@ import { getObjectStorageService } from "../lib/objectStorageProvider";
 import { checkProfileMutationRate, flagDuplicateAccount } from "./AbuseService";
 import { sendWelcomeEmail } from "./EmailService";
 import { mergeBusinessCompanyDetails } from "../lib/mergeBusinessCompanyDetails";
-import { suspendWorkspaceOnOwnerExit, ensureFiWorkspace } from "./FinancingService";
+import { ensureFiWorkspace } from "./FinancingService";
 
 export async function getOrCreateUser(clerkId: string, data?: { name?: string; email?: string }) {
   const [existing] = await db
@@ -513,12 +515,28 @@ export async function deleteAccount(clerkId: string): Promise<{ deleted: boolean
     // Revoke FI operational seats so a lingering Clerk JWT cannot keep reading
     // the institution inbox / buyer PII after soft-delete.
     await tx.delete(financingSeats).where(eq(financingSeats.userId, user.id));
-  });
 
-  // Suspend all FI workspaces owned by this user — fire-and-forget (non-blocking).
-  void suspendWorkspaceOnOwnerExit(user.id).catch((err) =>
-    logger.warn({ err }, "fi workspace suspension failed (non-blocking)")
-  );
+    // Atomically suspend every FI workspace this user owns — done inside the
+    // same transaction so it cannot silently survive a deleted owner.
+    const ownedFiRows = await tx
+      .select({ id: financingIntermediaries.id, workspaceStatus: financingIntermediaries.workspaceStatus })
+      .from(financingIntermediaries)
+      .where(eq(financingIntermediaries.workspaceOwnerUserId, user.id));
+    for (const fi of ownedFiRows) {
+      if (fi.workspaceStatus === "suspended") continue;
+      await tx
+        .update(financingIntermediaries)
+        .set({ workspaceStatus: "suspended", isActive: false, updatedAt: now })
+        .where(eq(financingIntermediaries.id, fi.id));
+      await tx.insert(fiLifecycleEvents).values({
+        intermediaryId: fi.id,
+        fromStatus: fi.workspaceStatus as string,
+        toStatus: "suspended",
+        actorUserId: null,
+        reason: "owner_account_deleted",
+      });
+    }
+  });
 
   // Best-effort storage cleanup AFTER the tombstone is durable: delete the
   // actual chat media objects so blobs can't outlive the DB scrub. A storage

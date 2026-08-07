@@ -272,7 +272,7 @@ export async function institutionUpdateRequestHandler(req: Request, res: Respons
 /** Admin: lifecycle events for any intermediary by id (manage_financing gated via admin router). */
 export async function financingLifecycleEventsHandler(req: Request, res: Response) {
   try {
-    const { id } = req.params;
+    const id = String(req.params["id"] ?? "");
     if (!id) return res.status(400).json(errorResponse("INVALID_DATA", "intermediary id required"));
     const events = await FinancingService.getLifecycleEvents(id);
     return res.json(successResponse(events));
