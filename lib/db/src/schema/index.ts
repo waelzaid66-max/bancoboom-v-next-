@@ -2379,6 +2379,11 @@ export const financingIntermediaries = pgTable(
   (table) => [
     index("idx_financing_intermediaries_active").on(table.isActive),
     index("idx_financing_intermediaries_owner").on(table.ownerUserId),
+    // One workspace per FI owner user. Partial (WHERE IS NOT NULL) so legacy
+    // admin-only rows without an owner remain unconstrained.
+    uniqueIndex("financing_intermediaries_workspace_owner_uniq")
+      .on(table.workspaceOwnerUserId)
+      .where(sql`workspace_owner_user_id IS NOT NULL`),
   ]
 );
 
