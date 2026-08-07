@@ -38,6 +38,12 @@ function handleError(res: Response, err: unknown, label: string, fallback: strin
   if (e.code === "CONFLICT") {
     return res.status(409).json(errorResponse("CONFLICT", e.message ?? "Conflict"));
   }
+  if (e.code === "WORKSPACE_NOT_ACTIVE") {
+    return res.status(403).json(errorResponse("WORKSPACE_NOT_ACTIVE", e.message ?? "Workspace not active"));
+  }
+  if (e.code === "INVALID_STATUS_TRANSITION") {
+    return res.status(409).json(errorResponse("INVALID_STATUS_TRANSITION", e.message ?? "Invalid status transition"));
+  }
   console.error(label, err);
   return res.status(500).json(errorResponse("INTERNAL_ERROR", fallback));
 }

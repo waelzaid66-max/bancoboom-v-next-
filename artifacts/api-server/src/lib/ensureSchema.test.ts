@@ -128,4 +128,62 @@ describe("ensureSchemaPatches (P0 C-01)", () => {
     `);
     expect(idxRows.length).toBe(1);
   });
+
+  // Regression: if a legacy FI user owns multiple intermediaries (permitted by
+  // the old schema), the migration/ensureSchemaPatches backfill must not
+  // violate the unique index — it leaves duplicate-owner rows with NULL
+  // workspace_owner_user_id rather than aborting the upgrade.
+  it("backfill tolerates a legacy user who owns multiple intermediaries", async () => {
+    // Create a unique user to serve as the duplicate legacy owner.
+    const { rows: userRows } = await db.execute<{ id: string }>(sql`
+      INSERT INTO users (id, clerk_id, name, role)
+      VALUES (gen_random_uuid(), 'test-dup-owner-' || gen_random_uuid()::text, 'Dup Owner', 'financial_institution')
+      RETURNING id
+    `);
+    const userId = userRows[0]!.id;
+
+    // Create two intermediaries with the same owner_user_id (legacy duplicate).
+    const { rows: im1Rows } = await db.execute<{ id: string }>(sql`
+      INSERT INTO financing_intermediaries (id, name, owner_user_id, is_active)
+      VALUES (gen_random_uuid(), 'DupBank A', ${userId}::uuid, true)
+      RETURNING id
+    `);
+    const { rows: im2Rows } = await db.execute<{ id: string }>(sql`
+      INSERT INTO financing_intermediaries (id, name, owner_user_id, is_active)
+      VALUES (gen_random_uuid(), 'DupBank B', ${userId}::uuid, false)
+      RETURNING id
+    `);
+    const im1Id = im1Rows[0]!.id;
+    const im2Id = im2Rows[0]!.id;
+
+    // Drop the unique index so the backfill runs from scratch.
+    await db.execute(sql`DROP INDEX IF EXISTS financing_intermediaries_workspace_owner_uniq`);
+    await db.execute(sql`UPDATE financing_intermediaries SET workspace_owner_user_id = NULL WHERE id IN (${im1Id}::uuid, ${im2Id}::uuid)`);
+
+    // The boot patch must not throw even with duplicate legacy owners.
+    await expect(ensureSchemaPatches()).resolves.toBeUndefined();
+
+    // Both rows must have workspace_owner_user_id = NULL (not backfilled) to
+    // avoid violating the unique index. The unique index itself must exist.
+    const { rows: dupRows } = await db.execute<{ id: string; workspace_owner_user_id: string | null }>(sql`
+      SELECT id, workspace_owner_user_id
+      FROM financing_intermediaries
+      WHERE id IN (${im1Id}::uuid, ${im2Id}::uuid)
+    `);
+    for (const row of dupRows) {
+      expect(row.workspace_owner_user_id).toBeNull();
+    }
+
+    // Unique index must still exist.
+    const { rows: idxCheck } = await db.execute<{ indexname: string }>(sql`
+      SELECT indexname FROM pg_indexes
+      WHERE schemaname = 'public' AND tablename = 'financing_intermediaries'
+        AND indexname = 'financing_intermediaries_workspace_owner_uniq'
+    `);
+    expect(idxCheck.length).toBe(1);
+
+    // Cleanup.
+    await db.execute(sql`DELETE FROM financing_intermediaries WHERE id IN (${im1Id}::uuid, ${im2Id}::uuid)`);
+    await db.execute(sql`DELETE FROM users WHERE id = ${userId}::uuid`);
+  });
 });

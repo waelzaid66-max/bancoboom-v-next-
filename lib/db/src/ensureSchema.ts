@@ -77,5 +77,18 @@ export async function ensureSchemaPatches(): Promise<void> {
   `));
   await db.execute(sql`CREATE INDEX IF NOT EXISTS fi_lifecycle_events_intermediary_idx ON fi_lifecycle_events (intermediary_id)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS fi_lifecycle_events_created_at_idx ON fi_lifecycle_events (created_at DESC)`);
+  // Backfill workspace_owner_user_id BEFORE the unique index to avoid
+  // constraint violations. Only backfill single-owner users — duplicates stay
+  // NULL and require admin reconciliation.
+  await db.execute(sql`
+    UPDATE financing_intermediaries fi
+      SET workspace_owner_user_id = fi.owner_user_id
+      WHERE fi.owner_user_id IS NOT NULL
+        AND fi.workspace_owner_user_id IS NULL
+        AND (
+          SELECT COUNT(*) FROM financing_intermediaries fi2
+          WHERE fi2.owner_user_id = fi.owner_user_id
+        ) = 1
+  `);
   await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS financing_intermediaries_workspace_owner_uniq ON financing_intermediaries (workspace_owner_user_id) WHERE workspace_owner_user_id IS NOT NULL`);
 }
