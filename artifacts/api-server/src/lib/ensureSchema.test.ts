@@ -65,4 +65,67 @@ describe("ensureSchemaPatches (P0 C-01)", () => {
       expect(live.has(value), `live enum missing ${value}`).toBe(true);
     }
   });
+
+  // FI lifecycle upgrade-path: simulates a pre-0004 environment by dropping
+  // the lifecycle columns/tables, then proves ensureSchemaPatches re-creates
+  // them with the correct types so lagging environments boot cleanly.
+  it("FI lifecycle schema survives a pre-0004 drop-and-repatch cycle", async () => {
+    // Drop lifecycle artifacts in safe order (child FK tables first).
+    await db.execute(sql`DROP TABLE IF EXISTS fi_lifecycle_events CASCADE`);
+    await db.execute(sql`DROP INDEX IF EXISTS financing_intermediaries_workspace_owner_uniq`);
+    await db.execute(sql`ALTER TABLE financing_intermediaries DROP COLUMN IF EXISTS workspace_owner_user_id`);
+    await db.execute(sql`ALTER TABLE financing_intermediaries DROP COLUMN IF EXISTS workspace_status`);
+    // Drop enum only after all dependents are gone.
+    await db.execute(sql`DROP TYPE IF EXISTS fi_workspace_status CASCADE`);
+
+    // Re-run the boot patch — must succeed without throwing.
+    await expect(ensureSchemaPatches()).resolves.toBeUndefined();
+
+    // Verify the enum was recreated with the expected labels.
+    const { rows: enumRows } = await db.execute<{ label: string }>(sql`
+      SELECT e.enumlabel AS label
+      FROM pg_enum e
+      JOIN pg_type t ON t.oid = e.enumtypid
+      WHERE t.typname = 'fi_workspace_status'
+      ORDER BY e.enumsortorder
+    `);
+    expect(enumRows.map((r) => r.label)).toEqual(["draft", "pending_review", "active", "suspended"]);
+
+    // Verify workspace columns exist on financing_intermediaries.
+    const colsResult = await db.execute<{ column_name: string; data_type: string; udt_name: string }>(sql`
+      SELECT column_name, data_type, udt_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'financing_intermediaries'
+        AND column_name IN ('workspace_status', 'workspace_owner_user_id')
+      ORDER BY column_name
+    `);
+    const colMap = Object.fromEntries(colsResult.rows.map((r) => [r.column_name, r]));
+    expect(colMap["workspace_status"]).toBeDefined();
+    expect(colMap["workspace_owner_user_id"]).toBeDefined();
+    // workspace_owner_user_id must be uuid (FK to users.id which is uuid).
+    expect(colMap["workspace_owner_user_id"]?.udt_name).toBe("uuid");
+
+    // Verify fi_lifecycle_events table and its uuid primary key exist.
+    const { rows: tableRows } = await db.execute<{ table_name: string }>(sql`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'fi_lifecycle_events'
+    `);
+    expect(tableRows.length).toBe(1);
+
+    const { rows: pkRows } = await db.execute<{ column_name: string; udt_name: string }>(sql`
+      SELECT c.column_name, c.udt_name
+      FROM information_schema.columns c
+      WHERE c.table_schema = 'public' AND c.table_name = 'fi_lifecycle_events'
+        AND c.column_name = 'id'
+    `);
+    expect(pkRows[0]?.udt_name).toBe("uuid");
+
+    // Verify the unique partial index was recreated.
+    const { rows: idxRows } = await db.execute<{ indexname: string }>(sql`
+      SELECT indexname FROM pg_indexes
+      WHERE schemaname = 'public' AND tablename = 'financing_intermediaries'
+        AND indexname = 'financing_intermediaries_workspace_owner_uniq'
+    `);
+    expect(idxRows.length).toBe(1);
+  });
 });

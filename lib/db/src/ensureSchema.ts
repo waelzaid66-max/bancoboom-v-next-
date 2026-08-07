@@ -49,6 +49,8 @@ export async function ensureSchemaPatches(): Promise<void> {
 
   // FI lifecycle schema (migration 0004) — idempotent so lagging environments
   // still serve lifecycle queries on boot without requiring drizzle-kit push.
+  // All types/defaults must match the Drizzle schema: UUID primary keys,
+  // gen_random_uuid() default, and uuid FK references (not text).
   await db.execute(sql.raw(`
     DO $$
     BEGIN
@@ -60,15 +62,15 @@ export async function ensureSchemaPatches(): Promise<void> {
   await db.execute(sql.raw(`
     ALTER TABLE financing_intermediaries
       ADD COLUMN IF NOT EXISTS workspace_status fi_workspace_status NOT NULL DEFAULT 'draft',
-      ADD COLUMN IF NOT EXISTS workspace_owner_user_id text REFERENCES users(id) ON DELETE SET NULL
+      ADD COLUMN IF NOT EXISTS workspace_owner_user_id uuid REFERENCES users(id) ON DELETE SET NULL
   `));
   await db.execute(sql.raw(`
     CREATE TABLE IF NOT EXISTS fi_lifecycle_events (
-      id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      intermediary_id text NOT NULL REFERENCES financing_intermediaries(id) ON DELETE CASCADE,
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      intermediary_id uuid NOT NULL REFERENCES financing_intermediaries(id) ON DELETE CASCADE,
       from_status fi_workspace_status,
       to_status fi_workspace_status NOT NULL,
-      actor_user_id text REFERENCES users(id) ON DELETE SET NULL,
+      actor_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
       reason text,
       created_at timestamp DEFAULT now()
     )
