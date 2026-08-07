@@ -393,8 +393,22 @@ const ICONS: Record<string, LucideIcon> = {
  * star. Lucide icons are stroke-only by default, so we paint the interior with
  * the icon color to preserve the filled-vs-outline distinction the UI relies on
  * (`saved ? "heart" : "heart-outline"`, `rated ? "star" : "star-outline"`).
+ *
+ * `send` is here for a different reason, and it is worth writing down because
+ * the symptom was reported as "the send icon looks like a V".
+ *
+ * These names read like the Feather font the app used to ship, but nothing here
+ * is Feather any more — every glyph is a lucide SVG. Lucide's `send` is a paper
+ * plane drawn as an outline whose left edge is a long shallow V. At 18px with a
+ * 2px stroke there is almost no interior left to read, so what survives is that
+ * V — and in Arabic the button mirrors it, which lands it somewhere between a
+ * checkmark and an arrow. Neither says "send".
+ *
+ * Filling it restores the solid paper plane every messenger uses, at every size
+ * and in both directions. The interior fold is an open stroke and encloses no
+ * area, so filling changes the silhouette and nothing else.
  */
-const FILLED = new Set(["heart", "star"]);
+const FILLED = new Set(["heart", "star", "send"]);
 
 type BrandProps = { size: number; color: string; style?: StyleProp<ViewStyle> };
 
