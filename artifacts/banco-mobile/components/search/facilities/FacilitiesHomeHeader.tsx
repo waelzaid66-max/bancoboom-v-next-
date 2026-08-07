@@ -42,6 +42,12 @@ import { AppTextInput as TextInput } from "@/components/AppTextInput";
 import type { TextInput as RNTextInput } from "react-native";
 import React, { useMemo } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  type SharedValue,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "@/components/AppText";
@@ -56,6 +62,11 @@ const B_MARK = require("../../../assets/images/b-mark.png");
 const HERO_PHOTO = require("../../../assets/images/categories/facilities.jpg");
 
 const ACCENT = sectionAccent("facilities");
+/** Travel the collapse maps over — same figure Cars and Stays use, so the
+ *  three sections answer a scroll at the same rate. */
+const COLLAPSE_SCROLL = 96;
+/** Brand lockup height, animated to zero on collapse. */
+const BRAND_H = 34;
 const VOID = "#000000";
 const SNOW = "#FFFFFF";
 const ASH = "#8E8E93";
@@ -92,6 +103,13 @@ type Props = {
   onSelectType?: (key: string) => void;
   /** Which slice to draw. Default "all" keeps the pre-split behaviour exactly. */
   slot?: "all" | "pinned" | "scroll";
+  /**
+   * Scroll offset published by the results surface. Read only by the pinned
+   * slot, and only to collapse the brand lockup. Derived on the UI thread,
+   * so scrolling drives no React render. Absent ⇒ painted expanded, never
+   * moves — which is what every caller got before this existed.
+   */
+  scrollY?: SharedValue<number>;
   onBack: () => void;
   onSaveSearch: () => void;
   onOpenFilters: () => void;
@@ -117,6 +135,7 @@ export function FacilitiesHomeHeader({
   activeType = null,
   onSelectType,
   slot = "all",
+  scrollY,
   onBack,
   onSaveSearch,
   onOpenFilters,
@@ -138,6 +157,20 @@ export function FacilitiesHomeHeader({
 
   const showPinned = slot === "all" || slot === "pinned";
   const showScroll = slot === "all" || slot === "scroll";
+
+  /** The brand lockup gives its height back on the way down: it is identity,
+   *  and identity is what a collapsed header can afford to shrink. The top bar
+   *  and the search row keep theirs — they hold the controls. */
+  const brandCollapse = useAnimatedStyle(() => {
+    const p = scrollY
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [1, 0], Extrapolation.CLAMP)
+      : 1;
+    return {
+      opacity: p,
+      height: BRAND_H * p,
+      marginBottom: 6 * p,
+    };
+  });
 
   const marketMeta = useMemo(() => {
     const phone = PHONE_COUNTRIES.find((c) => c.iso === marketCountry);
@@ -241,8 +274,8 @@ export function FacilitiesHomeHeader({
 
       {/* ── B · brand lockup — ONE row, pinned ──────────────────────── */}
       {showPinned ? (
-        <View
-          style={[styles.brandLockup, { flexDirection: rowDir }]}
+        <Animated.View
+          style={[styles.brandLockup, { flexDirection: rowDir }, brandCollapse]}
           testID="facilities-industry-brand"
         >
           <Image source={B_MARK} style={styles.wordmarkB} contentFit="contain" />
@@ -283,7 +316,7 @@ export function FacilitiesHomeHeader({
             </AppText>
             <Feather name="chevron-down" size={10} color={ASH} />
           </Pressable>
-        </View>
+        </Animated.View>
       ) : null}
 
       {/* ── C · search + filters, pinned ────────────────────────────── */}
@@ -395,8 +428,15 @@ export function FacilitiesHomeHeader({
         </View>
       ) : null}
 
-      {/* ── E · type strip — only types a facet actually returned ───── */}
-      {showScroll && types.length > 0 ? (
+      {/* ── E · type strip — only types a facet actually returned ─────
+          PINNED, corrected 2026-08-03. This is a browse control and it used to
+          sit in the scrolling slot, handed to the list as part of listHeader
+          (SectionSearchApp:2643). The empty and error states paint over the
+          list as an opaque absoluteFill, so the strip disappeared exactly when
+          a buyer with no results needed it to widen the search. That is the
+          same defect that broke Stays in 80b1a17 and was reverted in fdbb4ff —
+          it was still live here. Identity may scroll; a control may not. */}
+      {showPinned && types.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}

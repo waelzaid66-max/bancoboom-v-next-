@@ -287,11 +287,19 @@ const styles = StyleSheet.create({
   containerRTL: {
     flexDirection: "row-reverse",
   },
+  /** Brought onto FilterPill's metrics 2026-08-03.
+   *
+   *  FilterPill is the ONE filter-control shape in this app and its numbers are
+   *  the owner's, measured off Stay's rental-term button and pinned by a guard:
+   *  paddingHorizontal 10, paddingVertical 4. These chips were running 16 and 7,
+   *  half again as wide and tall, which is what pushed the car axes onto three
+   *  wrapped rows. Compressing the chip is the honest way to shorten that strip
+   *  — hiding chips behind a control is not. */
   pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   label: {
-    fontSize: 13,
+    fontSize: 12.5,
   },
 });

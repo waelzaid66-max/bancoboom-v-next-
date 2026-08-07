@@ -104,8 +104,35 @@ Guards: `test:messenger-wiring` · `test:production-wiring` · existing `test:no
 
 | ID | Gap | Severity |
 |----|-----|----------|
-| MAP-08b | No draw-area polygon filter | Product deferred |
+| ~~MAP-08b~~ | ~~No draw-area polygon filter~~ | ✅ **Shipped 2026-08-03** |
 | MAP-07b | OSM raster tiles still require network | Medium (by design) |
+| ~~MAP-11~~ | ~~Map controls drawn under MiniAppBottomNav~~ | ✅ **Fixed 2026-08-03** |
+| ~~MAP-12~~ | ~~Bookable pin used a system emoji, not a drawn glyph~~ | ✅ **Fixed 2026-08-03** |
+
+> **2026-08-03 — this table is now empty except one item that is by design.**
+>
+> **MAP-08b (draw area).** `GET /v1/search/map` takes a bounding box and has no
+> polygon parameter, which is why this sat deferred. It ships as a split: the
+> server narrows to the shape's BOX, which it genuinely supports, and the exact
+> inside/outside test runs in `lib/geoArea.ts` on points already returned. Same
+> answer, no invented API. The page draws and reports corners; it never decides
+> what is inside, so there is one implementation of that maths and it has tests.
+>
+> The count is only called exact when every marker inside the shape is a single
+> listing — a cluster sits at the centroid of what it holds, so one inside the
+> shape can hold listings outside it. Otherwise the caption reads "N+ · zoom in
+> for the exact count", and zooming resolves clusters into pins, so the exact
+> number is reachable rather than withheld.
+>
+> **MAP-11 and MAP-12 were found from the owner's screenshots**, not from this
+> ledger — the locate button was sliced in half by the bottom bar and the OSM
+> attribution was buried under it, and the bookable pin borrowed a system emoji
+> that renders differently on every handset. Numbered here so the ledger stays
+> the whole story.
+>
+> **MAP-07b stays open and should.** OSM tiles are map DATA. The libraries are
+> vendored locally (MAP-07); the tiles cannot be, and no map renders offline
+> without a licensed offline tile pack. Not a defect — a property.
 
 ---
 

@@ -20,22 +20,44 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  type SharedValue,
+} from "react-native-reanimated";
 
 import { AppText } from "@/components/AppText";
 import { MarketCountryButton } from "@/components/MarketCountryPicker";
 import { PROPERTY_TYPES } from "@/constants/listingCreateTaxonomy";
 import { useI18n } from "@/context/LanguageContext";
-import { sectionAccent } from "@/lib/sectionTheme";
+import { SECTION_NEUTRAL, sectionAccent } from "@/lib/sectionTheme";
 
 const BANCO_LOGO = require("../../../assets/images/banco-logo.png");
 const B_MARK = require("../../../assets/images/b-mark.png");
 const PROPERTY_MARK = require("../../../assets/images/property-mark.png");
 
+/** Neutrals come from `SECTION_NEUTRAL` — the same values every section header
+ *  is built on. They used to be written out here, once per header, and they
+ *  drifted: Cars ran the owner's brief palette while this one stayed on an
+ *  older black and grey. A value with five homes always drifts.
+ *
+ *  The ACCENT stays per-section. That is the part that is meant to differ. */
 const ACCENT = sectionAccent("real_estate"); // #B81E3C
-const VOID = "#000000";
-const SNOW = "#FFFFFF";
-const ASH = "#8E8E93";
-const HAIRLINE = "rgba(255,255,255,0.16)";
+const VOID = SECTION_NEUTRAL.void;
+const SNOW = SECTION_NEUTRAL.snow;
+const ASH = SECTION_NEUTRAL.ash;
+const HAIRLINE = SECTION_NEUTRAL.hairline;
+
+/** Scroll travel the collapse is mapped over — matched to Cars so the two
+ *  sections answer a finger at the same rate. */
+const COLLAPSE_SCROLL = 96;
+/** The brand lockup's resting height, now that it is one row rather than three
+ *  (wordmark · ruled tagline · powered-by). It still carries two short stacked
+ *  lines on each side — name over tagline, caption over BANCO — so 40 is what
+ *  holds them without clipping, against the 8dp rhythm this file keeps. */
+const LOCKUP_HEIGHT = 40;
+const LOCKUP_SCALE_MIN = 0.82;
 
 /** Band D sentinel — opens commercial subtype picker (never sent to API). */
 export const RE_COMMERCIAL_TAB = "__commercial__";
@@ -100,6 +122,34 @@ type PropertyHomeHeaderProps = {
   onToggleWanted: () => void;
   onOpenMarket: () => void;
   onCycleSort: () => void;
+  /**
+   * Which slice to paint — the Facilities model, applied here.
+   *
+   *   "pinned"  everything — top bar · brand lockup · search · offer · types
+   *   "scroll"  nothing today
+   *   "all"     identical to "pinned"
+   *
+   * The blocker on this header was never the animation: BANCO lived in a brand
+   * block BELOW the top bar, so splitting at the top bar alone would have sent
+   * the brand down under the filter chips. Pinning the lockup WITH the top bar
+   * solves it without moving a single node in the tree.
+   *
+   * Why "scroll" is empty. The offer axis and the type strip are the only two
+   * bands that could go, and they are browse CONTROLS. The non-results overlay
+   * is an absoluteFill on an opaque background, so it covers the list and its
+   * ListHeaderComponent together — a control handed down there disappears in
+   * precisely the state a buyer needs it, staring at zero results and wanting
+   * to widen. The prop stays because the height win here comes from the lockup
+   * collapsing on scroll, and because the day this header grows a hero or a
+   * counts strip, that is what "scroll" is for.
+   */
+  slot?: "all" | "pinned" | "scroll";
+  /**
+   * List scroll offset, published by SearchResultsSurface. Only the pinned
+   * slice reads it, and only to collapse. Optional — without it the header
+   * paints expanded and never moves, exactly as before.
+   */
+  scrollY?: SharedValue<number>;
 };
 
 /** Names must exist in `@/components/icons` ICONS registry (Android/Expo safe). */
@@ -159,6 +209,8 @@ export function PropertyHomeHeader({
   onToggleWanted,
   onOpenMarket,
   onCycleSort,
+  slot = "all",
+  scrollY,
 }: PropertyHomeHeaderProps) {
   const insets = useSafeAreaInsets();
   const { t, isRTL } = useI18n();
@@ -202,9 +254,52 @@ export function PropertyHomeHeader({
   const pickerTestPrefix =
     typePicker === "commercial" ? "re-commercial" : "re-more";
 
+  const showPinned = slot === "all" || slot === "pinned";
+  const showScroll = slot === "all" || slot === "scroll";
+
+  // Collapse, same contract as Cars: read off a shared value on the UI thread,
+  // interpolate, never re-render. `interpolate` is a straight mapping, so there
+  // is no spring and no overshoot to bounce the brand into the top bar.
+  const collapseProgress = (v?: SharedValue<number>) => {
+    "worklet";
+    return v
+      ? interpolate(v.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
+      : 0;
+  };
+
+  // The lockup is the row that goes. It carries identity, not control — the
+  // back button, the search field and the filters all live in bands that stay —
+  // so it is the one row a reader can lose without losing their way.
+  const lockupCollapse = useAnimatedStyle(() => {
+    const p = collapseProgress(scrollY);
+    return {
+      opacity: 1 - p,
+      height: LOCKUP_HEIGHT * (1 - p),
+      transform: [{ scale: 1 + (LOCKUP_SCALE_MIN - 1) * p }],
+    };
+  });
+
+  const liftCollapse = useAnimatedStyle(() => {
+    const p = collapseProgress(scrollY);
+    return {
+      shadowOpacity: 0.18 + 0.34 * p,
+      shadowRadius: 8 + 12 * p,
+      elevation: 2 + 10 * p,
+    };
+  });
+
   return (
-    <View style={[styles.root, { paddingTop: Math.max(0, topPad - 1) }]} testID="re-property-header">
+    <Animated.View
+      style={[
+        styles.root,
+        { paddingTop: slot === "scroll" ? 0 : Math.max(0, topPad - 1) },
+        showPinned && !showScroll ? styles.pinnedShell : null,
+        showPinned && !showScroll ? liftCollapse : null,
+      ]}
+      testID={slot === "scroll" ? "re-property-scroll-band" : "re-property-header"}
+    >
       {/* Band A — top actions */}
+      {showPinned ? (
       <View style={[styles.topBar, { flexDirection: rowDir }]}>
         <Pressable
           onPress={onBack}
@@ -265,53 +360,48 @@ export function PropertyHomeHeader({
           />
         </Pressable>
       </View>
+      ) : null}
 
-      {/* Band B — B-PROPERTIES identity (balanced, not half-screen) */}
-      <View style={styles.brandBlock} testID="re-property-brand">
-        <View
-          style={[
-            styles.wordmarkRow,
-            { flexDirection: isRTL ? "row-reverse" : "row" },
-          ]}
-        >
-          <Image
-            source={B_MARK}
-            style={styles.wordmarkB}
-            contentFit="contain"
-          />
+      {/* Band B — B-PROPERTIES identity. ONE row, pinned.
+              It used to be three stacked rows — wordmark, then a ruled tagline,
+              then a powered-by line carrying market and sort — and those three
+              rows are most of why this header stood at 282dp. Nothing is
+              dropped: the tagline moves under the wordmark as its second line,
+              and powered-by, market and sort weld to the trailing end of the
+              same row. Every control keeps its testID and its handler. */}
+      {showPinned ? (
+      <Animated.View
+        style={[
+          styles.brandLockup,
+          { flexDirection: rowDir },
+          slot === "all" ? null : lockupCollapse,
+        ]}
+        testID="re-property-brand"
+      >
+        <Image source={B_MARK} style={styles.wordmarkB} contentFit="contain" />
+        <View style={styles.brandTextCol}>
           <AppText style={styles.wordmarkProperties} numberOfLines={1}>
             {t("search.discover.section.propertyBrand")}
           </AppText>
-          <Image
-            source={PROPERTY_MARK}
-            style={styles.wordmarkSeal}
-            contentFit="contain"
-          />
-        </View>
-
-        <View style={styles.taglineRow}>
-          <View style={styles.taglineRule} />
           <AppText style={styles.tagline} numberOfLines={1}>
             {t("search.discover.section.propertyTagline")}
           </AppText>
-          <View style={styles.taglineRule} />
         </View>
+        <Image
+          source={PROPERTY_MARK}
+          style={styles.wordmarkSeal}
+          contentFit="contain"
+        />
 
-        {/* POWERED BY sits INSIDE this row, immediately before the mark it
-            qualifies. It used to be its own <AppText> above the row, which is
-            the "POWERED BY eats its own line" defect the owner reported from
-            his screenshots: eight-point type claiming a full line of vertical
-            space above the logo it belongs to. Reading order is preserved in
-            both directions because the row flips with `isRTL`, so the label
-            still leads the mark rather than trailing it.
-            FacilitiesHomeHeader is the reference for this shape. */}
-        <View
-          style={[
-            styles.poweredRow,
-            { flexDirection: isRTL ? "row-reverse" : "row" },
-          ]}
-        >
-          <AppText style={styles.poweredLabelInline} numberOfLines={1}>
+        <View style={styles.brandSpacer} />
+
+        {/* POWERED BY stacks ABOVE the BANCO mark rather than sitting beside it.
+            Side by side the two cost ~110dp of a 358dp row and the section name
+            truncated to "PRO…" — identity damage, which is the one thing this
+            item must not do. Stacked they cost ~58dp, and the label reads as
+            what it always was: a caption on the logo, not a word next to it. */}
+        <View style={styles.poweredCol}>
+          <AppText style={styles.poweredLabel} numberOfLines={1}>
             {t("booking.poweredBy")}
           </AppText>
           <Image
@@ -320,33 +410,38 @@ export function PropertyHomeHeader({
             contentFit="contain"
             tintColor={ACCENT}
           />
-          {/* Market + sort sit above the search pill, next to BANCO — no orphan strip. */}
-          <MarketCountryButton
-            selected={marketCountry}
-            onPress={onOpenMarket}
-            density="micro"
-          />
-          <Pressable
-            onPress={onCycleSort}
-            style={[
-              styles.sortNearBanco,
-              sortActive ? styles.sortNearBancoActive : null,
-            ]}
-            accessibilityLabel={t(`search.sortOptions.${sort}`)}
-            testID="section-sort-cycle"
-            hitSlop={8}
-          >
-            <Feather
-              name={sortIcon(sort)}
-              size={13}
-              color={sortActive ? SNOW : ASH}
-            />
-          </Pressable>
         </View>
-      </View>
+        {/* Market + sort stay welded to BANCO — no orphan strip, same as before. */}
+        <MarketCountryButton
+          selected={marketCountry}
+          onPress={onOpenMarket}
+          density="micro"
+        />
+        <Pressable
+          onPress={onCycleSort}
+          style={[
+            styles.sortNearBanco,
+            sortActive ? styles.sortNearBancoActive : null,
+          ]}
+          accessibilityLabel={t(`search.sortOptions.${sort}`)}
+          testID="section-sort-cycle"
+          hitSlop={8}
+        >
+          <Feather
+            name={sortIcon(sort)}
+            size={13}
+            color={sortActive ? SNOW : ASH}
+          />
+        </Pressable>
+      </Animated.View>
+      ) : null}
 
-      {/* Band C — search pill; filter lives inside (Stay-aligned) */}
-      {searchOpen ? (
+      {/* Band C — search pill; filter lives inside (Stay-aligned).
+              Pinned, and not negotiable: the empty and error states render as an
+              absolute overlay on the results, so anything in the list is
+              unreachable there. Search and filters have to stay outside it. */}
+      {showPinned ? (
+      searchOpen ? (
         <View style={[styles.searchPill, { flexDirection: rowDir }]}>
           <Ionicons name="search" size={17} color={ACCENT} />
           <TextInput
@@ -424,9 +519,18 @@ export function PropertyHomeHeader({
             ) : null}
           </Pressable>
         </View>
-      )}
+      )
+      ) : null}
 
-      {/* Offer axis + Wanted (listingMode) — Wanted composes with sale/rent. */}
+      {/* Offer axis + Wanted (listingMode) — Wanted composes with sale/rent.
+              PINNED, and this is not a preference.
+              The non-results overlay is an absoluteFill on an opaque
+              background, so it covers the list AND its ListHeaderComponent. A
+              browse control handed to the list therefore vanishes in exactly
+              the state a buyer most needs it: zero results, wanting to widen.
+              The accepted pattern in this repo only ever hands DOWN identity —
+              the cars hero, the B-CORE tagline — never a control. */}
+      {showPinned ? (
       <View
         style={[styles.offerRow, { flexDirection: rowDir }]}
         testID="re-offer-strip"
@@ -462,8 +566,11 @@ export function PropertyHomeHeader({
           </AppText>
         </Pressable>
       </View>
+      ) : null}
 
-      {/* Band D — primary types only (market lives next to BANCO above search). */}
+      {/* Band D — primary types only (market lives next to BANCO above search).
+              Pinned for the same reason as the offer axis above. */}
+      {showPinned ? (
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -494,7 +601,11 @@ export function PropertyHomeHeader({
           );
         })}
       </ScrollView>
+      ) : null}
 
+      {/* The picker is a modal, so it belongs to whichever slice owns the strip
+          that opens it — Band D, which is pinned. */}
+      {showPinned ? (
       <Modal
         visible={typePicker != null}
         transparent
@@ -545,7 +656,8 @@ export function PropertyHomeHeader({
           </View>
         </Pressable>
       </Modal>
-    </View>
+      ) : null}
+    </Animated.View>
   );
 }
 
@@ -554,6 +666,14 @@ const styles = StyleSheet.create({
     backgroundColor: VOID,
     paddingHorizontal: 16,
     paddingBottom: 2,
+  },
+  /** Only the pinned slice — it is the piece that sits OVER the results, so it
+   *  is the piece that casts a shadow. The scrolling slice is inside the list,
+   *  where a shadow would trail the strips down the screen. */
+  pinnedShell: {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    zIndex: 10,
   },
   topBar: {
     alignItems: "center",
@@ -567,72 +687,65 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  brandBlock: {
-    alignItems: "center",
-    paddingTop: 0,
-    paddingBottom: 0,
-    marginBottom: 4,
-  },
-  wordmarkRow: {
+  /** One row, replacing the three-row brandBlock. `overflow: hidden` is what
+   *  lets the animated height close it cleanly instead of squashing its
+   *  children on the way down. */
+  brandLockup: {
     alignItems: "center",
     gap: 6,
     marginBottom: 4,
+    overflow: "hidden",
+  },
+  /** Wordmark over tagline — the tagline's old ruled row folded into a second
+   *  line here, which is where it reads as a subtitle rather than a divider. */
+  brandTextCol: {
+    justifyContent: "center",
+    flexShrink: 1,
+  },
+  /** Pushes powered-by, market and sort to the trailing end, so identity leads
+   *  and controls trail — the same reading order the row had when it was three. */
+  brandSpacer: {
+    flex: 1,
   },
   wordmarkB: {
-    width: 32,
-    height: 40,
+    width: 26,
+    height: 32,
   },
   wordmarkProperties: {
-    fontSize: 20,
+    // 20 → 15 with the tagline moved under it: the pair reads as one lockup at
+    // this size, and it is the size at which the full word survives a 390dp row
+    // beside the market control. A truncated section name is not a smaller
+    // header, it is a broken one.
+    fontSize: 15,
     fontFamily: "Inter_700Bold",
     color: ACCENT,
-    letterSpacing: 1.1,
+    letterSpacing: 0.8,
+    // Never the thing that gives: the controls beside it shrink first.
+    flexShrink: 0,
   },
   wordmarkSeal: {
-    width: 30,
-    height: 30,
-  },
-  taglineRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    maxWidth: "100%",
-    paddingHorizontal: 8,
-    marginBottom: 2,
-  },
-  taglineRule: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth * 2,
-    backgroundColor: ACCENT,
-    maxWidth: 48,
-    opacity: 0.85,
+    width: 24,
+    height: 24,
   },
   tagline: {
     fontSize: 10,
     fontFamily: "Inter_500Medium",
     color: ASH,
-    textAlign: "center",
   },
-  // Inline variant: same type as before, without the `marginBottom` that only
-  // made sense when this sat on a line of its own.
-  poweredLabelInline: {
+  poweredLabel: {
     fontSize: 8,
     fontFamily: "Inter_500Medium",
     color: ASH,
     letterSpacing: 1.1,
     textTransform: "uppercase",
   },
-  poweredRow: {
+  poweredCol: {
     alignItems: "center",
-    gap: 6,
-    flexWrap: "wrap",
-    justifyContent: "center",
-    maxWidth: "100%",
-    paddingHorizontal: 4,
+    flexShrink: 0,
   },
   poweredLogo: {
-    width: 68,
-    height: 16,
+    width: 58,
+    height: 14,
   },
   sortNearBanco: {
     width: 26,

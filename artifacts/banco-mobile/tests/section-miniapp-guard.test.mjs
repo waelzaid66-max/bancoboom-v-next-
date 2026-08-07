@@ -2134,10 +2134,25 @@ test("B-INDUSTRY: the split defaults to the old behaviour and stays honest", () 
   assert.match(header, /showScroll = slot === "all" \|\| slot === "scroll"/);
 
   // Brand is pinned, so BANCO can never end up beneath the filter chips.
+  // `Animated.View` is accepted alongside `View`: the lockup collapses on
+  // scroll as of 2026-08-03, and the element type was never what this guard
+  // was protecting — being inside the PINNED branch is. Tightened, not
+  // loosened: it still fails the moment the lockup moves to the scroll slice.
   assert.match(
     header,
-    /\{showPinned \? \(\s*<View\s+style=\{\[styles\.brandLockup/,
+    /\{showPinned \? \(\s*<(?:Animated\.)?View\s+style=\{\[styles\.brandLockup/,
     "the brand lockup must sit in the pinned slice",
+  );
+
+  // The type strip is a BROWSE CONTROL and must stay pinned. It shipped in the
+  // scrolling slice, handed to the list via listHeader, where the opaque
+  // empty/error overlay covered it — so the one row a buyer with no results
+  // needs to widen the search was the row that disappeared. Same defect that
+  // broke Stays in 80b1a17 and was reverted in fdbb4ff.
+  assert.match(
+    header,
+    /\{showPinned && types\.length > 0 \? \(/,
+    "the facilities type strip must render in the pinned slice, never the scrolling one",
   );
 
   // Counts are proven or absent — never typed in, never a guess.
