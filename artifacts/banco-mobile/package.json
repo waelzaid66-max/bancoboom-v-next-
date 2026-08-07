@@ -31,11 +31,12 @@
     "test:messenger-wiring": "node --test tests/messenger-wiring-guard.test.mjs",
     "test:production-wiring": "node --test tests/production-wiring-guard.test.mjs",
     "test:import-honesty": "node --test tests/import-honesty-guard.test.mjs",
+    "test:retired-red": "node --test tests/retired-red-guard.test.mjs",
     "test:import-docs": "node --test tests/import-order-documents-guard.test.mjs",
     "test:scale": "node --test tests/scale-readiness.test.mjs",
     "test:cdn": "node --test tests/cdn-readiness.test.mjs",
     "test:render": "jest",
-    "test": "pnpm run test:avatar-initial && pnpm run test:presence-privacy && pnpm run test:assistant-identity && pnpm run test:icons && pnpm run test:lib && pnpm run test:resilience && pnpm run test:universal-links && pnpm run test:session-restore && pnpm run test:auth-routes && pnpm run test:section-guard && pnpm run test:materials-core && pnpm run test:i18n && pnpm run test:accounts && pnpm run test:notification-routing && pnpm run test:create-market && pnpm run test:ui-density && pnpm run test:stay-honesty && pnpm run test:car-hero-honesty && pnpm run test:messenger-wiring && pnpm run test:production-wiring && pnpm run test:import-honesty && pnpm run test:import-docs && pnpm run test:scale && pnpm run test:cdn && pnpm run test:render"
+    "test": "pnpm run test:avatar-initial && pnpm run test:presence-privacy && pnpm run test:assistant-identity && pnpm run test:icons && pnpm run test:lib && pnpm run test:resilience && pnpm run test:universal-links && pnpm run test:session-restore && pnpm run test:auth-routes && pnpm run test:section-guard && pnpm run test:materials-core && pnpm run test:i18n && pnpm run test:accounts && pnpm run test:notification-routing && pnpm run test:create-market && pnpm run test:ui-density && pnpm run test:stay-honesty && pnpm run test:car-hero-honesty && pnpm run test:messenger-wiring && pnpm run test:production-wiring && pnpm run test:import-honesty && pnpm run test:retired-red && pnpm run test:import-docs && pnpm run test:scale && pnpm run test:cdn && pnpm run test:render"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

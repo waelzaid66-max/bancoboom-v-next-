@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
-import { sectionAccent } from "@/lib/sectionTheme";
+import { sectionAccent, sectionAccentAlpha } from "@/lib/sectionTheme";
 
 /** Car import is the CAR world, so its accent is the CAR token — bound, never
  *  written as a literal. #E53935 was Material Design's default red: a sixth
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(229,57,53,0.12)",
+    backgroundColor: sectionAccentAlpha("car", 0.12),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(229,57,53,0.10)",
+    backgroundColor: sectionAccentAlpha("car", 0.10),
     borderRadius: 999,
     paddingHorizontal: 9,
     paddingVertical: 4,
