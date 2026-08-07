@@ -78,17 +78,22 @@ export async function ensureSchemaPatches(): Promise<void> {
   await db.execute(sql`CREATE INDEX IF NOT EXISTS fi_lifecycle_events_intermediary_idx ON fi_lifecycle_events (intermediary_id)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS fi_lifecycle_events_created_at_idx ON fi_lifecycle_events (created_at DESC)`);
   // Reconcile workspace_status from legacy is_active flag (mirrors migration 0004
-  // data section). Runs BEFORE the backfill and unique index so lagging
-  // environments get the same active/suspended state as migration-applied ones.
+  // data section). Scoped to LEGACY rows only (workspace_owner_user_id IS NULL)
+  // so that legitimately-created draft workspaces (is_active=false by design)
+  // are never accidentally moved to suspended on a boot cycle.
   await db.execute(sql`
     UPDATE financing_intermediaries
       SET workspace_status = 'active'
-      WHERE is_active = true AND workspace_status = 'draft'
+      WHERE is_active = true
+        AND workspace_status = 'draft'
+        AND workspace_owner_user_id IS NULL
   `);
   await db.execute(sql`
     UPDATE financing_intermediaries
       SET workspace_status = 'suspended'
-      WHERE is_active = false AND workspace_status = 'draft'
+      WHERE is_active = false
+        AND workspace_status = 'draft'
+        AND workspace_owner_user_id IS NULL
   `);
   // Backfill workspace_owner_user_id BEFORE the unique index to avoid
   // constraint violations. Only backfill single-owner users — duplicates stay

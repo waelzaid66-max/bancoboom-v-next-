@@ -17,12 +17,14 @@ CREATE INDEX "idx_fi_lifecycle_events_intermediary" ON "fi_lifecycle_events" USI
 CREATE INDEX "idx_fi_lifecycle_events_created_at" ON "fi_lifecycle_events" USING btree ("created_at");--> statement-breakpoint
 ALTER TABLE "financing_intermediaries" ADD CONSTRAINT "financing_intermediaries_workspace_owner_user_id_users_id_fk" FOREIGN KEY ("workspace_owner_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 
--- Data reconciliation (BEFORE unique index): align workspace_status with is_active.
--- Safe to re-run: idempotent direction.
+-- Data reconciliation (BEFORE unique index): align workspace_status with is_active
+-- for LEGACY rows only (workspace_owner_user_id IS NULL = admin-only CRM rows).
+-- Lifecycle-managed drafts (workspace_owner_user_id IS NOT NULL, is_active=false)
+-- are intentionally excluded so they remain draft and can transition normally.
 UPDATE "financing_intermediaries" SET "workspace_status" = 'active'
-  WHERE "is_active" = true  AND "workspace_status" = 'draft';
+  WHERE "is_active" = true  AND "workspace_status" = 'draft' AND "workspace_owner_user_id" IS NULL;
 UPDATE "financing_intermediaries" SET "workspace_status" = 'suspended'
-  WHERE "is_active" = false AND "workspace_status" = 'draft';
+  WHERE "is_active" = false AND "workspace_status" = 'draft' AND "workspace_owner_user_id" IS NULL;
 
 -- Backfill workspace_owner_user_id from owner_user_id BEFORE the unique index.
 -- Only backfill for users who own exactly ONE intermediary. Users with multiple

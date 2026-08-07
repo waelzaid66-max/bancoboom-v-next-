@@ -164,6 +164,37 @@ describe("ensureSchemaPatches (P0 C-01)", () => {
     await db.execute(sql`DELETE FROM financing_intermediaries WHERE id IN (${activeId}::uuid, ${inactiveId}::uuid)`);
   });
 
+  // Regression: a newly provisioned draft workspace (is_active=false by design)
+  // must NOT be moved to suspended on the next boot cycle.
+  it("draft workspace with workspace_owner_user_id survives ensureSchemaPatches unchanged", async () => {
+    // Create a fresh FI user and provision a draft workspace.
+    const { rows: userRows } = await db.execute<{ id: string }>(sql`
+      INSERT INTO users (id, clerk_id, name, role)
+      VALUES (gen_random_uuid(), 'test-draft-ws-' || gen_random_uuid()::text, 'Draft FI', 'financial_institution')
+      RETURNING id
+    `);
+    const userId = userRows[0]!.id;
+    const { rows: imRows } = await db.execute<{ id: string }>(sql`
+      INSERT INTO financing_intermediaries (id, name, owner_user_id, workspace_owner_user_id, workspace_status, is_active)
+      VALUES (gen_random_uuid(), 'Draft WS Bank', ${userId}::uuid, ${userId}::uuid, 'draft', false)
+      RETURNING id
+    `);
+    const imId = imRows[0]!.id;
+
+    // Re-run ensureSchemaPatches (simulates a server restart).
+    await expect(ensureSchemaPatches()).resolves.toBeUndefined();
+
+    // Workspace must remain 'draft' — not suspended.
+    const { rows: check } = await db.execute<{ workspace_status: string }>(sql`
+      SELECT workspace_status FROM financing_intermediaries WHERE id = ${imId}::uuid
+    `);
+    expect(check[0]?.workspace_status).toBe("draft");
+
+    // Cleanup.
+    await db.execute(sql`DELETE FROM financing_intermediaries WHERE id = ${imId}::uuid`);
+    await db.execute(sql`DELETE FROM users WHERE id = ${userId}::uuid`);
+  });
+
   // Regression: if a legacy FI user owns multiple intermediaries (permitted by
   // the old schema), the migration/ensureSchemaPatches backfill must not
   // violate the unique index — it leaves duplicate-owner rows with NULL
