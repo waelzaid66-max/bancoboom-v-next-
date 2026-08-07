@@ -502,6 +502,33 @@ export async function updateIntermediary(params: {
   ownerUserId?: string | null;
   adminUserId: string;
 }): Promise<FinancingIntermediaryRow> {
+  // For lifecycle-managed intermediaries (those with workspaceOwnerUserId),
+  // is_active is derived from workspace_status — the admin cannot override it
+  // directly. Translate a boolean toggle into the correct lifecycle transition.
+  if (params.isActive !== undefined) {
+    const [current] = await db
+      .select({ workspaceOwnerUserId: financingIntermediaries.workspaceOwnerUserId, workspaceStatus: financingIntermediaries.workspaceStatus })
+      .from(financingIntermediaries)
+      .where(eq(financingIntermediaries.id, params.id))
+      .limit(1);
+    if (!current) throw Object.assign(new Error("Intermediary not found"), { code: "NOT_FOUND" });
+
+    if (current.workspaceOwnerUserId) {
+      // Lifecycle-managed: translate is_active to a workspace status transition.
+      const targetStatus: FiWorkspaceStatus = params.isActive ? "active" : "suspended";
+      if (current.workspaceStatus !== targetStatus) {
+        await transitionWorkspaceStatus({
+          intermediaryId: params.id,
+          newStatus: targetStatus,
+          actorUserId: params.adminUserId,
+          reason: params.isActive ? "admin_activated_via_toggle" : "admin_suspended_via_toggle",
+        });
+      }
+      // Drop is_active from the direct update — transitionWorkspaceStatus syncs it.
+      params = { ...params, isActive: undefined };
+    }
+  }
+
   const set: Partial<typeof financingIntermediaries.$inferInsert> = {
     updatedAt: new Date(),
   };
@@ -509,7 +536,7 @@ export async function updateIntermediary(params: {
   if (params.contactEmail !== undefined) set.contactEmail = params.contactEmail;
   if (params.contactPhone !== undefined) set.contactPhone = params.contactPhone;
   if (params.notes !== undefined) set.notes = params.notes;
-  if (params.isActive !== undefined) set.isActive = params.isActive;
+  if (params.isActive !== undefined) set.isActive = params.isActive; // legacy-only rows
   if (params.ownerUserId !== undefined) {
     if (params.ownerUserId) {
       const [owner] = await db
@@ -601,29 +628,32 @@ export async function ensureFiWorkspace(ownerUserId: string): Promise<FinancingI
       }
 
       const now = new Date();
-      const [created] = await db
-        .insert(financingIntermediaries)
-        .values({
-          name: owner.name ?? "Financial Institution",
-          ownerUserId,
-          workspaceOwnerUserId: ownerUserId,
-          workspaceStatus: "draft",
-          isActive: false,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning(intermediarySelection);
-
-      // Log the creation event
-      await db.insert(fiLifecycleEvents).values({
-        intermediaryId: created!.id,
-        fromStatus: null,
-        toStatus: "draft",
-        actorUserId: ownerUserId,
-        reason: "workspace_created",
+      // Atomically insert intermediary + creation event so a creation event
+      // is never missing even if the caller retries after a partial failure.
+      const created = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(financingIntermediaries)
+          .values({
+            name: owner.name ?? "Financial Institution",
+            ownerUserId,
+            workspaceOwnerUserId: ownerUserId,
+            workspaceStatus: "draft",
+            isActive: false,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning(intermediarySelection);
+        await tx.insert(fiLifecycleEvents).values({
+          intermediaryId: row!.id,
+          fromStatus: null,
+          toStatus: "draft",
+          actorUserId: ownerUserId,
+          reason: "workspace_created",
+        });
+        return row!;
       });
 
-      return mapIntermediary(created!);
+      return mapIntermediary(created);
     } finally {
       await client.query("SELECT pg_advisory_unlock($1)", [lockKey]);
     }
@@ -643,32 +673,36 @@ export async function transitionWorkspaceStatus(params: {
   actorUserId: string;
   reason?: string;
 }): Promise<FinancingIntermediaryRow> {
-  const [current] = await db
-    .select({ id: financingIntermediaries.id, workspaceStatus: financingIntermediaries.workspaceStatus })
-    .from(financingIntermediaries)
-    .where(eq(financingIntermediaries.id, params.intermediaryId))
-    .limit(1);
-  if (!current) throw Object.assign(new Error("Intermediary not found"), { code: "NOT_FOUND" });
+  let updated: (typeof intermediarySelection extends Record<string, unknown> ? unknown : typeof intermediarySelection) | null = null;
 
-  const fromStatus = current.workspaceStatus as FiWorkspaceStatus;
-  if (fromStatus === params.newStatus) {
-    // Idempotent — already in target status
-    const [row] = await db.select(intermediarySelection).from(financingIntermediaries).where(eq(financingIntermediaries.id, params.intermediaryId)).limit(1);
-    return mapIntermediary(row!);
-  }
-  if (!FI_WORKSPACE_TRANSITIONS[fromStatus]?.has(params.newStatus)) {
-    throw Object.assign(
-      new Error(`Invalid workspace transition from ${fromStatus} to ${params.newStatus}`),
-      { code: "INVALID_STATUS_TRANSITION" },
-    );
-  }
-
-  const isActive = params.newStatus === "active";
   await db.transaction(async (tx) => {
-    await tx
+    // Lock the row inside the transaction so concurrent transitions serialize.
+    const locked = await tx.execute(
+      sql`SELECT id, workspace_status FROM financing_intermediaries WHERE id = ${params.intermediaryId} FOR UPDATE`,
+    );
+    const current = locked.rows[0] as { id: string; workspace_status: string } | undefined;
+    if (!current) throw Object.assign(new Error("Intermediary not found"), { code: "NOT_FOUND" });
+
+    const fromStatus = current.workspace_status as FiWorkspaceStatus;
+    if (fromStatus === params.newStatus) {
+      // Idempotent — already in target status; still need to return the row.
+      const [row] = await tx.select(intermediarySelection).from(financingIntermediaries).where(eq(financingIntermediaries.id, params.intermediaryId)).limit(1);
+      updated = row ?? null;
+      return;
+    }
+    if (!FI_WORKSPACE_TRANSITIONS[fromStatus]?.has(params.newStatus)) {
+      throw Object.assign(
+        new Error(`Invalid workspace transition from ${fromStatus} to ${params.newStatus}`),
+        { code: "INVALID_STATUS_TRANSITION" },
+      );
+    }
+
+    const isActive = params.newStatus === "active";
+    const [row] = await tx
       .update(financingIntermediaries)
       .set({ workspaceStatus: params.newStatus, isActive, updatedAt: new Date() })
-      .where(eq(financingIntermediaries.id, params.intermediaryId));
+      .where(eq(financingIntermediaries.id, params.intermediaryId))
+      .returning(intermediarySelection);
     await tx.insert(fiLifecycleEvents).values({
       intermediaryId: params.intermediaryId,
       fromStatus,
@@ -676,18 +710,20 @@ export async function transitionWorkspaceStatus(params: {
       actorUserId: params.actorUserId,
       reason: params.reason ?? null,
     });
+    updated = row ?? null;
   });
+
+  if (!updated) throw Object.assign(new Error("Intermediary not found"), { code: "NOT_FOUND" });
 
   writeAudit({
     eventType: "admin_action",
     severity: "info",
     actorUserId: params.actorUserId,
     reason: "fi_workspace_transition",
-    metadata: { intermediary_id: params.intermediaryId, from: fromStatus, to: params.newStatus },
+    metadata: { intermediary_id: params.intermediaryId, to: params.newStatus },
   });
 
-  const [updated] = await db.select(intermediarySelection).from(financingIntermediaries).where(eq(financingIntermediaries.id, params.intermediaryId)).limit(1);
-  return mapIntermediary(updated!);
+  return mapIntermediary(updated as Parameters<typeof mapIntermediary>[0]);
 }
 
 /**
