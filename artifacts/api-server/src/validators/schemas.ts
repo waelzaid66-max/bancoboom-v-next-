@@ -1987,6 +1987,12 @@ export const FiWorkspaceStatusSchema = z.enum([
   "suspended",
 ]);
 
+export const WorkspaceTransitionBodySchema = z.object({
+  intermediary_id: z.string().uuid(),
+  new_status: FiWorkspaceStatusSchema,
+  reason: z.string().max(1000).nullable().optional(),
+});
+
 export const FinancingIntermediarySchema = z
   .object({
     id: z.string(),

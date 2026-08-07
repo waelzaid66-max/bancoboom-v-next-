@@ -1823,6 +1823,14 @@ const en = {
       inboxBranch: "Branch:",
       inboxMonthly: "Monthly:",
       inboxMonths: "mo",
+      // FI lifecycle banner strings
+      wsDraft: "Complete your verification",
+      wsDraftDesc: "Upload your institution's KYC documents to submit for review.",
+      wsPending: "Under review",
+      wsPendingDesc: "Your documents are being reviewed. We'll notify you once a decision is made.",
+      wsSuspended: "Account suspended",
+      wsSuspendedDesc: "Your institution's workspace has been suspended. Contact BANCO support for assistance.",
+      wsUploadDocs: "Upload documents",
       inboxRole: {
         owner: "Institution account",
         manager: "Manager — all branches",
@@ -4195,6 +4203,14 @@ const ar: typeof en = {
       inboxBranch: "الفرع:",
       inboxMonthly: "شهري:",
       inboxMonths: "شهر",
+      // FI lifecycle banner strings
+      wsDraft: "أكمل متطلبات التحقق",
+      wsDraftDesc: "ارفع وثائق KYC الخاصة بمؤسستك لتقديمها للمراجعة.",
+      wsPending: "تحت المراجعة",
+      wsPendingDesc: "وثائقك قيد المراجعة. سنُعلمك فور صدور القرار.",
+      wsSuspended: "الحساب موقوف",
+      wsSuspendedDesc: "تم تعليق مساحة عمل مؤسستك. تواصل مع دعم بانكو للمساعدة.",
+      wsUploadDocs: "رفع الوثائق",
       inboxRole: {
         owner: "حساب المؤسسة",
         manager: "مدير — كل الفروع",

@@ -17,6 +17,7 @@ import {
   FinancingSeatSchema,
   CreateFinancingBranchSchema,
   CreateFinancingSeatSchema,
+  WorkspaceTransitionBodySchema,
 } from "../validators/schemas";
 import * as FinancingService from "../services/FinancingService";
 import { getDbUser } from "../services/UserService";
@@ -203,15 +204,12 @@ export async function workspaceTransitionHandler(req: Request, res: Response) {
   try {
     const dbUser = await getDbUser(req.userId!);
     if (!dbUser) throw Object.assign(new Error("User not found"), { code: "FORBIDDEN" });
-    const { intermediary_id, new_status, reason } = req.body;
-    if (!intermediary_id || !new_status) {
-      return res.status(400).json({ error: "intermediary_id and new_status are required" });
-    }
+    const body = WorkspaceTransitionBodySchema.parse(req.body);
     const result = await FinancingService.transitionWorkspaceStatus({
-      intermediaryId: intermediary_id,
-      newStatus: new_status,
+      intermediaryId: body.intermediary_id,
+      newStatus: body.new_status,
       actorUserId: dbUser.id,
-      reason,
+      reason: body.reason ?? undefined,
     });
     return res.json(successResponse(result));
   } catch (err) {
