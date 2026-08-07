@@ -129,6 +129,41 @@ describe("ensureSchemaPatches (P0 C-01)", () => {
     expect(idxRows.length).toBe(1);
   });
 
+  // Upgrade-path regression: legacy active and inactive intermediaries must get
+  // the correct workspace_status after ensureSchemaPatches, so that inbox
+  // assertWorkspaceActive continues to allow/block them correctly.
+  it("reconciles legacy is_active=true→active and is_active=false→suspended for pre-0004 rows", async () => {
+    // Set two existing intermediary rows (if any) to draft + force is_active mismatch.
+    // Create fresh test rows to avoid interfering with the live fixture.
+    const { rows: activeRows } = await db.execute<{ id: string }>(sql`
+      INSERT INTO financing_intermediaries (id, name, is_active, workspace_status)
+      VALUES (gen_random_uuid(), 'Legacy Active Bank', true, 'draft')
+      RETURNING id
+    `);
+    const { rows: inactiveRows } = await db.execute<{ id: string }>(sql`
+      INSERT INTO financing_intermediaries (id, name, is_active, workspace_status)
+      VALUES (gen_random_uuid(), 'Legacy Inactive Bank', false, 'draft')
+      RETURNING id
+    `);
+    const activeId = activeRows[0]!.id;
+    const inactiveId = inactiveRows[0]!.id;
+
+    // Run the boot patch — must reconcile workspace_status from is_active.
+    await expect(ensureSchemaPatches()).resolves.toBeUndefined();
+
+    const { rows: results } = await db.execute<{ id: string; workspace_status: string }>(sql`
+      SELECT id, workspace_status
+      FROM financing_intermediaries
+      WHERE id IN (${activeId}::uuid, ${inactiveId}::uuid)
+    `);
+    const byId = Object.fromEntries(results.map((r) => [r.id, r.workspace_status]));
+    expect(byId[activeId]).toBe("active");
+    expect(byId[inactiveId]).toBe("suspended");
+
+    // Cleanup.
+    await db.execute(sql`DELETE FROM financing_intermediaries WHERE id IN (${activeId}::uuid, ${inactiveId}::uuid)`);
+  });
+
   // Regression: if a legacy FI user owns multiple intermediaries (permitted by
   // the old schema), the migration/ensureSchemaPatches backfill must not
   // violate the unique index — it leaves duplicate-owner rows with NULL

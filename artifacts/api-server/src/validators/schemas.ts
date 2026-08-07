@@ -46,7 +46,11 @@ export function errorResponse(
     // Duplicate resource (e.g. seating a user twice in the same institution).
     | "CONFLICT"
     // Transient auth/DB resolution failure (HTTP 503) — used by authGuard.
-    | "SERVICE_UNAVAILABLE",
+    | "SERVICE_UNAVAILABLE"
+    // FI lifecycle: workspace is not yet active (draft/pending_review/suspended).
+    | "WORKSPACE_NOT_ACTIVE"
+    // FI lifecycle: the requested state transition is not allowed.
+    | "INVALID_STATUS_TRANSITION",
   message: string
 ): GlobalResponse<never[]> {
   return { data: [], error: { code, message }, meta: {} };
