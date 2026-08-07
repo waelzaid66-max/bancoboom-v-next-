@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import {
   createIntermediary,
   listIntermediaries,
@@ -9,6 +9,11 @@ import {
   createSeat,
   updateInstitutionRequest,
   listInstitutionRequests,
+  ensureFiWorkspace,
+  transitionWorkspaceStatus,
+  assertWorkspaceActive,
+  suspendWorkspaceOnOwnerExit,
+  getLifecycleEvents,
 } from "./FinancingService";
 import { db, createUser, deleteUsers, uniq, randomUUID } from "../__tests__/helpers";
 import {
@@ -18,6 +23,7 @@ import {
   financingIntermediaries,
   financingBranches,
   financingSeats,
+  fiLifecycleEvents,
 } from "@workspace/db/schema";
 
 /**
@@ -32,6 +38,7 @@ const listingIds: string[] = [];
 const imIds: string[] = [];
 const branchIds: string[] = [];
 const seatIds: string[] = [];
+const lifecycleEventIds: string[] = [];
 
 async function financeLead(): Promise<string> {
   const seller = await createUser();
@@ -69,6 +76,9 @@ afterAll(async () => {
   }
   if (branchIds.length) {
     await db.delete(financingBranches).where(inArray(financingBranches.id, branchIds));
+  }
+  if (lifecycleEventIds.length) {
+    await db.delete(fiLifecycleEvents).where(inArray(fiLifecycleEvents.id, lifecycleEventIds));
   }
   for (const id of listingIds) await db.delete(listings).where(eq(listings.id, id));
   for (const id of imIds) await db.delete(financingIntermediaries).where(eq(financingIntermediaries.id, id));
@@ -162,6 +172,11 @@ describe("FinancingService — institution AuthZ + status machine (F-SEC-01 / R2
     const im = await createIntermediary({ name: uniq("FI Bank"), adminUserId: admin });
     imIds.push(im.id);
     await updateIntermediary({ id: im.id, ownerUserId: owner, adminUserId: admin });
+    // Activate workspace so assertWorkspaceActive gate passes in inbox/update ops.
+    // Use raw SQL to avoid depending on dist rebuild for the new enum column type.
+    await db.execute(
+      sql`UPDATE financing_intermediaries SET workspace_status = 'active' WHERE id = ${im.id}`
+    );
 
     const branchA = await createBranch({
       intermediaryId: im.id,
@@ -341,5 +356,196 @@ describe("FinancingService — institution AuthZ + status machine (F-SEC-01 / R2
     await expect(
       listInstitutionRequests({ dbUserId: fi, limit: 10 }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});
+
+describe("FinancingService — FI Workspace Lifecycle (Task 5)", () => {
+  it("creates workspace (draft) for financial_institution user — idempotent", async () => {
+    const owner = await createUser({ role: "financial_institution" });
+    uids.push(owner);
+
+    const ws1 = await ensureFiWorkspace(owner);
+    imIds.push(ws1.id);
+    expect(ws1.workspace_status).toBe("draft");
+    expect(ws1.is_active).toBe(false);
+
+    // Calling again returns same record
+    const ws2 = await ensureFiWorkspace(owner);
+    expect(ws2.id).toBe(ws1.id);
+  });
+
+  it("rejects workspace creation for non-FI user", async () => {
+    const individual = await createUser({ role: "individual" });
+    uids.push(individual);
+    await expect(ensureFiWorkspace(individual)).rejects.toMatchObject({ code: "INVALID_DATA" });
+  });
+
+  it("allowed status transitions succeed", async () => {
+    const admin = await createUser();
+    uids.push(admin);
+    const owner = await createUser({ role: "financial_institution" });
+    uids.push(owner);
+    const ws = await ensureFiWorkspace(owner);
+    imIds.push(ws.id);
+
+    // draft → pending_review
+    const r1 = await transitionWorkspaceStatus({ intermediaryId: ws.id, newStatus: "pending_review", actorUserId: admin, reason: "kyc_submitted" });
+    expect(r1.workspace_status).toBe("pending_review");
+    expect(r1.is_active).toBe(false);
+
+    // pending_review → active
+    const r2 = await transitionWorkspaceStatus({ intermediaryId: ws.id, newStatus: "active", actorUserId: admin, reason: "approved" });
+    expect(r2.workspace_status).toBe("active");
+    expect(r2.is_active).toBe(true);
+
+    // active → suspended
+    const r3 = await transitionWorkspaceStatus({ intermediaryId: ws.id, newStatus: "suspended", actorUserId: admin, reason: "policy_violation" });
+    expect(r3.workspace_status).toBe("suspended");
+    expect(r3.is_active).toBe(false);
+
+    // suspended → active (re-activation)
+    const r4 = await transitionWorkspaceStatus({ intermediaryId: ws.id, newStatus: "active", actorUserId: admin });
+    expect(r4.workspace_status).toBe("active");
+  });
+
+  it("disallowed transitions throw INVALID_STATUS_TRANSITION", async () => {
+    const admin = await createUser();
+    uids.push(admin);
+    const owner = await createUser({ role: "financial_institution" });
+    uids.push(owner);
+    const ws = await ensureFiWorkspace(owner);
+    imIds.push(ws.id);
+
+    // draft → active is not allowed (must go through pending_review)
+    await expect(
+      transitionWorkspaceStatus({ intermediaryId: ws.id, newStatus: "active", actorUserId: admin })
+    ).rejects.toMatchObject({ code: "INVALID_STATUS_TRANSITION" });
+
+    // draft → suspended is not allowed
+    await expect(
+      transitionWorkspaceStatus({ intermediaryId: ws.id, newStatus: "suspended", actorUserId: admin })
+    ).rejects.toMatchObject({ code: "INVALID_STATUS_TRANSITION" });
+  });
+
+  it("assertWorkspaceActive passes on active, throws on draft/pending_review/suspended", async () => {
+    const admin = await createUser();
+    uids.push(admin);
+    const owner = await createUser({ role: "financial_institution" });
+    uids.push(owner);
+    const ws = await ensureFiWorkspace(owner);
+    imIds.push(ws.id);
+
+    // draft → should reject
+    await expect(assertWorkspaceActive(ws.id)).rejects.toMatchObject({ code: "WORKSPACE_NOT_ACTIVE" });
+
+    // pending_review → should reject
+    await transitionWorkspaceStatus({ intermediaryId: ws.id, newStatus: "pending_review", actorUserId: admin });
+    await expect(assertWorkspaceActive(ws.id)).rejects.toMatchObject({ code: "WORKSPACE_NOT_ACTIVE" });
+
+    // active → should pass
+    await transitionWorkspaceStatus({ intermediaryId: ws.id, newStatus: "active", actorUserId: admin });
+    await expect(assertWorkspaceActive(ws.id)).resolves.toBeUndefined();
+
+    // suspended → should reject
+    await transitionWorkspaceStatus({ intermediaryId: ws.id, newStatus: "suspended", actorUserId: admin });
+    await expect(assertWorkspaceActive(ws.id)).rejects.toMatchObject({ code: "WORKSPACE_NOT_ACTIVE" });
+  });
+
+  it("tenant isolation: institution A member cannot access institution B inbox", async () => {
+    const admin = await createUser();
+    uids.push(admin);
+
+    const ownerA = await createUser({ role: "financial_institution" });
+    uids.push(ownerA);
+    const wsA = await ensureFiWorkspace(ownerA);
+    imIds.push(wsA.id);
+    await transitionWorkspaceStatus({ intermediaryId: wsA.id, newStatus: "pending_review", actorUserId: admin });
+    await transitionWorkspaceStatus({ intermediaryId: wsA.id, newStatus: "active", actorUserId: admin });
+
+    const ownerB = await createUser({ role: "financial_institution" });
+    uids.push(ownerB);
+    const wsB = await ensureFiWorkspace(ownerB);
+    imIds.push(wsB.id);
+    await transitionWorkspaceStatus({ intermediaryId: wsB.id, newStatus: "pending_review", actorUserId: admin });
+    await transitionWorkspaceStatus({ intermediaryId: wsB.id, newStatus: "active", actorUserId: admin });
+
+    // ownerA calls listInstitutionRequests → they see institution A membership
+    const resultA = await listInstitutionRequests({ dbUserId: ownerA, limit: 10 });
+    expect(resultA.membership.intermediary_id).toBe(wsA.id);
+
+    // ownerB calls listInstitutionRequests → they see institution B membership
+    const resultB = await listInstitutionRequests({ dbUserId: ownerB, limit: 10 });
+    expect(resultB.membership.intermediary_id).toBe(wsB.id);
+  });
+
+  it("inbox returns 403 WORKSPACE_NOT_ACTIVE when workspace is not active", async () => {
+    const owner = await createUser({ role: "financial_institution" });
+    uids.push(owner);
+    const ws = await ensureFiWorkspace(owner);
+    imIds.push(ws.id);
+    // workspace is draft — inbox should be blocked
+    await expect(
+      listInstitutionRequests({ dbUserId: owner, limit: 10 })
+    ).rejects.toMatchObject({ code: "WORKSPACE_NOT_ACTIVE" });
+  });
+
+  it("suspendWorkspaceOnOwnerExit suspends workspace and writes lifecycle event", async () => {
+    const admin = await createUser();
+    uids.push(admin);
+    const owner = await createUser({ role: "financial_institution" });
+    uids.push(owner);
+    const ws = await ensureFiWorkspace(owner);
+    imIds.push(ws.id);
+    await transitionWorkspaceStatus({ intermediaryId: ws.id, newStatus: "pending_review", actorUserId: admin });
+    await transitionWorkspaceStatus({ intermediaryId: ws.id, newStatus: "active", actorUserId: admin });
+
+    await suspendWorkspaceOnOwnerExit(owner);
+
+    const [refreshed] = await db
+      .select({ workspaceStatus: financingIntermediaries.workspaceStatus, isActive: financingIntermediaries.isActive })
+      .from(financingIntermediaries)
+      .where(eq(financingIntermediaries.id, ws.id))
+      .limit(1);
+    expect(refreshed!.workspaceStatus).toBe("suspended");
+    expect(refreshed!.isActive).toBe(false);
+
+    const events = await getLifecycleEvents(ws.id);
+    const suspendEvent = events.find((e) => e.to_status === "suspended" && e.reason === "owner_account_exit");
+    expect(suspendEvent).toBeDefined();
+    expect(suspendEvent!.actor_user_id).toBeNull();
+  });
+
+  it("getLifecycleEvents returns ordered timeline of transitions", async () => {
+    const admin = await createUser();
+    uids.push(admin);
+    const owner = await createUser({ role: "financial_institution" });
+    uids.push(owner);
+    const ws = await ensureFiWorkspace(owner);
+    imIds.push(ws.id);
+    await transitionWorkspaceStatus({ intermediaryId: ws.id, newStatus: "pending_review", actorUserId: admin, reason: "kyc_docs_received" });
+    await transitionWorkspaceStatus({ intermediaryId: ws.id, newStatus: "active", actorUserId: admin, reason: "approved_by_risk" });
+
+    const events = await getLifecycleEvents(ws.id);
+    // Most recent first
+    expect(events[0]!.to_status).toBe("active");
+    expect(events[1]!.to_status).toBe("pending_review");
+    // Creation event (from_status null, to_status draft)
+    const creation = events.find((e) => e.from_status === null && e.to_status === "draft");
+    expect(creation).toBeDefined();
+  });
+
+  it("financing request cannot be forwarded to non-active workspace intermediary", async () => {
+    const admin = await createUser();
+    uids.push(admin);
+    const owner = await createUser({ role: "financial_institution" });
+    uids.push(owner);
+    const ws = await ensureFiWorkspace(owner);
+    imIds.push(ws.id);
+    // workspace is draft (not active) — forwarding should fail
+
+    const leadId = await financeLead();
+    await expect(
+      updateFinancingRequest({ leadId, status: "forwarded", intermediaryId: ws.id, adminUserId: admin })
+    ).rejects.toMatchObject({ code: "INVALID_DATA" });
   });
 });

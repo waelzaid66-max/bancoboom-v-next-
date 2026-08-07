@@ -67,6 +67,13 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 const UNASSIGNED = "__none__";
 
+const WS_STATUS_STYLE: Record<string, string> = {
+  active: "bg-green-500/15 text-green-400 border-green-500/30",
+  pending_review: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+  suspended: "bg-red-500/15 text-red-400 border-red-500/30",
+  draft: "bg-gray-500/15 text-gray-400 border-gray-500/30",
+};
+
 function fmtMoney(value: string | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   const num = Number(value);
@@ -685,6 +692,22 @@ function IntermediariesDialog({ intermediaries }: { intermediaries: FinancingInt
   const refetch = () =>
     queryClient.invalidateQueries({ queryKey: getGetFinancingIntermediariesQueryKey() });
 
+  async function handleWorkspaceTransition(id: string, newStatus: string) {
+    try {
+      const res = await fetch("/api/v1/financing/workspace/status", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intermediary_id: id, new_status: newStatus }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await refetch();
+      toast({ title: "Workspace status updated" });
+    } catch {
+      toast({ title: "Failed to update workspace status", variant: "destructive" });
+    }
+  }
+
   function resetForm() {
     setEditing(null);
     setName("");
@@ -769,12 +792,15 @@ function IntermediariesDialog({ intermediaries }: { intermediaries: FinancingInt
               intermediaries.map((im) => (
                 <div key={im.id} className="flex items-center justify-between border rounded-md p-3 gap-2">
                   <div className="min-w-0">
-                    <div className="font-medium flex items-center gap-2">
+                    <div className="font-medium flex items-center gap-2 flex-wrap">
                       {im.name}
                       {!im.is_active && <Badge variant="outline" className="text-xs">Inactive</Badge>}
                       {im.owner_user_id && (
                         <Badge variant="outline" className="text-xs">linked</Badge>
                       )}
+                      <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${WS_STATUS_STYLE[(im as any).workspace_status ?? "draft"] ?? WS_STATUS_STYLE.draft}`}>
+                        {(im as any).workspace_status ?? "draft"}
+                      </span>
                     </div>
                     <div className="text-xs text-muted-foreground truncate">
                       {[im.contact_email, im.contact_phone].filter(Boolean).join(" · ") || "No contact info"}
@@ -786,6 +812,15 @@ function IntermediariesDialog({ intermediaries }: { intermediaries: FinancingInt
                     ) : null}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleWorkspaceTransition(im.id ?? "", (im as any).workspace_status === "active" ? "suspended" : "active")}
+                      title={(im as any).workspace_status === "active" ? "Suspend workspace" : "Activate workspace"}
+                      disabled={(im as any).workspace_status === "draft"}
+                    >
+                      {(im as any).workspace_status === "active" ? "🔴" : "🟢"}
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => setOpsTarget(im)} title={t("financingPage.manageInstitution")}>
                       <Network className="w-3.5 h-3.5" />
                     </Button>

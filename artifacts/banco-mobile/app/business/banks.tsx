@@ -385,6 +385,86 @@ function InstitutionInboxSection({
   );
 }
 
+function WorkspaceBanner({ status, colors, t, isRTL }: {
+  status: string;
+  colors: ReturnType<typeof useColors>;
+  t: (k: string) => string;
+  isRTL: boolean;
+}) {
+  const textAlign: "left" | "right" = isRTL ? "right" : "left";
+  if (status === "active") return null;
+
+  const cfg = {
+    draft: {
+      icon: "file-document-outline" as const,
+      color: "#F59E0B",
+      bg: "#F59E0B18",
+      border: "#F59E0B38",
+      title: t("business.banks.wsDraft"),
+      desc: t("business.banks.wsDraftDesc"),
+    },
+    pending_review: {
+      icon: "clock-outline" as const,
+      color: "#3B82F6",
+      bg: "#3B82F618",
+      border: "#3B82F638",
+      title: t("business.banks.wsPending"),
+      desc: t("business.banks.wsPendingDesc"),
+    },
+    suspended: {
+      icon: "alert-circle-outline" as const,
+      color: "#EF4444",
+      bg: "#EF444418",
+      border: "#EF444438",
+      title: t("business.banks.wsSuspended"),
+      desc: t("business.banks.wsSuspendedDesc"),
+    },
+  }[status] ?? {
+    icon: "information-outline" as const,
+    color: colors.mutedForeground,
+    bg: colors.card,
+    border: colors.border,
+    title: status,
+    desc: "",
+  };
+
+  return (
+    <View style={{
+      margin: 16,
+      padding: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      backgroundColor: cfg.bg,
+      borderColor: cfg.border,
+      gap: 8,
+    }}>
+      <View style={{ flexDirection: isRTL ? "row-reverse" : "row", alignItems: "center", gap: 8 }}>
+        <MaterialCommunityIcons name={cfg.icon} size={20} color={cfg.color} />
+        <AppText style={{ color: cfg.color, fontFamily: "Inter_700Bold", fontSize: 14, textAlign }}>
+          {cfg.title}
+        </AppText>
+      </View>
+      {cfg.desc ? (
+        <AppText style={{ color: colors.mutedForeground, fontFamily: "Inter_400Regular", fontSize: 13, lineHeight: 19, textAlign }}>
+          {cfg.desc}
+        </AppText>
+      ) : null}
+      {status === "draft" && (
+        <Pressable
+          onPress={() => router.push("/business/verification")}
+          style={{ alignSelf: "flex-start", flexDirection: isRTL ? "row-reverse" : "row", alignItems: "center", gap: 6, backgroundColor: cfg.color, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10 }}
+          accessibilityRole="button"
+        >
+          <MaterialCommunityIcons name="upload" size={14} color="#FFFFFF" />
+          <AppText style={{ color: "#FFFFFF", fontFamily: "Inter_600SemiBold", fontSize: 13 }}>
+            {t("business.banks.wsUploadDocs")}
+          </AppText>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 export default function BanksScreen() {
   const colors = useColors();
   const { t, isRTL } = useI18n();
@@ -431,6 +511,20 @@ export default function BanksScreen() {
       Alert.alert(t("business.banks.linkAccountIdLabel"), meUserId);
     }
   }, [meUserId, t]);
+
+  // Workspace lifecycle — FI role users see a banner based on their workspace status.
+  const [wsStatus, setWsStatus] = React.useState<string | null>(null);
+  const [wsLoading, setWsLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isSignedIn || !isFiRole) { setWsStatus(null); return; }
+    setWsLoading(true);
+    fetch("/api/v1/financing/workspace", { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setWsStatus(data?.data?.workspace_status ?? null))
+      .catch(() => setWsStatus(null))
+      .finally(() => setWsLoading(false));
+  }, [isSignedIn, isFiRole]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -490,8 +584,15 @@ export default function BanksScreen() {
           </AppText>
         </LinearGradient>
 
-        {/* FI phase 2 — the bank's own inbox (members only; hidden otherwise) */}
-        <InstitutionInboxSection onMembershipChange={onMembershipChange} />
+        {/* FI phase 2 — only show inbox for active workspace (or unknown status) */}
+        {(!isFiRole || wsStatus === "active" || wsStatus === null) && (
+          <InstitutionInboxSection onMembershipChange={onMembershipChange} />
+        )}
+
+        {/* Workspace status banner — shown to FI role users when workspace is not active */}
+        {isFiRole && !wsLoading && wsStatus && wsStatus !== "active" && (
+          <WorkspaceBanner status={wsStatus} colors={colors} t={t} isRTL={isRTL} />
+        )}
 
         {/* Product types — explanatory brochure only (not a live partner directory).
             Rows are non-interactive examples — no card chrome that reads as a

@@ -8,8 +8,9 @@ import {
   financingIntermediaries,
   financingBranches,
   financingSeats,
+  fiLifecycleEvents,
 } from "@workspace/db/schema";
-import { and, asc, desc, eq, ilike, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import { writeAudit } from "./AbuseService";
 import { createNotification } from "./NotificationService";
 
@@ -17,6 +18,15 @@ import { createNotification } from "./NotificationService";
 
 type FinancingStatus = "new" | "forwarded" | "contacted" | "closed" | "rejected";
 type ListingCategory = "car" | "real_estate" | "industrial";
+
+type FiWorkspaceStatus = "draft" | "pending_review" | "active" | "suspended";
+
+const FI_WORKSPACE_TRANSITIONS: Record<FiWorkspaceStatus, ReadonlySet<FiWorkspaceStatus>> = {
+  draft: new Set(["pending_review"]),
+  pending_review: new Set(["active", "suspended"]),
+  active: new Set(["suspended"]),
+  suspended: new Set(["active"]),
+};
 
 export interface FinancingRequestRow {
   lead_id: string;
@@ -50,6 +60,8 @@ export interface FinancingIntermediaryRow {
   owner_user_id: string | null;
   is_active: boolean;
   created_at: string | null;
+  workspace_status: FiWorkspaceStatus;
+  workspace_owner_user_id: string | null;
 }
 
 interface ListFilters {
@@ -411,6 +423,8 @@ function mapIntermediary(r: {
   ownerUserId: string | null;
   isActive: boolean | null;
   createdAt: Date | null;
+  workspaceStatus: string | null;
+  workspaceOwnerUserId: string | null;
 }): FinancingIntermediaryRow {
   return {
     id: r.id,
@@ -421,6 +435,8 @@ function mapIntermediary(r: {
     owner_user_id: r.ownerUserId,
     is_active: r.isActive ?? true,
     created_at: r.createdAt ? r.createdAt.toISOString() : null,
+    workspace_status: (r.workspaceStatus as FiWorkspaceStatus) ?? "draft",
+    workspace_owner_user_id: r.workspaceOwnerUserId,
   };
 }
 
@@ -433,6 +449,8 @@ const intermediarySelection = {
   ownerUserId: financingIntermediaries.ownerUserId,
   isActive: financingIntermediaries.isActive,
   createdAt: financingIntermediaries.createdAt,
+  workspaceStatus: financingIntermediaries.workspaceStatus,
+  workspaceOwnerUserId: financingIntermediaries.workspaceOwnerUserId,
 } as const;
 
 export async function listIntermediaries(): Promise<FinancingIntermediaryRow[]> {
@@ -534,6 +552,220 @@ export async function updateIntermediary(params: {
   return mapIntermediary(row);
 }
 
+/* ── FI workspace lifecycle ────────────────────────────── */
+
+export interface FiLifecycleEventRow {
+  id: string;
+  intermediary_id: string;
+  from_status: FiWorkspaceStatus | null;
+  to_status: FiWorkspaceStatus;
+  actor_user_id: string | null;
+  reason: string | null;
+  created_at: string | null;
+}
+
+/**
+ * Provision (or return existing) workspace for an FI user.
+ * Advisory lock on ownerUserId hash prevents concurrent double-creation.
+ * Idempotent: calling twice returns same record.
+ */
+export async function ensureFiWorkspace(ownerUserId: string): Promise<FinancingIntermediaryRow> {
+  // Hash ownerUserId to a 32-bit integer for advisory lock key
+  let hash = 0;
+  for (let i = 0; i < ownerUserId.length; i++) {
+    hash = Math.imul(31, hash) + ownerUserId.charCodeAt(i) | 0;
+  }
+  const lockKey = Math.abs(hash) % 2147483647;
+
+  const client = await (await import("@workspace/db")).pool.connect();
+  try {
+    await client.query("SELECT pg_advisory_lock($1)", [lockKey]);
+    try {
+      // Check if workspace already exists
+      const [existing] = await db
+        .select(intermediarySelection)
+        .from(financingIntermediaries)
+        .where(eq(financingIntermediaries.workspaceOwnerUserId, ownerUserId))
+        .limit(1);
+      if (existing) return mapIntermediary(existing);
+
+      // Verify user has financial_institution role
+      const [owner] = await db
+        .select({ id: users.id, name: users.name, role: users.role })
+        .from(users)
+        .where(eq(users.id, ownerUserId))
+        .limit(1);
+      if (!owner) throw Object.assign(new Error("User not found"), { code: "NOT_FOUND" });
+      if (owner.role !== "financial_institution") {
+        throw Object.assign(new Error("User must have financial_institution role"), { code: "INVALID_DATA" });
+      }
+
+      const now = new Date();
+      const [created] = await db
+        .insert(financingIntermediaries)
+        .values({
+          name: owner.name ?? "Financial Institution",
+          ownerUserId,
+          workspaceOwnerUserId: ownerUserId,
+          workspaceStatus: "draft",
+          isActive: false,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning(intermediarySelection);
+
+      // Log the creation event
+      await db.insert(fiLifecycleEvents).values({
+        intermediaryId: created!.id,
+        fromStatus: null,
+        toStatus: "draft",
+        actorUserId: ownerUserId,
+        reason: "workspace_created",
+      });
+
+      return mapIntermediary(created!);
+    } finally {
+      await client.query("SELECT pg_advisory_unlock($1)", [lockKey]);
+    }
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Transition workspace status through the allowed state machine.
+ * Writes a fi_lifecycle_events record in the same transaction.
+ * Also keeps isActive in sync (active→true, else→false) for backwards compat.
+ */
+export async function transitionWorkspaceStatus(params: {
+  intermediaryId: string;
+  newStatus: FiWorkspaceStatus;
+  actorUserId: string;
+  reason?: string;
+}): Promise<FinancingIntermediaryRow> {
+  const [current] = await db
+    .select({ id: financingIntermediaries.id, workspaceStatus: financingIntermediaries.workspaceStatus })
+    .from(financingIntermediaries)
+    .where(eq(financingIntermediaries.id, params.intermediaryId))
+    .limit(1);
+  if (!current) throw Object.assign(new Error("Intermediary not found"), { code: "NOT_FOUND" });
+
+  const fromStatus = current.workspaceStatus as FiWorkspaceStatus;
+  if (fromStatus === params.newStatus) {
+    // Idempotent — already in target status
+    const [row] = await db.select(intermediarySelection).from(financingIntermediaries).where(eq(financingIntermediaries.id, params.intermediaryId)).limit(1);
+    return mapIntermediary(row!);
+  }
+  if (!FI_WORKSPACE_TRANSITIONS[fromStatus]?.has(params.newStatus)) {
+    throw Object.assign(
+      new Error(`Invalid workspace transition from ${fromStatus} to ${params.newStatus}`),
+      { code: "INVALID_STATUS_TRANSITION" },
+    );
+  }
+
+  const isActive = params.newStatus === "active";
+  await db.transaction(async (tx) => {
+    await tx
+      .update(financingIntermediaries)
+      .set({ workspaceStatus: params.newStatus, isActive, updatedAt: new Date() })
+      .where(eq(financingIntermediaries.id, params.intermediaryId));
+    await tx.insert(fiLifecycleEvents).values({
+      intermediaryId: params.intermediaryId,
+      fromStatus,
+      toStatus: params.newStatus,
+      actorUserId: params.actorUserId,
+      reason: params.reason ?? null,
+    });
+  });
+
+  writeAudit({
+    eventType: "admin_action",
+    severity: "info",
+    actorUserId: params.actorUserId,
+    reason: "fi_workspace_transition",
+    metadata: { intermediary_id: params.intermediaryId, from: fromStatus, to: params.newStatus },
+  });
+
+  const [updated] = await db.select(intermediarySelection).from(financingIntermediaries).where(eq(financingIntermediaries.id, params.intermediaryId)).limit(1);
+  return mapIntermediary(updated!);
+}
+
+/**
+ * Assert the workspace is active — throws 403 WORKSPACE_NOT_ACTIVE otherwise.
+ * Call at the start of every inbox/request operation.
+ */
+export async function assertWorkspaceActive(intermediaryId: string): Promise<void> {
+  const [row] = await db
+    .select({ workspaceStatus: financingIntermediaries.workspaceStatus })
+    .from(financingIntermediaries)
+    .where(eq(financingIntermediaries.id, intermediaryId))
+    .limit(1);
+  if (!row) throw Object.assign(new Error("Institution not found"), { code: "NOT_FOUND" });
+  if (row.workspaceStatus !== "active") {
+    throw Object.assign(
+      new Error("Institution workspace is not active"),
+      { code: "WORKSPACE_NOT_ACTIVE" },
+    );
+  }
+}
+
+/**
+ * Suspend all workspaces owned by a user (called on account delete/suspend).
+ * Idempotent: already-suspended workspaces are skipped.
+ */
+export async function suspendWorkspaceOnOwnerExit(ownerUserId: string): Promise<void> {
+  const ownedIntermediaries = await db
+    .select({ id: financingIntermediaries.id, workspaceStatus: financingIntermediaries.workspaceStatus })
+    .from(financingIntermediaries)
+    .where(eq(financingIntermediaries.workspaceOwnerUserId, ownerUserId));
+
+  for (const inst of ownedIntermediaries) {
+    if (inst.workspaceStatus === "suspended") continue;
+    await db.transaction(async (tx) => {
+      await tx
+        .update(financingIntermediaries)
+        .set({ workspaceStatus: "suspended", isActive: false, updatedAt: new Date() })
+        .where(eq(financingIntermediaries.id, inst.id));
+      await tx.insert(fiLifecycleEvents).values({
+        intermediaryId: inst.id,
+        fromStatus: inst.workspaceStatus as FiWorkspaceStatus,
+        toStatus: "suspended",
+        actorUserId: null,
+        reason: "owner_account_exit",
+      });
+    });
+  }
+}
+
+/**
+ * Get lifecycle events for an intermediary (timeline).
+ */
+export async function getLifecycleEvents(intermediaryId: string): Promise<FiLifecycleEventRow[]> {
+  const rows = await db
+    .select()
+    .from(fiLifecycleEvents)
+    .where(eq(fiLifecycleEvents.intermediaryId, intermediaryId))
+    .orderBy(desc(fiLifecycleEvents.createdAt));
+  return rows.map((r) => ({
+    id: r.id,
+    intermediary_id: r.intermediaryId,
+    from_status: r.fromStatus as FiWorkspaceStatus | null,
+    to_status: r.toStatus as FiWorkspaceStatus,
+    actor_user_id: r.actorUserId,
+    reason: r.reason,
+    created_at: r.createdAt ? r.createdAt.toISOString() : null,
+  }));
+}
+
+export async function getOwnedWorkspace(ownerUserId: string): Promise<FinancingIntermediaryRow | null> {
+  const [row] = await db
+    .select(intermediarySelection)
+    .from(financingIntermediaries)
+    .where(eq(financingIntermediaries.workspaceOwnerUserId, ownerUserId))
+    .limit(1);
+  return row ? mapIntermediary(row) : null;
+}
+
 /* ── FI phase 2: institution access (the bank's own side) ─────────────────
  *
  * The flow (user-locked): buyer requests financing → BANCO admin studies the
@@ -561,12 +793,10 @@ export async function resolveInstitutionMembership(
   const [owned] = await db
     .select({ id: financingIntermediaries.id, name: financingIntermediaries.name })
     .from(financingIntermediaries)
-    .where(
-      and(
-        eq(financingIntermediaries.ownerUserId, dbUserId),
-        eq(financingIntermediaries.isActive, true),
-      ),
-    )
+    // No isActive guard here — workspace_status is the access gate (assertWorkspaceActive).
+    // An FI owner's membership resolves regardless of workspace phase so callers
+    // that legitimately need to know "who owns this institution" still work.
+    .where(eq(financingIntermediaries.ownerUserId, dbUserId))
     .limit(1);
   if (owned) {
     return {
@@ -590,7 +820,10 @@ export async function resolveInstitutionMembership(
       eq(financingSeats.intermediaryId, financingIntermediaries.id),
     )
     .where(
-      and(eq(financingSeats.userId, dbUserId), eq(financingIntermediaries.isActive, true)),
+      and(
+        eq(financingSeats.userId, dbUserId),
+        eq(financingIntermediaries.isActive, true),
+      ),
     )
     .limit(1);
   if (!seat) return null;
@@ -628,6 +861,8 @@ export async function listInstitutionRequests(params: {
       code: "FORBIDDEN",
     });
   }
+
+  await assertWorkspaceActive(membership.intermediary_id);
 
   // The institution's branches ride the inbox response so the bank side needs
   // no admin-only endpoint to render its branch-routing picker. Names only —
@@ -737,6 +972,8 @@ export async function updateInstitutionRequest(params: {
       code: "FORBIDDEN",
     });
   }
+
+  await assertWorkspaceActive(membership.intermediary_id);
 
   const existing = await getFinancingRequestByLeadId(params.leadId);
   if (!existing || existing.intermediary_id !== membership.intermediary_id) {

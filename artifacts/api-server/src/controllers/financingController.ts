@@ -148,6 +148,71 @@ export async function updateFinancingIntermediaryHandler(req: Request, res: Resp
   }
 }
 
+/* ── FI phase 5: workspace lifecycle ──────────────────────────────────────── */
+
+export async function workspaceProvisionHandler(req: Request, res: Response) {
+  try {
+    const dbUser = await getDbUser(req.userId!);
+    if (!dbUser) throw Object.assign(new Error("User not found"), { code: "FORBIDDEN" });
+    const workspace = await FinancingService.ensureFiWorkspace(dbUser.id);
+    return res.json(successResponse(workspace));
+  } catch (err) {
+    return handleError(res, err, "[Workspace provision]", "Failed to provision workspace");
+  }
+}
+
+export async function workspaceStatusHandler(req: Request, res: Response) {
+  try {
+    const dbUser = await getDbUser(req.userId!);
+    if (!dbUser) throw Object.assign(new Error("User not found"), { code: "FORBIDDEN" });
+    const membership = await FinancingService.resolveInstitutionMembership(dbUser.id);
+    if (!membership) {
+      const ws = await FinancingService.getOwnedWorkspace(dbUser.id);
+      if (!ws) return res.status(404).json({ error: "No workspace found" });
+      return res.json(successResponse(ws));
+    }
+    const intermediaries = await FinancingService.listIntermediaries();
+    const im = intermediaries.find((i) => i.id === membership.intermediary_id);
+    if (!im) return res.status(404).json({ error: "Workspace not found" });
+    return res.json(successResponse({ ...im, membership }));
+  } catch (err) {
+    return handleError(res, err, "[Workspace status]", "Failed to load workspace status");
+  }
+}
+
+export async function workspaceEventsHandler(req: Request, res: Response) {
+  try {
+    const dbUser = await getDbUser(req.userId!);
+    if (!dbUser) throw Object.assign(new Error("User not found"), { code: "FORBIDDEN" });
+    const membership = await FinancingService.resolveInstitutionMembership(dbUser.id);
+    if (!membership) return res.status(403).json({ error: "Not an institution member" });
+    const events = await FinancingService.getLifecycleEvents(membership.intermediary_id);
+    return res.json(successResponse(events));
+  } catch (err) {
+    return handleError(res, err, "[Workspace events]", "Failed to load workspace events");
+  }
+}
+
+export async function workspaceTransitionHandler(req: Request, res: Response) {
+  try {
+    const dbUser = await getDbUser(req.userId!);
+    if (!dbUser) throw Object.assign(new Error("User not found"), { code: "FORBIDDEN" });
+    const { intermediary_id, new_status, reason } = req.body;
+    if (!intermediary_id || !new_status) {
+      return res.status(400).json({ error: "intermediary_id and new_status are required" });
+    }
+    const result = await FinancingService.transitionWorkspaceStatus({
+      intermediaryId: intermediary_id,
+      newStatus: new_status,
+      actorUserId: dbUser.id,
+      reason,
+    });
+    return res.json(successResponse(result));
+  } catch (err) {
+    return handleError(res, err, "[Workspace transition]", "Failed to transition workspace status");
+  }
+}
+
 /* ── FI phase 2: institution inbox (bank-side, requireAuth) ─────────────── */
 
 /** Resolve the caller's db user id (requireAuth gives us the Clerk id only). */

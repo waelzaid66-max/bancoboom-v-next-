@@ -21,6 +21,7 @@ import { getObjectStorageService } from "../lib/objectStorageProvider";
 import { checkProfileMutationRate, flagDuplicateAccount } from "./AbuseService";
 import { sendWelcomeEmail } from "./EmailService";
 import { mergeBusinessCompanyDetails } from "../lib/mergeBusinessCompanyDetails";
+import { suspendWorkspaceOnOwnerExit } from "./FinancingService";
 
 export async function getOrCreateUser(clerkId: string, data?: { name?: string; email?: string }) {
   const [existing] = await db
@@ -503,6 +504,11 @@ export async function deleteAccount(clerkId: string): Promise<{ deleted: boolean
     // the institution inbox / buyer PII after soft-delete.
     await tx.delete(financingSeats).where(eq(financingSeats.userId, user.id));
   });
+
+  // Suspend all FI workspaces owned by this user — fire-and-forget (non-blocking).
+  void suspendWorkspaceOnOwnerExit(user.id).catch((err) =>
+    logger.warn({ err }, "fi workspace suspension failed (non-blocking)")
+  );
 
   // Best-effort storage cleanup AFTER the tombstone is durable: delete the
   // actual chat media objects so blobs can't outlive the DB scrub. A storage

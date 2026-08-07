@@ -29,6 +29,13 @@
       "when": 1785759024001,
       "tag": "0003_typical_human_robot",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1754611200000,
+      "tag": "0004_fi_workspace_lifecycle",
+      "breakpoints": true
     }
   ]
 }

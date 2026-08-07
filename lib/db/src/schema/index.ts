@@ -107,6 +107,13 @@ export const financingStatusEnum = pgEnum("financing_status", [
   "rejected",
 ]);
 
+export const fiWorkspaceStatusEnum = pgEnum("fi_workspace_status", [
+  "draft",
+  "pending_review",
+  "active",
+  "suspended",
+]);
+
 export const adTypeEnum = pgEnum("ad_type", [
   "featured",
   "native_feed",
@@ -2362,6 +2369,10 @@ export const financingIntermediaries = pgTable(
       onDelete: "set null",
     }),
     isActive: boolean("is_active").notNull().default(true),
+    workspaceStatus: fiWorkspaceStatusEnum("workspace_status").notNull().default("draft"),
+    workspaceOwnerUserId: uuid("workspace_owner_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -2449,6 +2460,28 @@ export const financingRequests = pgTable(
     index("idx_financing_requests_intermediary").on(table.intermediaryId),
   ]
 );
+
+export const fiLifecycleEvents = pgTable(
+  "fi_lifecycle_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    intermediaryId: uuid("intermediary_id")
+      .references(() => financingIntermediaries.id, { onDelete: "cascade" })
+      .notNull(),
+    fromStatus: fiWorkspaceStatusEnum("from_status"),
+    toStatus: fiWorkspaceStatusEnum("to_status").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    reason: text("reason"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_fi_lifecycle_events_intermediary").on(table.intermediaryId),
+    index("idx_fi_lifecycle_events_created_at").on(table.createdAt),
+  ]
+);
+
+export type FiLifecycleEvent = typeof fiLifecycleEvents.$inferSelect;
+export type InsertFiLifecycleEvent = typeof fiLifecycleEvents.$inferInsert;
 
 export type FinancingIntermediary = typeof financingIntermediaries.$inferSelect;
 export type InsertFinancingIntermediary = typeof financingIntermediaries.$inferInsert;

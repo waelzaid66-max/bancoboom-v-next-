@@ -2,8 +2,12 @@ import { Router } from "express";
 import {
   institutionInboxHandler,
   institutionUpdateRequestHandler,
+  workspaceProvisionHandler,
+  workspaceStatusHandler,
+  workspaceEventsHandler,
+  workspaceTransitionHandler,
 } from "../../controllers/financingController";
-import { requireAuth } from "../../middlewares/authGuard";
+import { requireAuth, requireAdminRole } from "../../middlewares/authGuard";
 import { writeRateLimiter, publicRateLimiter } from "../../middlewares/rateLimiter";
 
 const router = Router();
@@ -19,5 +23,11 @@ router.patch(
   requireAuth,
   institutionUpdateRequestHandler,
 );
+
+// FI phase 5 — workspace lifecycle
+router.post("/workspace", writeRateLimiter, requireAuth, workspaceProvisionHandler);
+router.get("/workspace", publicRateLimiter, requireAuth, workspaceStatusHandler);
+router.get("/workspace/events", publicRateLimiter, requireAuth, workspaceEventsHandler);
+router.patch("/workspace/status", writeRateLimiter, requireAuth, requireAdminRole, workspaceTransitionHandler);
 
 export default router;
