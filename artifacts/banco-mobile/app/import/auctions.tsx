@@ -184,11 +184,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-<<<<<<< HEAD
-    backgroundColor: sectionAccentAlpha("car", 0.12),
-=======
     backgroundColor: RED_TINT(0.12),
->>>>>>> origin/claude/project-understanding-manager-lcgi3u
     alignItems: "center",
     justifyContent: "center",
   },

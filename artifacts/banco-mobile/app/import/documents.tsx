@@ -161,11 +161,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-<<<<<<< HEAD
-    backgroundColor: sectionAccentAlpha("car", 0.12),
-=======
     backgroundColor: RED_TINT(0.12),
->>>>>>> origin/claude/project-understanding-manager-lcgi3u
     alignItems: "center",
     justifyContent: "center",
   },
@@ -180,11 +176,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-<<<<<<< HEAD
-    backgroundColor: sectionAccentAlpha("car", 0.10),
-=======
     backgroundColor: RED_TINT(0.10),
->>>>>>> origin/claude/project-understanding-manager-lcgi3u
     borderRadius: 999,
     paddingHorizontal: 9,
     paddingVertical: 4,
