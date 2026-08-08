@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   hostsFromIntentFilters,
   mergeAndroidAppLinkFilters,
@@ -125,6 +125,10 @@ test("nginx + Dockerfile.web ship well-known AASA/assetlinks templates", () => {
   assert.ok(fs.existsSync(assetlinks), "assetlinks template missing");
   const aasaText = fs.readFileSync(aasa, "utf8");
   const assetText = fs.readFileSync(assetlinks, "utf8");
+  // The two placeholders MUST stay in Git. The Apple Team ID and the Play
+  // signing fingerprint are owner-only credentials; committing a made-up value
+  // would be worse than leaving the slot empty. What must never happen is that
+  // slot reaching production — that is what the renderer tests below cover.
   assert.match(aasaText, /REPLACE_APPLE_TEAM_ID/);
   assert.match(aasaText, new RegExp(CANONICAL_PACKAGE.replace(/\./g, "\\.")));
   assert.doesNotMatch(aasaText, new RegExp(FORBIDDEN_PACKAGE.replace(/\./g, "\\.")));
@@ -135,6 +139,107 @@ test("nginx + Dockerfile.web ship well-known AASA/assetlinks templates", () => {
   assert.match(nginx, /default_type\s+application\/json/);
   assert.match(dockerfile, /well-known\/apple-app-site-association/);
   assert.match(dockerfile, /well-known\/assetlinks\.json/);
+});
+
+test("Dockerfile.web serves rendered well-known files, not the raw templates", () => {
+  const root = path.resolve(APP_ROOT, "../..");
+  const dockerfile = fs.readFileSync(
+    path.join(root, "deploy/coolify/Dockerfile.web"),
+    "utf8",
+  );
+  // The original defect: `COPY deploy/coolify/well-known/... /usr/share/nginx/`
+  // baked the unfilled template straight into the image, so production served a
+  // parseable HTTP 200 whose fingerprint field read REPLACE_PLAY_APP_SIGNING_SHA256.
+  // Nothing failed — Apple and Google just never verified. The nginx stage must
+  // take these two files from the renderer's output only.
+  for (const name of ["apple-app-site-association", "assetlinks.json"]) {
+    assert.match(
+      dockerfile,
+      new RegExp(`COPY --from=builder /well-known/${name.replace(/\./g, "\\.")}\\s`),
+      `${name} must be copied from the renderer output (/well-known), never from the build context`,
+    );
+    assert.doesNotMatch(
+      dockerfile,
+      new RegExp(`^COPY deploy/coolify/well-known/${name.replace(/\./g, "\\.")}`, "m"),
+      `${name} is being copied straight from the context again — that is the bug`,
+    );
+  }
+  assert.match(dockerfile, /render-well-known\.mjs/, "the renderer must run in the build");
+  assert.match(dockerfile, /WELL_KNOWN_STRICT/, "the strict switch must be a build arg");
+});
+
+test("the renderer refuses every way a placeholder could reach production", async () => {
+  const root = path.resolve(APP_ROOT, "../..");
+  const mod = await import(
+    pathToFileURL(path.join(root, "deploy/coolify/well-known/render-well-known.mjs")).href
+  );
+  const GOOD_TEAM = "ABCDE12345";
+  const GOOD_FP = Array(32).fill("AB").join(":");
+
+  // Strict build with nothing supplied — the store-verification path. Must throw,
+  // which in the Dockerfile is a non-zero RUN and a failed image.
+  assert.throws(
+    () => mod.resolveCredentials({}, { strict: true }),
+    /APPLE_TEAM_ID and PLAY_APP_SIGNING_SHA256 not supplied/,
+  );
+  assert.throws(
+    () => mod.resolveCredentials({ APPLE_TEAM_ID: GOOD_TEAM }, { strict: true }),
+    /PLAY_APP_SIGNING_SHA256 not supplied/,
+  );
+
+  // A malformed value is rejected in BOTH modes. A wrong fingerprint does not
+  // announce itself — it fails verification silently, days later, on a device.
+  for (const strict of [false, true]) {
+    assert.throws(
+      () =>
+        mod.resolveCredentials(
+          { APPLE_TEAM_ID: "com.bancooom.app", PLAY_APP_SIGNING_SHA256: GOOD_FP },
+          { strict },
+        ),
+      /not a Team ID/,
+    );
+    assert.throws(
+      () =>
+        mod.resolveCredentials(
+          { APPLE_TEAM_ID: GOOD_TEAM, PLAY_APP_SIGNING_SHA256: "deadbeef" },
+          { strict },
+        ),
+      /not a SHA-256 fingerprint/,
+    );
+  }
+
+  // Non-strict with nothing supplied is the landing/market/admin build: allowed
+  // through, but reported as unfilled so the warning banner prints.
+  const relaxed = mod.resolveCredentials({}, { strict: false });
+  assert.equal(relaxed.mode, "passthrough");
+  assert.deepEqual(relaxed.missing, ["APPLE_TEAM_ID", "PLAY_APP_SIGNING_SHA256"]);
+
+  // Both shapes a human actually pastes resolve to the same rendered file.
+  for (const fp of [GOOD_FP, "ab".repeat(32)]) {
+    const creds = mod.resolveCredentials(
+      { APPLE_TEAM_ID: GOOD_TEAM.toLowerCase(), PLAY_APP_SIGNING_SHA256: fp },
+      { strict: true },
+    );
+    assert.equal(creds.mode, "render");
+    const out = mod.renderTemplate(
+      "assetlinks.json",
+      fs.readFileSync(path.join(root, "deploy/coolify/well-known/assetlinks.json"), "utf8"),
+      creds,
+    );
+    assert.doesNotMatch(out, /REPLACE_/);
+    assert.deepEqual(JSON.parse(out)[0].target.sha256_cert_fingerprints, [GOOD_FP]);
+  }
+
+  // And a template that grows an unknown placeholder must not render as if filled.
+  assert.throws(
+    () =>
+      mod.renderTemplate(
+        "assetlinks.json",
+        '{"a":"REPLACE_SOMETHING_NEW","p":"com.bancooom.app"}',
+        { teamId: GOOD_TEAM, fingerprint: GOOD_FP },
+      ),
+    /REPLACE_/,
+  );
 });
 
 test("custom scheme bancooom remains in app.json", () => {

@@ -28,7 +28,11 @@ import { AppText } from "@/components/AppText";
 import { MiniAppBottomNav } from "@/components/MiniAppBottomNav";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
-import { SECTION_HERO_RAMP, sectionAccent, sectionAccentAlpha } from "@/lib/sectionTheme";
+import {
+  SECTION_HERO_RAMP,
+  sectionAccent,
+  sectionAccentAlpha,
+} from "@/lib/sectionTheme";
 
 import { SOURCES as AUCTION_SOURCES } from "./auctions";
 
@@ -37,6 +41,10 @@ import { SOURCES as AUCTION_SOURCES } from "./auctions";
  *  family the app never chose, sitting ΔE ≈ 19 from the logo. Owner ruling
  *  2026-08-02: colours track the identity of the app as a whole. */
 const RED = sectionAccent("car");
+/** Tints of the SAME accent. They used to be written as rgba(229,57,53,…) —
+ *  the old Material red surviving in a notation the hex guard could not see.
+ *  Derived now, so a tint can never disagree with the accent it tints. */
+const RED_TINT = (alpha: number) => sectionAccentAlpha("car", alpha);
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -462,9 +470,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: sectionAccentAlpha("car", 0.22),
+    backgroundColor: RED_TINT(0.22),
     borderWidth: 1,
-    borderColor: sectionAccentAlpha("car", 0.45),
+    borderColor: RED_TINT(0.45),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -526,7 +534,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: sectionAccentAlpha("car", 0.12),
+    backgroundColor: RED_TINT(0.12),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -568,7 +576,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: sectionAccentAlpha("car", 0.12),
+    backgroundColor: RED_TINT(0.12),
     alignItems: "center",
     justifyContent: "center",
   },

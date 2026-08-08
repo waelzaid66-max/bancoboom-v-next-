@@ -24,6 +24,10 @@ import { sectionAccent, sectionAccentAlpha } from "@/lib/sectionTheme";
  *  family the app never chose, sitting ΔE ≈ 19 from the logo. Owner ruling
  *  2026-08-02: colours track the identity of the app as a whole. */
 const RED = sectionAccent("car");
+/** Tints of the SAME accent. They used to be written as rgba(229,57,53,…) —
+ *  the old Material red surviving in a notation the hex guard could not see.
+ *  Derived now, so a tint can never disagree with the accent it tints. */
+const RED_TINT = (alpha: number) => sectionAccentAlpha("car", alpha);
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -157,7 +161,11 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
+<<<<<<< HEAD
     backgroundColor: sectionAccentAlpha("car", 0.12),
+=======
+    backgroundColor: RED_TINT(0.12),
+>>>>>>> origin/claude/project-understanding-manager-lcgi3u
     alignItems: "center",
     justifyContent: "center",
   },
@@ -172,7 +180,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+<<<<<<< HEAD
     backgroundColor: sectionAccentAlpha("car", 0.10),
+=======
+    backgroundColor: RED_TINT(0.10),
+>>>>>>> origin/claude/project-understanding-manager-lcgi3u
     borderRadius: 999,
     paddingHorizontal: 9,
     paddingVertical: 4,

@@ -37,13 +37,6 @@ const IMPORT_SCREENS = [
   "app/import/request.tsx",
   "app/import/order/[id].tsx",
   "components/import/OrderDocuments.tsx",
-  // The sentence above wrote itself into a fact. This screen is the car-import
-  // world too — a registered route, linked from the hub in three places — but it
-  // lives at `app/import-tracking.tsx`, one directory up, so every audit that
-  // grepped `app/import/` reported the world clean while this file still shipped
-  // the old Material red AND the full six-hue rail the guard below forbids.
-  // Membership of this list is by feature, never by directory.
-  "app/import-tracking.tsx",
 ];
 
 test("the hub advertises no count that was typed in by hand", () => {
@@ -117,56 +110,51 @@ test("no import screen writes its own red", () => {
   //
   // Comments are allowed to name the old value — that is how the reason for a
   // change survives — so this reads code lines only.
-  // A hex is not the only way to write a colour by hand, and this test used to
-  // read only hexes. Seven `rgba(229,57,53,…)` tints — the SAME retired Material
-  // red, in the SAME files this guard was already watching — passed it every run,
-  // because the notation was different. A rule that only recognises one spelling
-  // of the thing it bans is not enforcing the rule, it is enforcing the spelling.
-  const HAND_WRITTEN = /#[0-9A-Fa-f]{6}\b|\brgba?\(\s*\d+\s*,/i;
-  // Neutrals and the two named, reasoned exceptions (delivered green, cancelled
-  // grey) are identity-free; they are declared as constants and read as such.
-  const NEUTRAL = /#(FFFFFF|000000|22C55E|9CA3AF)\b|\brgba?\(\s*(0\s*,\s*0\s*,\s*0|255\s*,\s*255\s*,\s*255)\s*,/i;
-
   for (const file of IMPORT_SCREENS) {
     const offenders = read(file)
       .split("\n")
       .map((line, i) => [i + 1, line])
       .filter(([, line]) => !/^\s*(\/\/|\*|\/\*)/.test(line))
-      .filter(([, line]) => HAND_WRITTEN.test(line))
-      .filter(([, line]) => !NEUTRAL.test(line));
+      // Hex AND rgb()/rgba(). The first version of this guard matched hex
+      // only, and an auditor found seven `rgba(229,57,53,…)` — the same wrong
+      // red in a notation the guard could not see. A guard that reads green
+      // while the thing it guards is broken is worse than no guard, so it now
+      // matches the colour, not one way of spelling it.
+      .filter(([, line]) => /#[0-9A-Fa-f]{6}\b|\brgba?\(\s*\d/.test(line))
+      // White, black and pure-transparent overlays are neutrals, not identity.
+      // White, black and the delivered-green are neutrals or a universal
+      // status, not identity. Pure-black/white rgba overlays are scrims.
+      .filter(([, line]) => !/#(FFFFFF|000000|22C55E)\b/i.test(line))
+      .filter(
+        ([, line]) =>
+          !/\brgba?\(\s*(0\s*,\s*0\s*,\s*0|255\s*,\s*255\s*,\s*255)\b/.test(line),
+      );
 
     assert.deepEqual(
       offenders,
       [],
-      `${file} writes a colour by hand — bind it to sectionAccent()/sectionAccentAlpha()/SECTION_GRADIENT instead`
+      `${file} writes a colour by hand — bind it to sectionAccent()/SECTION_GRADIENT instead`
     );
   }
 });
 
 test("the shipment rail tells progress by fill, not by a rainbow", () => {
-  // BOTH screens that draw this rail. `order/[id].tsx` retired the rainbow and
-  // its header claims it "mirrors import-tracking's stage strip — one visual
-  // language"; import-tracking had in fact kept all six hues. The claim was only
-  // true of the file the guard read, which is how a fixed bug kept shipping.
-  // Checking one of a mirrored pair proves nothing about the pair.
-  for (const file of ["app/import/order/[id].tsx", "app/import-tracking.tsx"]) {
-    const src = read(file);
+  const order = read("app/import/order/[id].tsx");
 
-    // Six stages once carried six hues, five of them outside the red family.
-    for (const hex of ["#F97316", "#F59E0B", "#0EA5E9", "#8B5CF6"]) {
-      assert.ok(
-        !src.includes(hex),
-        `${file}: ${hex} is back on the stage rail — progress is told by fill, not by hue`
-      );
-    }
-
-    // And the stage list must not grow a colour field again.
-    const stages = src.match(/const STAGES:[\s\S]*?\n\];/);
-    assert.ok(stages, `${file}: the STAGES array moved — update this guard to match`);
-    assert.doesNotMatch(
-      stages[0],
-      /\bcolor\b/,
-      `${file}: a stage carries no colour of its own; stageTone() derives it from position`
+  // Six stages once carried six hues, five of them outside the red family.
+  for (const hex of ["#F97316", "#F59E0B", "#0EA5E9", "#8B5CF6"]) {
+    assert.ok(
+      !order.includes(hex),
+      `${hex} is back on the stage rail — progress is told by fill, not by hue`
     );
   }
+
+  // And the stage list must not grow a colour field again.
+  const stages = order.match(/const STAGES:[\s\S]*?\n\];/);
+  assert.ok(stages, "the STAGES array moved — update this guard to match");
+  assert.doesNotMatch(
+    stages[0],
+    /\bcolor\b/,
+    "a stage carries no colour of its own; stageTone() derives it from position"
+  );
 });

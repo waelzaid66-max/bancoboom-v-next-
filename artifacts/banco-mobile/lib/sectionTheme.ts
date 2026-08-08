@@ -163,3 +163,31 @@ export const SECTION_NEUTRAL = {
   /** The only divider. Four different opacities existed before this line. */
   hairline: "rgba(255,255,255,0.06)",
 } as const;
+
+/**
+ * A section's accent at a given opacity — for tinted grounds and soft borders.
+ *
+ * This exists because an auditor found the hole it closes. The import screens
+ * were unified onto `sectionAccent("car")`, and the guard written to hold them
+ * there matched `#RRGGBB` — so seven values that had been written as
+ * `rgba(229,57,53,…)` sailed straight through it. Same wrong red, different
+ * notation, and a guard that read as green while the thing it guarded was
+ * broken.
+ *
+ * Deriving the channels from the token means the tint cannot disagree with the
+ * accent it is meant to be a tint OF, and there is no second literal to miss.
+ */
+export function sectionAccentAlpha(
+  category: Category | null | undefined,
+  alpha: number,
+): string {
+  const hex = sectionAccent(category);
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  // Clamped: an out-of-range alpha from a caller would render an invalid CSS
+  // colour, which React Native drops silently — an invisible element rather
+  // than an obvious mistake.
+  const a = Math.max(0, Math.min(Number(alpha) || 0, 1));
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}

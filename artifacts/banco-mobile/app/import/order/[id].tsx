@@ -242,7 +242,10 @@ export default function ImportOrderDetailScreen() {
             <View
               style={[
                 styles.cancelledBanner,
-                { flexDirection: rowDir, backgroundColor: colors.muted },
+                {
+                  flexDirection: rowDir,
+                  backgroundColor: colors.secondary,
+                },
               ]}
               testID="import-order-cancelled"
             >
@@ -368,11 +371,10 @@ export default function ImportOrderDetailScreen() {
                 {
                   opacity: cancelling ? 0.6 : 1,
                   flexDirection: rowDir,
-                  // Was a flat rgba(239,68,68,.5) — Tailwind red-500, which is
-                  // neither theme's destructive (#FF3B30 dark / #DC2626 light).
-                  // The label beside it was already themed, so the button drew
-                  // its border in one red and its text in another.
-                  borderColor: `${colors.destructive}80`,
+                  // Destructive is a THEME role, not a colour to type out. It
+                  // was rgba(239,68,68,0.5) — Tailwind's red, unrelated to the
+                  // app's — and it slipped past a hex-only guard.
+                  borderColor: colors.destructive,
                 },
               ]}
               accessibilityRole="button"
@@ -459,6 +461,9 @@ const styles = StyleSheet.create({
   cancelledBanner: {
     alignItems: "center",
     gap: 8,
+    // Tint comes from the theme at the call site — a StyleSheet cannot read the
+    // hook, and hard-coding it is how rgba(156,163,175,…) got in and then slid
+    // past a guard that only knew how to read hex.
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,

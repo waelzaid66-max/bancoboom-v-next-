@@ -1410,13 +1410,16 @@ export function SectionSearchApp({
    * without the hero having to leave the list to be animated.
    */
   const carScrollY = useSharedValue(0);
-  /** One shared value per section that collapses. Separate values rather than
-   *  one shared offset: only one section mounts at a time, but a single value
-   *  would carry the previous section's scroll position into the next one's
-   *  first frame. Property + Materials from headers-dynamic-polish, Facilities
-   *  from five-headers — merged 2026-08-03. */
+  /** Same contract as `carScrollY`, for the Property split. Separate values
+   *  rather than one shared offset: only one section is ever mounted, but a
+   *  single value would carry the previous section's scroll position into the
+   *  next one's first frame. */
   const propertyScrollY = useSharedValue(0);
+  /** Same again for Materials. */
   const materialsScrollY = useSharedValue(0);
+  /** Same mechanism for Factories: the pinned half reads it to collapse the
+   *  brand lockup. Separate value per section — one shared offset would carry
+   *  a stale scroll position across a section change. */
   const facilitiesScrollY = useSharedValue(0);
 
   /** B-INDUSTRY's scrolling slice — hero, type strip, proven count. Placed here,
@@ -1700,6 +1703,11 @@ export function SectionSearchApp({
       ) : isCarSection ? (
         <CarsHomeHeader
           slot="pinned"
+          // The filter bands below are painted here, in this component, right
+          // under the pinned header. Telling the header they continue it drops
+          // its rounded bottom + shadow so the two stop reading as separate
+          // cards — the closing edge moves to the last filter row.
+          continuesBelow
           scrollY={carScrollY}
           searchOpen={searchOpen}
           draftQuery={draftQuery}
@@ -1814,8 +1822,10 @@ export function SectionSearchApp({
         >
           <Feather name="search" size={18} color={draftQuery ? "#FFFFFF" : colors.foreground} />
         </Pressable>
-        {/* W9 D-W9-02: Factories (and other generic-header worlds) need a header
-            map hit — FAB alone is easy to miss. Do NOT invent FactoriesHomeHeader. */}
+        {/* W9 D-W9-02: generic-header worlds need a header map hit — the FAB
+            alone is easy to miss. Facilities has its own FacilitiesHomeHeader
+            now (imported, memoised and rendered above); this affordance still
+            serves the sections that fall back to the generic header. */}
         <Pressable
           onPress={() => {
             playSound(tap);
@@ -1971,8 +1981,18 @@ export function SectionSearchApp({
       // the page. The section flag lives HERE, on the wrapper — never between
       // the strip and MarketCountryButton, which a guard keeps ungated.
       <View style={isCarSection ? styles.carFilterPanel : undefined}>
-      <View
-        style={[styles.chipStrip, { flexDirection: rowDir }]}
+      {/* One clean horizontal strip instead of a wrapping block. The axes used
+          to wrap into ragged two- and three-line rows that read as loose chips
+          dumped under the header; on a horizontal scroll they stay a single
+          strip inside the header design, the way the type strip and the brand
+          strip already do. Nothing is removed — every axis is still here and
+          reachable, just on one line with the divider marking the compartments
+          (market · sort │ offer · condition). */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.hScroll}
+        contentContainerStyle={[styles.chipStripRow, { flexDirection: rowDir }]}
         testID="section-primary-strip"
       >
         <MarketCountryButton
@@ -2016,12 +2036,13 @@ export function SectionSearchApp({
             color={criteria.sort !== "recommended" ? "#FFFFFF" : colors.mutedForeground}
           />
         </Pressable>
-        {(showListingMode || showEngineChips || showIndustrialChips) ? (
+        {showListingMode ? (
           <View style={[styles.chipStripDivider, { backgroundColor: colors.border }]} />
         ) : null}
-        {/* Offer + engine axes: the SECTION decides the shape, this only renders
-            it. Cars ask for chips (REL-17) so new/used/import/instalment stay
-            visible. A section whose axis is set once may ask for a pill. */}
+        {/* Offer axis stays on the primary strip next to market + sort. The
+            engine/condition chips (new/used/import/instalment) moved to their
+            own strip below so they lead their own line and are not pushed off
+            the right edge behind the offer pill — visible, not hidden. */}
         {showListingMode ? (
           axisShape(chrome, "listingMode") === "pill" ? (
             <FilterPillSelect
@@ -2060,6 +2081,19 @@ export function SectionSearchApp({
             })
           )
         ) : null}
+      </ScrollView>
+      {/* Condition/engine strip — its own clean line so new/used/import/
+          instalment lead the row instead of scrolling off behind the offer
+          pill. Same compartment surface as the strip above; a section that
+          wants its axis as a single pill still gets one, here. */}
+      {(showEngineChips || showIndustrialChips) ? (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.hScroll}
+        contentContainerStyle={[styles.chipStripRow, { flexDirection: rowDir }]}
+        testID="section-engine-strip"
+      >
         {showEngineChips ? (
           axisShape(chrome, "engines") === "pill" ? (
             <FilterPillSelect
@@ -2115,8 +2149,8 @@ export function SectionSearchApp({
             </Pressable>
           );
         }) : null}
-
-      </View>
+      </ScrollView>
+      ) : null}
       </View>
       ) : null}
 
@@ -2624,15 +2658,16 @@ export function SectionSearchApp({
           onRefresh={retry}
           overlay={overlay}
           contentPaddingBottom={insets.bottom + 150}
-          // Merged 2026-08-03. Cars pin every band and animate their own
-          // collapse (five-headers), so cars is NOT in listHeader — the hero,
-          // type strip and stats were being covered by the empty-state overlay
-          // when they rode the list. Materials rides the list header
-          // (headers-dynamic-polish); Facilities too (five-headers). Only one
-          // section mounts, so the ?? chain resolves to that section's header.
+          // Cars keep every band pinned now — the hero, the type strip and the
+          // stats were all being covered by the empty-state overlay when they
+          // rode in the list header, which is why none of them were ever on
+          // screen. Property does the same. Materials and Facilities still hand
+          // the list a scrolling half.
           listHeader={materialsScrollHeader ?? facilitiesScrollHeader}
-          // Every section that collapses reads its own offset; the rest leave
-          // it undefined so the list attaches no scroll handler at all.
+          // Every section that animates its collapse needs the offset: Cars and
+          // Property read it from their pinned half, Materials and Facilities
+          // from their scrolling half. Every other section leaves this
+          // undefined and the list attaches no scroll handler at all.
           scrollY={
             isCarSection
               ? carScrollY
@@ -2882,6 +2917,19 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 2,
   },
+  /** Single-line variant of chipStrip for the primary axis strip. No wrap: it
+   *  is the content of a horizontal scroll, so the axes stay on one clean line
+   *  (market · sort · offer · condition) instead of wrapping into ragged rows.
+   *  Same rhythm/padding as chipStrip so the compartment lines up with the
+   *  bands above and below it. */
+  chipStripRow: {
+    alignItems: "center",
+    flexGrow: 0,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 2,
+  },
   /** Cars filter surface — the same #090909 the header root uses, so the chips
    *  continue the header card rather than floating on the page. */
   carFilterPanel: {
@@ -2889,12 +2937,20 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   /** The last cars filter row: same surface, and the rounded bottom that closes
-   *  the card off. */
+   *  the card off. This row is now the bottom edge of the whole header+filters
+   *  card, so it also carries the soft shadow the pinned header used to own —
+   *  the card floats over the results from here, its one closing edge. */
   carFilterPanelFooter: {
     backgroundColor: SECTION_NEUTRAL.void,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
     paddingBottom: 10,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+    zIndex: 10,
   },
   chipStripDivider: {
     width: 1,
