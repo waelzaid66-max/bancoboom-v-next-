@@ -6,6 +6,8 @@ on:
     paths:
       - "artifacts/banco-web/**"
       - "artifacts/banco-website/**"
+      - "artifacts/api-server/**"
+      - "lib/db/**"
       - "lib/design-tokens/**"
       - "lib/search-contract/**"
       - "deploy/aws/Dockerfile.banco-web"
@@ -16,12 +18,15 @@ on:
       - "deploy/coolify/nginx.conf"
       - "docker-compose.coolify.yml"
       - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - "package.json"
       - ".github/workflows/ci-website-docker.yml"
   pull_request:
     paths:
       - "artifacts/banco-web/**"
       - "artifacts/banco-website/**"
+      - "artifacts/api-server/**"
+      - "lib/db/**"
       - "lib/design-tokens/**"
       - "lib/search-contract/**"
       - "deploy/aws/Dockerfile.banco-web"
@@ -32,6 +37,7 @@ on:
       - "deploy/coolify/nginx.conf"
       - "docker-compose.coolify.yml"
       - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - "package.json"
       - ".github/workflows/ci-website-docker.yml"
   workflow_dispatch:

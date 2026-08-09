@@ -2045,6 +2045,105 @@ const CHECKS = [
       !/\*\*أساسي\*\*\s*\|\s*https:\/\/github\.com\/waelzaid66-max\/-BANCO-CA-OOM-/.test(s),
     why: "The repository-status entry point must not present the retired pre-consolidation repo as primary",
   },
+  {
+    id: "P-dependency-security-gate-policy",
+    file: "scripts/dependency-security-gate.mjs",
+    test: (s) =>
+      /runPnpm\(\["audit", "--prod", "--json"\]\)/.test(s) &&
+      /pnpm \$\{REQUIRED_PNPM_VERSION\} is required/.test(s) &&
+      /moderate", "high", "critical"/.test(s) &&
+      /GHSA-w3rx-r6r6-pgpr/i.test(s) &&
+      /GHSA-5p2g-fcmc-qvqq/i.test(s) &&
+      /2026-09-09T00:00:00Z/.test(s) &&
+      /Direct product imports and non-mobile\/non-Metro paths remain forbidden/.test(
+        s,
+      ),
+    why: "Production dependencies must fail closed except the exact, expiring Metro image-size waiver",
+  },
+  {
+    id: "P-dependency-security-gate-ci",
+    file: ".github/workflows/ci.yml",
+    test: (s) =>
+      /Production dependency security gate[\s\S]*pnpm run security:audit/.test(
+        s,
+      ),
+    why: "Primary CI must execute the production dependency security gate",
+  },
+  {
+    id: "P-deploy-verify-exact-ref",
+    file: ".github/workflows/deploy.yml",
+    test: (s) => {
+      const verify = s.slice(
+        s.indexOf("  verify:"),
+        s.indexOf("  build-and-push:"),
+      );
+      const build = s.slice(
+        s.indexOf("  build-and-push:"),
+        s.indexOf("  deploy:"),
+      );
+      const deploy = s.slice(s.indexOf("  deploy:"));
+      return (
+        /outputs:[\s\S]*candidate_sha:[\s\S]*steps\.candidate\.outputs\.sha/.test(
+          verify,
+        ) &&
+        /id: candidate[\s\S]*git rev-parse HEAD/.test(verify) &&
+        /pnpm run security:audit/.test(verify) &&
+        /ref: \$\{\{ needs\.verify\.outputs\.candidate_sha \}\}/.test(build) &&
+        /GIT_SHA="\$CANDIDATE_SHA"/.test(build) &&
+        /needs: \[verify, build-and-push\]/.test(deploy) &&
+        /git checkout --detach %q/.test(deploy)
+      );
+    },
+    why: "Deploy must resolve one immutable SHA, verify/build/deploy only that SHA, and enforce the dependency gate",
+  },
+  {
+    id: "P-docker-ci-api-change-paths",
+    file: ".github/workflows/ci-website-docker.yml",
+    test: (s) =>
+      (s.match(/artifacts\/api-server\/\*\*/g) ?? []).length === 2 &&
+      (s.match(/lib\/db\/\*\*/g) ?? []).length === 2,
+    why: "API and migration changes must trigger every API Docker build on push and pull request",
+  },
+  {
+    id: "P-website-ci-local-build-parity",
+    file: "scripts/website-ci-local.mjs",
+    test: (s) =>
+      /--filter @workspace\/banco-web run build/.test(s) &&
+      /--filter @workspace\/banco-website run build/.test(s),
+    why: "The local website CI mirror must build both Next.js website surfaces like GitHub CI",
+  },
+  ...[
+    ["website", ".github/workflows/ci-website.yml"],
+    ["docker", ".github/workflows/ci-website-docker.yml"],
+  ].map(([name, file]) => ({
+    id: `P-workspace-policy-${name}-ci-paths`,
+    file,
+    test: (s) => (s.match(/pnpm-workspace\.yaml/g) ?? []).length === 2,
+    why: "Workspace dependency policy changes must trigger push and pull-request CI path filters",
+  })),
+  {
+    id: "P-next-build-export-cleanup-policy",
+    file: "scripts/prepare-next-build.mjs",
+    test: (s) =>
+      /artifacts\/banco-web/.test(s) &&
+      /artifacts\/banco-website/.test(s) &&
+      /\.next", "export/.test(s) &&
+      /maxRetries:\s*5/.test(s) &&
+      /Refusing to clean/.test(s),
+    why: "Repeated Next builds must clear only allowlisted stale export output before compiling",
+  },
+  ...[
+    ["web", "artifacts/banco-web/package.json", "artifacts/banco-web"],
+    ["website", "artifacts/banco-website/package.json", "artifacts/banco-website"],
+  ].map(([name, file, workspace]) => ({
+    id: `P-next-build-export-cleanup-${name}`,
+    file,
+    test: (s) =>
+      new RegExp(
+        `"prebuild":\\s*"node \\.\\.\\/\\.\\.\\/scripts\\/prepare-next-build\\.mjs ${workspace}"`,
+      ).test(s),
+    why: "Both Next surfaces must run the bounded stale-export cleanup before every build",
+  })),
 ];
 
 function main() {

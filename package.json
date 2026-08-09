@@ -19,6 +19,7 @@
     "ops:website-soft-launch-prep": "node scripts/website-soft-launch-prep-audit.mjs",
     "ops:live-cutover": "node scripts/ops-live-cutover-check.mjs",
     "confidence": "node scripts/production-confidence-check.mjs",
+    "security:audit": "node scripts/dependency-security-gate.mjs",
     "workspace:verify": "node scripts/workspace-verify.mjs"
   },
   "private": true,

@@ -3,7 +3,7 @@
 **Date:** 2026-08-09
 **Canonical repository:** `waelzaid66-max/bancoboomstor`
 **Last fully verified remote base:** `main@66771d6bec143f675217c44aa48753021c83aa3d`
-**Implementation commit before this report:** `ae52fe3eef8cd2c690a20860b63549ff9578804e`
+**Current local parent before the Wave 1 security/CI commit:** `04ece0dabff2fe1773c45db193a1e5f2fa453ecc`
 **Package manager:** `pnpm@11.9.0`
 **Decision:** **RC1 NOT READY** — the repository candidate is healthy, but the
 live-service and physical-device gates in this document are still mandatory.
@@ -62,6 +62,29 @@ Local evidence for this wave so far:
 | `git diff --check`                                            |                                                        Passed |
 | PostgreSQL behavioral tests for atomic commit/rollback/dedupe |                   Added; exact-candidate CI execution pending |
 | Final root `npm run build`                                    | Passed; exit 0; all workspace typechecks and builds completed |
+
+### Wave 1 security and CI hardening addendum
+
+The next bounded local wave reduces the production dependency audit from 36
+advisories (25 high, 11 moderate) to two high upstream `image-size` advisories.
+Those two have no patched release, are restricted to the mobile Metro build
+path, have no direct product import, and are covered by a loud fail-closed waiver
+that expires on 2026-09-09. Every other moderate/high/critical advisory blocks
+CI.
+
+The same wave repairs API/migration Docker path coverage, makes local Website CI
+build both Next surfaces, and changes AWS verification/build/SSM checkout to one
+immutable candidate SHA. Local evidence is chain integrity `234/234`, Website CI
+`19/19`, full mobile regression including `31/31` render tests, and a literal
+root `npm run build` exit 0. A repeated build exposed stale Next export cleanup;
+the repaired candidate now passes two consecutive parallel root builds.
+Current-tree secret scan is clean; reachable Git
+history still contains earlier Clerk key material, so key rotation remains P0.
+
+Exact-candidate PostgreSQL, Website/Lighthouse, and Docker GitHub jobs remain
+pending because no task-scoped Git credential is available to push the local
+commit. Full evidence and the publication boundary are recorded in
+`audit/reports/WAVE1-SECURITY-CI-VALIDATION-2026-08-09.md`.
 
 ## 2. Copilot/Claude evidence — adjudicated, do not merge
 
@@ -163,6 +186,9 @@ drain them.
 
 Owner: repository/release engineer.
 
+**Status:** local implementation and all available local gates pass; commit,
+credentialed push, and exact-SHA remote CI remain.
+
 1. Run the final root build.
 2. Review the complete diff and secret scan.
 3. Commit one bounded wave and push `main` under the fresh explicit authorization
@@ -255,7 +281,7 @@ the root build.
 
 | Gate                        | Current state                          | RC1 condition                                   |
 | --------------------------- | -------------------------------------- | ----------------------------------------------- |
-| Source/build on pushed base | Green                                  | Re-run on outbox candidate                      |
+| Source/build on pushed base | Local candidate green; push credential absent | Exact-SHA CI/PostgreSQL/Website/Docker all green |
 | Billing outbox              | Local source green                     | PostgreSQL + restart proof on exact SHA         |
 | Clerk                       | Unproved/live secrets require rotation | Four journeys and deletion pass                 |
 | Paymob                      | Source hardened                        | Signed live/test callbacks and inquiry pass     |
@@ -268,10 +294,10 @@ the root build.
 
 ## 6. Immediate command order
 
-1. Finish the forensic report update and run the focused guards on the local tree.
-2. Re-run `npm run build` after the final report-only update.
-3. Commit the two forensic-plan paths on top of `ae52fe3`, push the authorized
-   candidate to `main`, then require exact-SHA CI/PostgreSQL/website/Docker.
+1. Re-run `npm run build` after this final report-only update.
+2. Commit the bounded Wave 1 tree on top of `04ece0d`.
+3. Provide a task-scoped Git credential, push that exact commit to `main`, then
+   require exact-SHA CI/PostgreSQL/Website/Docker.
 
 Do not deploy, tag, rotate external secrets, or claim `RC1 READY` during this
 wave. Those actions require their explicit live gates above.
@@ -283,4 +309,5 @@ wave. Those actions require their explicit live gates above.
 - Expo incident references, now closed: <https://github.com/expo/expo/issues/47354>, <https://github.com/expo/expo/issues/42729>
 - Reanimated compatibility: <https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/>
 - Existing detailed validation: `audit/reports/RC1-VALIDATION-2026-08-09.md`
+- Wave 1 dependency/CI validation: `audit/reports/WAVE1-SECURITY-CI-VALIDATION-2026-08-09.md`
 - Existing A–J state: `audit/reports/MASTER-STABILIZATION-STATE-2026-08-09.md`

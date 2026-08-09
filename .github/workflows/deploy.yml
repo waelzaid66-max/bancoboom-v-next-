@@ -28,6 +28,8 @@ jobs:
   verify:
     name: Verify (typecheck + tests)
     runs-on: ubuntu-latest
+    outputs:
+      candidate_sha: ${{ steps.candidate.outputs.sha }}
     services:
       postgres:
         image: postgres:16
@@ -46,6 +48,19 @@ jobs:
       TZ: UTC
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+      - name: Resolve immutable deployment candidate
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate_sha="$(git rev-parse HEAD)"
+          if [[ ! "$candidate_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid candidate SHA: $candidate_sha" >&2
+            exit 1
+          fi
+          echo "sha=$candidate_sha" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -53,6 +68,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run typecheck
+      - name: Production dependency security gate
+        run: pnpm run security:audit
       # Production deploy must not skip mobile static gates (parity with ci.yml).
       - name: Mobile static regression (full pack)
         run: pnpm --filter @workspace/banco-mobile run test
@@ -75,20 +92,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
+          ref: ${{ needs.verify.outputs.candidate_sha }}
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
       - uses: aws-actions/amazon-ecr-login@v2
       - name: Build + push API
+        env:
+          CANDIDATE_SHA: ${{ needs.verify.outputs.candidate_sha }}
         run: |
-          TAG="${{ github.event.inputs.ref || github.ref_name }}"
-          docker build -f deploy/aws/Dockerfile.api -t "${{ vars.ECR_REGISTRY }}/banco-api:$TAG" .
+          set -euo pipefail
+          TAG="$CANDIDATE_SHA"
+          docker build -f deploy/aws/Dockerfile.api \
+            --build-arg GIT_SHA="$CANDIDATE_SHA" \
+            --build-arg BUILD_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            -t "${{ vars.ECR_REGISTRY }}/banco-api:$TAG" .
           docker push "${{ vars.ECR_REGISTRY }}/banco-api:$TAG"
       - name: Build + push Web
+        env:
+          CANDIDATE_SHA: ${{ needs.verify.outputs.candidate_sha }}
         run: |
-          TAG="${{ github.event.inputs.ref || github.ref_name }}"
+          set -euo pipefail
+          TAG="$CANDIDATE_SHA"
           docker build -f deploy/aws/Dockerfile.web \
             --build-arg VITE_CLERK_PUBLISHABLE_KEY="${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}" \
             --build-arg VITE_API_BASE_URL="${{ vars.VITE_API_BASE_URL }}" \
@@ -97,7 +123,7 @@ jobs:
 
   deploy:
     name: Deploy on EC2 (SSM)
-    needs: build-and-push
+    needs: [verify, build-and-push]
     runs-on: ubuntu-latest
     steps:
       - uses: aws-actions/configure-aws-credentials@v4
@@ -105,13 +131,26 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
       - name: Trigger deploy.sh on the host
+        env:
+          CANDIDATE_SHA: ${{ needs.verify.outputs.candidate_sha }}
+          DEPLOY_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          AWS_REGION_VALUE: ${{ vars.AWS_REGION }}
+          SSM_PREFIX_VALUE: ${{ vars.SSM_PREFIX }}
         run: |
           set -euo pipefail
+          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid candidate SHA: $CANDIDATE_SHA" >&2
+            exit 1
+          fi
+          printf -v REMOTE_COMMAND \
+            'cd /opt/banco/aws-virgen && git fetch --all --tags && git checkout --detach %q && GIT_SHA=%q BUILD_ID=%q AWS_REGION=%q SSM_PREFIX=%q bash deploy/aws/scripts/deploy.sh' \
+            "$CANDIDATE_SHA" "$CANDIDATE_SHA" "$DEPLOY_BUILD_ID" "$AWS_REGION_VALUE" "$SSM_PREFIX_VALUE"
+          PARAMETERS="$(jq -cn --arg command "$REMOTE_COMMAND" '{commands: [$command]}')"
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ vars.EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
-            --comment "BANCO deploy ${{ github.ref_name }}" \
-            --parameters commands='cd /opt/banco/aws-virgen && git fetch --all --tags && git checkout ${{ github.event.inputs.ref || github.ref_name }} && AWS_REGION=${{ vars.AWS_REGION }} SSM_PREFIX=${{ vars.SSM_PREFIX }} bash deploy/aws/scripts/deploy.sh' \
+            --comment "BANCO deploy ${CANDIDATE_SHA}" \
+            --parameters "$PARAMETERS" \
             --region "${{ vars.AWS_REGION }}" \
             --query 'Command.CommandId' \
             --output text)

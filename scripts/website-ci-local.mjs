@@ -71,6 +71,10 @@ const steps = [
     cmd: "pnpm --filter @workspace/banco-web run build",
   },
   {
+    label: "build banco-website",
+    cmd: "pnpm --filter @workspace/banco-website run build",
+  },
+  {
     label: "SEO static audit",
     cmd: "node scripts/website-seo-static-audit.mjs",
   },
@@ -114,7 +118,9 @@ if (failed > 0) {
   process.exit(1);
 }
 
-console.log(`\n--- website CI local: PASS (${steps.length}/${steps.length}) ---`);
+console.log(
+  `\n--- website CI local: PASS (${steps.length}/${steps.length}) ---`,
+);
 console.log(
   "Optional after CDN deploy: BANCO_WEB_URL=https://staging.example.com node scripts/website-staging-smoke.mjs",
 );
