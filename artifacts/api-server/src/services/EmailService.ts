@@ -83,6 +83,8 @@ export interface EmailMessage {
   subject: string;
   html: string;
   text: string;
+  /** Stable provider key for retryable sends (Resend retains it for 24 hours). */
+  idempotencyKey?: string;
 }
 
 export interface EmailTransport {
@@ -137,6 +139,9 @@ class ResendTransport implements EmailTransport {
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
         "Content-Type": "application/json; charset=utf-8",
+        ...(msg.idempotencyKey
+          ? { "Idempotency-Key": msg.idempotencyKey }
+          : {}),
       },
       body: payload,
     });
@@ -436,6 +441,7 @@ export async function sendBillingReceiptEmail(args: {
   to: string;
   lang?: EmailLang;
   name: string;
+  transactionId: string;
   kind: BillingReceiptKind;
   amount: string;
   balanceAfter: string;
@@ -483,6 +489,7 @@ export async function sendBillingReceiptEmail(args: {
     subject: ar ? "BANCO — إيصال دفع" : "BANCO — Payment receipt",
     html,
     text,
+    idempotencyKey: `billing-receipt/${args.transactionId}`,
   });
 }
 

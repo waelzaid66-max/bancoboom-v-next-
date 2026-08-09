@@ -259,6 +259,78 @@ const CHECKS = [
     why: "Arabic ByteString-safe escape (b6724a1) must remain",
   },
   {
+    id: "P-billing-receipt-outbox-schema",
+    file: "lib/db/src/schema/index.ts",
+    test: (s) =>
+      /export const billingReceiptOutbox = pgTable/.test(s) &&
+      /billing_receipt_outbox/.test(s) &&
+      /dedupeKey: text\("dedupe_key"\)/.test(s),
+    why: "Successful ledger writes need a durable receipt outbox and notification dedupe key",
+  },
+  {
+    id: "P-billing-receipt-outbox-migration",
+    file: "lib/db/migrations/0005_early_talisman.sql",
+    test: (s) =>
+      /CREATE TABLE "billing_receipt_outbox"/.test(s) &&
+      /ADD COLUMN "dedupe_key" text/.test(s) &&
+      /billing_receipt_outbox_transaction_id_transactions_id_fk/.test(s),
+    why: "The durable receipt schema must ship as a committed forward migration",
+  },
+  {
+    id: "P-billing-receipt-atomic-enqueue",
+    file: "artifacts/api-server/src/services/BillingNotificationService.ts",
+    test: (s) =>
+      /export async function enqueueBillingReceipt/.test(s) &&
+      /onConflictDoNothing/.test(s) &&
+      /export async function processBillingReceiptOutbox/.test(s),
+    why: "Billing receipt enqueue must be idempotent and recoverable after process restart",
+  },
+  {
+    id: "P-billing-receipt-no-process-local-bypass",
+    file: "artifacts/api-server/src/services/BillingNotificationService.ts",
+    test: (s) =>
+      !/schedulePaymentSuccess/.test(s) &&
+      !/notifyPaymentSuccess/.test(s) &&
+      !/setImmediate/.test(s),
+    why: "Billing success must have no process-local delivery path around the durable outbox",
+  },
+  {
+    id: "P-billing-receipt-retry-job",
+    file: "artifacts/api-server/src/jobs/index.ts",
+    test: (s) =>
+      /BILLING_RECEIPT_OUTBOX_LOCK_KEY/.test(s) &&
+      /processBillingReceiptOutbox/.test(s) &&
+      /billing-receipt-outbox/.test(s),
+    why: "A cross-replica scheduled worker must recover committed but undelivered receipts",
+  },
+  {
+    id: "P-billing-receipt-provider-dedupe",
+    file: "artifacts/api-server/src/services/EmailService.ts",
+    test: (s) =>
+      /idempotencyKey\?: string/.test(s) &&
+      /Idempotency-Key/.test(s) &&
+      /billing-receipt\//.test(s),
+    why: "Retried billing emails must carry a stable provider idempotency key",
+  },
+  {
+    id: "P-billing-receipt-topup-enqueue",
+    file: "artifacts/api-server/src/services/PaymentIntentService.ts",
+    test: (s) => /enqueueBillingReceipt\(tx, result\.transactionId\)/.test(s),
+    why: "Wallet top-up receipt must enqueue before its settlement transaction commits",
+  },
+  {
+    id: "P-billing-receipt-subscription-enqueue",
+    file: "artifacts/api-server/src/services/SubscriptionService.ts",
+    test: (s) => (s.match(/enqueueBillingReceipt\(tx,/g) || []).length >= 2,
+    why: "Wallet and PSP subscription charges must enqueue inside their money transactions",
+  },
+  {
+    id: "P-billing-receipt-lead-enqueue",
+    file: "artifacts/api-server/src/services/LeadService.ts",
+    test: (s) => (s.match(/enqueueBillingReceipt\(tx,/g) || []).length >= 2,
+    why: "Both lead capture paths must enqueue receipts inside their charge transactions",
+  },
+  {
     id: "P-push-service",
     file: "artifacts/api-server/src/services/PushService.ts",
     test: (s) => /EXPO_PUSH_ENDPOINT/.test(s) && /registerPushToken/.test(s),
@@ -1315,7 +1387,9 @@ const CHECKS = [
     test: (s) =>
       /money_schema/.test(s) &&
       /SELECT 1 FROM payment_intents LIMIT 0/.test(s) &&
-      /SELECT 1 FROM transactions LIMIT 0/.test(s),
+      /SELECT 1 FROM transactions LIMIT 0/.test(s) &&
+      /SELECT 1 FROM billing_receipt_outbox LIMIT 0/.test(s) &&
+      /SELECT dedupe_key FROM notifications LIMIT 0/.test(s),
     why: "readyz must fail closed when money tables are missing",
   },
   {

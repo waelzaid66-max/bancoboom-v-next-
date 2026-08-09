@@ -1221,12 +1221,18 @@ export const notifications = pgTable(
     title: text("title").notNull(),
     body: text("body").notNull(),
     data: jsonb("data"),
+    // Optional source-event key. Billing outbox retries use this to make the
+    // in-app insert idempotent if a worker dies after INSERT but before it can
+    // mark the outbox channel complete. NULL keeps every existing best-effort
+    // notification call site unchanged.
+    dedupeKey: text("dedupe_key"),
     readAt: timestamp("read_at"),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (table) => [
     index("idx_notification_user").on(table.userId),
     index("idx_notification_created").on(table.createdAt),
+    uniqueIndex("uniq_notification_dedupe").on(table.dedupeKey),
   ]
 );
 
@@ -1470,6 +1476,38 @@ export const transactions = pgTable(
     index("idx_transactions_type").on(table.type),
     index("idx_transactions_reference").on(table.referenceType, table.referenceId),
   ]
+);
+
+// Transactional outbox for successful billing receipts. The row is inserted
+// inside the SAME database transaction as the wallet ledger write, so a process
+// restart can delay a receipt but cannot lose it. Each delivery channel advances
+// independently; the stable transaction id dedupes both in-app and provider
+// retries. This intentionally covers receipts only, not every best-effort app
+// notification.
+export const billingReceiptOutbox = pgTable(
+  "billing_receipt_outbox",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    transactionId: uuid("transaction_id")
+      .references(() => transactions.id, { onDelete: "cascade" })
+      .notNull()
+      .unique(),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    availableAt: timestamp("available_at").notNull().defaultNow(),
+    inAppProcessedAt: timestamp("in_app_processed_at"),
+    emailProcessedAt: timestamp("email_processed_at"),
+    completedAt: timestamp("completed_at"),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_billing_receipt_outbox_due").on(
+      table.completedAt,
+      table.availableAt,
+      table.createdAt,
+    ),
+  ],
 );
 
 /* ── SUBSCRIPTIONS ─────────────────────────────────────── */

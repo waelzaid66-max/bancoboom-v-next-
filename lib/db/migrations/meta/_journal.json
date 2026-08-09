@@ -36,6 +36,13 @@
       "when": 1786113222287,
       "tag": "0004_fi_workspace_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786278182288,
+      "tag": "0005_early_talisman",
+      "breakpoints": true
     }
   ]
 }

@@ -19,7 +19,7 @@ import { resolveEffectivePlan, type UserRole } from "./PlanService";
 import { isInsufficientFunds, toMoney } from "../lib/billing";
 import { createNotification } from "./NotificationService";
 import { isEmailChannelEnabled, sendLeadNotificationEmail } from "./EmailService";
-import { schedulePaymentSuccess } from "./BillingNotificationService";
+import { enqueueBillingReceipt } from "./BillingNotificationService";
 import { resolveSellerContactPhone } from "../lib/resolveSellerContactPhone";
 
 const LEAD_ACTION_LABEL: Record<TrackLeadInput["actionType"], string> = {
@@ -289,6 +289,7 @@ export async function contactLead(input: ContactLeadInput): Promise<{ phone: str
           lineItems: [{ label: `Lead (${input.actionType})`, amount: cpl }],
         },
       });
+      await enqueueBillingReceipt(tx, charge.transactionId);
       await tx.insert(leadBilling).values({
         ...billingBase,
         status: "charged",
@@ -316,17 +317,6 @@ export async function contactLead(input: ContactLeadInput): Promise<{ phone: str
       throw err;
     }
   });
-
-  if (billing.status === "charged" && "charge" in billing && billing.charge) {
-    schedulePaymentSuccess({
-      userId: sellerId,
-      kind: "lead_charge",
-      amount: billing.charge.amount,
-      balanceAfter: billing.charge.balanceAfter,
-      transactionId: billing.charge.transactionId,
-      description: `Lead charge (${input.actionType})`,
-    });
-  }
 
   leadLogger.info(
     {
@@ -524,6 +514,7 @@ export async function processLead(input: TrackLeadInput): Promise<void> {
             lineItems: [{ label: `Lead (${input.actionType})`, amount: cpl }],
           },
         });
+        await enqueueBillingReceipt(tx, charge.transactionId);
         await tx.insert(leadBilling).values({
           ...billingBase,
           status: "charged",
@@ -552,17 +543,6 @@ export async function processLead(input: TrackLeadInput): Promise<void> {
         throw err;
       }
     });
-
-    if (billing.status === "charged" && "charge" in billing && billing.charge) {
-      schedulePaymentSuccess({
-        userId: sellerId,
-        kind: "lead_charge",
-        amount: billing.charge.amount,
-        balanceAfter: billing.charge.balanceAfter,
-        transactionId: billing.charge.transactionId,
-        description: `Lead charge (${input.actionType})`,
-      });
-    }
 
     // Durable lead business-event audit trail (money path).
     leadLogger.info(

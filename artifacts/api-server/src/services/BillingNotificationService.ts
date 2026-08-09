@@ -1,13 +1,15 @@
 import { db } from "@workspace/db";
 import {
+  billingReceiptOutbox,
   invoices,
   notifications,
   paymentIntents,
   plans,
   subscriptions,
+  transactions,
   users,
 } from "@workspace/db/schema";
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import {
   isEmailChannelEnabled,
@@ -17,9 +19,14 @@ import {
   type BillingEmailCategory,
   type BillingReceiptKind,
 } from "./EmailService";
-import { createNotification } from "./NotificationService";
+import { createNotification, createNotificationOnce } from "./NotificationService";
 
 const EXPIRING_HORIZON_DAYS = 3;
+const OUTBOX_BATCH_SIZE = 50;
+const OUTBOX_MAX_RETRY_MS = 60 * 60 * 1000;
+const OUTBOX_ERROR_MAX_CHARS = 1_000;
+
+type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export interface BillingReceiptPayload {
   userId: string;
@@ -86,64 +93,212 @@ async function resolveInvoiceNumber(transactionId: string): Promise<string | nul
   return row?.invoiceNumber ?? null;
 }
 
-/**
- * In-app + email receipt after a successful ledger write (top-up, subscription,
- * lead charge). Best-effort; never blocks the financial transaction.
- */
-export async function notifyPaymentSuccess(
+async function hydrateReceipt(
   payload: BillingReceiptPayload,
-): Promise<void> {
+): Promise<BillingReceiptPayload> {
   const invoiceNumber =
     payload.invoiceNumber ??
     (await resolveInvoiceNumber(payload.transactionId));
-
-  const data = {
-    transaction_id: payload.transactionId,
-    kind: payload.kind,
-    amount: payload.amount,
-    balance_after: payload.balanceAfter,
-    invoice_number: invoiceNumber,
-    plan_name: payload.planName ?? null,
-  };
-
-  const arBody = receiptBody(payload.kind, payload.amount, true, payload.planName);
-  const enBody = receiptBody(payload.kind, payload.amount, false, payload.planName);
-
-  await createNotification({
-    userId: payload.userId,
-    type: "payment_success",
-    title: "تم الدفع بنجاح · Payment successful",
-    body: `${arBody} · ${enBody}`,
-    data,
-  });
-
-  try {
-    if (!(await isEmailChannelEnabled(payload.userId, "payment_success"))) return;
-    const contact = await resolveUserContact(payload.userId);
-    if (!contact?.email) return;
-
-    await sendBillingReceiptEmail({
-      to: contact.email,
-      name: contact.name,
-      kind: payload.kind,
-      amount: payload.amount,
-      balanceAfter: payload.balanceAfter,
-      description: payload.description ?? undefined,
-      invoiceNumber,
-      planName: payload.planName ?? undefined,
-    });
-  } catch (err) {
-    logger.error({ err, userId: payload.userId }, "Billing receipt email failed");
-  }
+  return { ...payload, invoiceNumber };
 }
 
-/** Schedule notifyPaymentSuccess off the request/transaction hot path. */
-export function schedulePaymentSuccess(payload: BillingReceiptPayload): void {
-  setImmediate(() => {
-    void notifyPaymentSuccess(payload).catch((err) =>
-      logger.error({ err, userId: payload.userId }, "Billing success notification failed"),
-    );
+function paymentSuccessNotification(payload: BillingReceiptPayload) {
+  const arBody = receiptBody(payload.kind, payload.amount, true, payload.planName);
+  const enBody = receiptBody(payload.kind, payload.amount, false, payload.planName);
+  return {
+    userId: payload.userId,
+    type: "payment_success" as const,
+    title: "تم الدفع بنجاح · Payment successful",
+    body: `${arBody} · ${enBody}`,
+    data: {
+      transaction_id: payload.transactionId,
+      kind: payload.kind,
+      amount: payload.amount,
+      balance_after: payload.balanceAfter,
+      invoice_number: payload.invoiceNumber ?? null,
+      plan_name: payload.planName ?? null,
+    },
+  };
+}
+
+async function deliverPaymentSuccessEmail(
+  payload: BillingReceiptPayload,
+): Promise<void> {
+  if (!(await isEmailChannelEnabled(payload.userId, "payment_success"))) return;
+  const contact = await resolveUserContact(payload.userId);
+  if (!contact?.email) return;
+
+  await sendBillingReceiptEmail({
+    to: contact.email,
+    name: contact.name,
+    transactionId: payload.transactionId,
+    kind: payload.kind,
+    amount: payload.amount,
+    balanceAfter: payload.balanceAfter,
+    description: payload.description ?? undefined,
+    invoiceNumber: payload.invoiceNumber ?? null,
+    planName: payload.planName ?? undefined,
   });
+}
+
+/** Insert the recovery marker inside the caller's money transaction. */
+export async function enqueueBillingReceipt(
+  tx: DbTx,
+  transactionId: string,
+): Promise<void> {
+  await tx
+    .insert(billingReceiptOutbox)
+    .values({ transactionId })
+    .onConflictDoNothing({ target: billingReceiptOutbox.transactionId });
+}
+
+function isReceiptKind(value: string): value is BillingReceiptKind {
+  return (
+    value === "wallet_topup" ||
+    value === "subscription_charge" ||
+    value === "lead_charge"
+  );
+}
+
+function positiveMoney(value: string): string {
+  const amount = Math.abs(Number(value));
+  if (!Number.isFinite(amount)) {
+    throw new Error("Billing receipt ledger amount is invalid");
+  }
+  return amount.toFixed(2);
+}
+
+async function resolveOutboxReceipt(
+  transactionId: string,
+): Promise<BillingReceiptPayload> {
+  const [row] = await db
+    .select({
+      userId: transactions.userId,
+      kind: transactions.type,
+      amount: transactions.amount,
+      balanceAfter: transactions.balanceAfter,
+      description: transactions.description,
+      referenceType: transactions.referenceType,
+      referenceId: transactions.referenceId,
+    })
+    .from(transactions)
+    .where(eq(transactions.id, transactionId))
+    .limit(1);
+
+  if (!row) throw new Error("Billing receipt source transaction is missing");
+  if (!isReceiptKind(row.kind)) {
+    throw new Error(`Unsupported billing receipt transaction type: ${row.kind}`);
+  }
+
+  let planName: string | null = null;
+  if (row.kind === "subscription_charge" && row.referenceType === "subscription" && row.referenceId) {
+    const [plan] = await db
+      .select({ name: plans.name })
+      .from(subscriptions)
+      .innerJoin(plans, eq(subscriptions.planId, plans.id))
+      .where(eq(subscriptions.id, row.referenceId))
+      .limit(1);
+    planName = plan?.name ?? null;
+  }
+
+  return hydrateReceipt({
+    userId: row.userId,
+    kind: row.kind,
+    amount: positiveMoney(row.amount),
+    balanceAfter: row.balanceAfter,
+    transactionId,
+    description: row.description,
+    planName,
+  });
+}
+
+export function billingReceiptRetryDelayMs(attemptCount: number): number {
+  const exponent = Math.max(0, Math.min(attemptCount, 7));
+  return Math.min(30_000 * 2 ** exponent, OUTBOX_MAX_RETRY_MS);
+}
+
+function outboxErrorMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.slice(0, OUTBOX_ERROR_MAX_CHARS);
+}
+
+/**
+ * Deliver due receipt rows. The scheduled caller owns the cross-replica
+ * advisory lock. Channel checkpoints make a partial success replay-safe.
+ */
+export async function processBillingReceiptOutbox(): Promise<number> {
+  const due = await db
+    .select({
+      id: billingReceiptOutbox.id,
+      transactionId: billingReceiptOutbox.transactionId,
+      attemptCount: billingReceiptOutbox.attemptCount,
+      inAppProcessedAt: billingReceiptOutbox.inAppProcessedAt,
+      emailProcessedAt: billingReceiptOutbox.emailProcessedAt,
+    })
+    .from(billingReceiptOutbox)
+    .where(
+      and(
+        isNull(billingReceiptOutbox.completedAt),
+        lte(billingReceiptOutbox.availableAt, new Date()),
+      ),
+    )
+    .orderBy(asc(billingReceiptOutbox.createdAt))
+    .limit(OUTBOX_BATCH_SIZE);
+
+  let completed = 0;
+  for (const item of due) {
+    let inAppDone = Boolean(item.inAppProcessedAt);
+    let emailDone = Boolean(item.emailProcessedAt);
+    try {
+      const payload = await resolveOutboxReceipt(item.transactionId);
+
+      if (!inAppDone) {
+        await createNotificationOnce({
+          ...paymentSuccessNotification(payload),
+          dedupeKey: `billing-receipt:${item.transactionId}:in-app`,
+        });
+        await db
+          .update(billingReceiptOutbox)
+          .set({ inAppProcessedAt: new Date(), updatedAt: new Date() })
+          .where(eq(billingReceiptOutbox.id, item.id));
+        inAppDone = true;
+      }
+
+      if (!emailDone) {
+        await deliverPaymentSuccessEmail(payload);
+        await db
+          .update(billingReceiptOutbox)
+          .set({ emailProcessedAt: new Date(), updatedAt: new Date() })
+          .where(eq(billingReceiptOutbox.id, item.id));
+        emailDone = true;
+      }
+
+      if (inAppDone && emailDone) {
+        await db
+          .update(billingReceiptOutbox)
+          .set({ completedAt: new Date(), lastError: null, updatedAt: new Date() })
+          .where(eq(billingReceiptOutbox.id, item.id));
+        completed += 1;
+      }
+    } catch (err) {
+      const nextAttempt = item.attemptCount + 1;
+      await db
+        .update(billingReceiptOutbox)
+        .set({
+          attemptCount: nextAttempt,
+          availableAt: new Date(Date.now() + billingReceiptRetryDelayMs(item.attemptCount)),
+          lastError: outboxErrorMessage(err),
+          updatedAt: new Date(),
+        })
+        .where(eq(billingReceiptOutbox.id, item.id));
+      logger.error(
+        { err, transactionId: item.transactionId, attempt: nextAttempt },
+        "Billing receipt outbox delivery failed",
+      );
+    }
+  }
+
+  return completed;
 }
 
 /**
@@ -183,14 +338,6 @@ export async function notifyPaymentFailed(payload: BillingFailedPayload): Promis
   } catch (err) {
     logger.error({ err, userId: payload.userId }, "Billing failed email failed");
   }
-}
-
-export function schedulePaymentFailed(payload: BillingFailedPayload): void {
-  setImmediate(() => {
-    void notifyPaymentFailed(payload).catch((err) =>
-      logger.error({ err, userId: payload.userId }, "Billing failure notification failed"),
-    );
-  });
 }
 
 async function alreadyNotifiedExpiring(

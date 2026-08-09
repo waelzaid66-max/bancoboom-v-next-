@@ -14,7 +14,10 @@ import {
   notFound,
   toMoney,
 } from "../lib/billing";
-import { schedulePaymentSuccess, notifyPaymentIntentFailed } from "./BillingNotificationService";
+import {
+  enqueueBillingReceipt,
+  notifyPaymentIntentFailed,
+} from "./BillingNotificationService";
 
 export type TopupMethod = EgyptianRail;
 
@@ -692,6 +695,8 @@ export async function settleTopupIntent(
         },
       });
 
+      await enqueueBillingReceipt(tx, result.transactionId);
+
       await tx
         .update(paymentIntents)
         .set({ status: "completed", completedAt: new Date() })
@@ -712,16 +717,6 @@ export async function settleTopupIntent(
       return;
     }
 
-    if (!applied.replayed) {
-      schedulePaymentSuccess({
-        userId: intent.userId,
-        kind: "wallet_topup",
-        amount: intent.amount,
-        balanceAfter: applied.balanceAfter,
-        transactionId: applied.transactionId,
-        description: `Wallet top-up via ${intent.method}`,
-      });
-    }
   } catch (err) {
     // Concurrent delivery already credited under the same idempotency key.
     if (isUniqueViolation(err)) return;

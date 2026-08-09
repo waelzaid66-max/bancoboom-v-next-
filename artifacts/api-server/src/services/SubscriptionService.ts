@@ -25,7 +25,7 @@ import { resolveEffectivePlan, type UserRole } from "./PlanService";
 import { createProviderCharge, type EgyptianRail } from "../lib/paymentProvider";
 import { invalidData, isUniqueViolation, notFound, toMoney, conflict } from "../lib/billing";
 import {
-  schedulePaymentSuccess,
+  enqueueBillingReceipt,
   notifyPaymentIntentFailed,
 } from "./BillingNotificationService";
 
@@ -271,6 +271,7 @@ export async function startSubscription(input: StartSubscriptionInput) {
               ],
             },
           });
+          await enqueueBillingReceipt(tx, applied.transactionId);
           const [updated] = await tx
             .update(subscriptions)
             .set({ transactionId: applied.transactionId })
@@ -287,17 +288,6 @@ export async function startSubscription(input: StartSubscriptionInput) {
         return { sub: created, charge: null as { transactionId: string; balanceAfter: string } | null };
       });
       sub = txResult.sub;
-      if (txResult.charge) {
-        schedulePaymentSuccess({
-          userId: input.userId,
-          kind: "subscription_charge",
-          amount: price,
-          balanceAfter: txResult.charge.balanceAfter,
-          transactionId: txResult.charge.transactionId,
-          description: `Subscription: ${plan.name} (${PERIOD_DAYS}d)`,
-          planName: plan.name,
-        });
-      }
     } catch (err) {
       // Lost race for the one-active-subscription slot — or a client retry after
       // the first request already activated. Replay via the ledger idempotency key.
@@ -755,6 +745,7 @@ export async function settleSubscriptionIntentByWebhook(
           ],
         },
       });
+      await enqueueBillingReceipt(tx, charge.transactionId);
 
       await tx
         .update(subscriptions)
@@ -779,15 +770,6 @@ export async function settleSubscriptionIntentByWebhook(
 
     if (!settled) return;
 
-    schedulePaymentSuccess({
-      userId,
-      kind: "subscription_charge",
-      amount: intent.amount,
-      balanceAfter: settled.balanceAfter,
-      transactionId: settled.transactionId,
-      description: `Subscription: ${plan.name} (${PERIOD_DAYS}d)`,
-      planName: plan.name,
-    });
   } catch (err) {
     if (isUniqueViolation(err)) {
       // Concurrent delivery already activated this charge key — complete intent.

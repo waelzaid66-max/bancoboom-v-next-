@@ -2,13 +2,20 @@ import { describe, it, expect, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, createUser, deleteUsers } from "../__tests__/helpers";
-import { notifications, paymentIntents } from "@workspace/db/schema";
 import {
-  notifyPaymentSuccess,
+  billingReceiptOutbox,
+  notifications,
+  paymentIntents,
+  transactions,
+} from "@workspace/db/schema";
+import {
+  enqueueBillingReceipt,
   notifyPaymentFailed,
   notifyPaymentIntentFailed,
+  processBillingReceiptOutbox,
 } from "./BillingNotificationService";
 import { markTopupIntentFailed } from "./PaymentIntentService";
+import { applyTransaction } from "./WalletService";
 
 const uids: string[] = [];
 
@@ -17,30 +24,120 @@ afterAll(async () => {
 });
 
 describe("BillingNotificationService", () => {
-  it("creates payment_success in-app notification with real ledger data", async () => {
-    const uid = await createUser({ walletBalance: "100" });
+  it("commits the receipt outbox atomically and delivers it exactly once", async () => {
+    const uid = await createUser({ walletBalance: "0" });
     uids.push(uid);
-    const txId = randomUUID();
 
-    await notifyPaymentSuccess({
-      userId: uid,
-      kind: "wallet_topup",
-      amount: "250.00",
-      balanceAfter: "350.00",
-      transactionId: txId,
-      description: "Wallet top-up via fawry",
+    const applied = await db.transaction(async (tx) => {
+      const result = await applyTransaction(tx, {
+        userId: uid,
+        type: "wallet_topup",
+        direction: "credit",
+        amount: "250.00",
+        idempotencyKey: randomUUID(),
+        description: "Durable receipt test",
+        invoice: {
+          lineItems: [{ label: "Wallet top-up", amount: "250.00" }],
+        },
+      });
+      await enqueueBillingReceipt(tx, result.transactionId);
+      await enqueueBillingReceipt(tx, result.transactionId);
+      return result;
     });
 
-    const rows = await db
+    const queued = await db
+      .select()
+      .from(billingReceiptOutbox)
+      .where(eq(billingReceiptOutbox.transactionId, applied.transactionId));
+    expect(queued).toHaveLength(1);
+    expect(queued[0].completedAt).toBeNull();
+
+    expect(await processBillingReceiptOutbox()).toBeGreaterThanOrEqual(1);
+    expect(await processBillingReceiptOutbox()).toBe(0);
+
+    const delivered = await db
       .select()
       .from(notifications)
-      .where(eq(notifications.userId, uid));
-    expect(rows.some((r) => r.type === "payment_success")).toBe(true);
-    const n = rows.find((r) => r.type === "payment_success");
-    expect(n?.data).toMatchObject({
-      transaction_id: txId,
+      .where(eq(notifications.dedupeKey, `billing-receipt:${applied.transactionId}:in-app`));
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0].data).toMatchObject({
+      transaction_id: applied.transactionId,
       amount: "250.00",
-      balance_after: "350.00",
+      balance_after: "250.00",
+    });
+
+    const [completed] = await db
+      .select()
+      .from(billingReceiptOutbox)
+      .where(eq(billingReceiptOutbox.transactionId, applied.transactionId));
+    expect(completed.inAppProcessedAt).not.toBeNull();
+    expect(completed.emailProcessedAt).not.toBeNull();
+    expect(completed.completedAt).not.toBeNull();
+  });
+
+  it("rolls the outbox marker back when the ledger transaction aborts", async () => {
+    const uid = await createUser({ walletBalance: "0" });
+    uids.push(uid);
+    let transactionId = "";
+
+    await expect(
+      db.transaction(async (tx) => {
+        const result = await applyTransaction(tx, {
+          userId: uid,
+          type: "wallet_topup",
+          direction: "credit",
+          amount: "75.00",
+          idempotencyKey: randomUUID(),
+        });
+        transactionId = result.transactionId;
+        await enqueueBillingReceipt(tx, result.transactionId);
+        throw new Error("abort-after-outbox");
+      }),
+    ).rejects.toThrow("abort-after-outbox");
+
+    const ledger = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.id, transactionId));
+    const queued = await db
+      .select()
+      .from(billingReceiptOutbox)
+      .where(eq(billingReceiptOutbox.transactionId, transactionId));
+    expect(ledger).toHaveLength(0);
+    expect(queued).toHaveLength(0);
+  });
+
+  it("renders a debit receipt as a positive charge amount", async () => {
+    const uid = await createUser({ walletBalance: "500" });
+    uids.push(uid);
+
+    const applied = await db.transaction(async (tx) => {
+      const result = await applyTransaction(tx, {
+        userId: uid,
+        type: "lead_charge",
+        direction: "debit",
+        amount: "25.00",
+        idempotencyKey: randomUUID(),
+        description: "Lead charge (chat)",
+      });
+      await enqueueBillingReceipt(tx, result.transactionId);
+      return result;
+    });
+
+    expect(await processBillingReceiptOutbox()).toBeGreaterThanOrEqual(1);
+    const [delivered] = await db
+      .select()
+      .from(notifications)
+      .where(
+        eq(
+          notifications.dedupeKey,
+          `billing-receipt:${applied.transactionId}:in-app`,
+        ),
+      );
+    expect(delivered.data).toMatchObject({
+      kind: "lead_charge",
+      amount: "25.00",
+      balance_after: "475.00",
     });
   });
 
@@ -58,7 +155,6 @@ describe("BillingNotificationService", () => {
     });
 
     await markTopupIntentFailed(intentId);
-    await new Promise((r) => setImmediate(r));
 
     const rows = await db
       .select()

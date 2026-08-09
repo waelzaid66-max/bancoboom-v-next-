@@ -7,6 +7,7 @@ import { expireSubscriptions } from "./subscriptionExpiry";
 import { remindSubscriptionsExpiringSoon } from "./subscriptionExpiringReminders";
 import { sendWeeklyReports } from "./weeklyReports";
 import { backfillStaffRoles } from "./backfillStaffRoles";
+import { processBillingReceiptOutbox } from "../services/BillingNotificationService";
 import {
   runPromoAdCreditCycle,
   PROMO_AD_CREDIT_LOCK_KEY,
@@ -20,6 +21,7 @@ const SUBSCRIPTION_LOCK_KEY = 48150003;
 const SUBSCRIPTION_REMINDER_LOCK_KEY = 48150007;
 const WEEKLY_REPORT_LOCK_KEY = 48150004;
 const STAFF_ROLE_BACKFILL_LOCK_KEY = 48150005;
+const BILLING_RECEIPT_OUTBOX_LOCK_KEY = 48150008;
 // PROMO_AD_CREDIT_LOCK_KEY (48150006) is owned by PromoAdCreditService so the
 // monthly grant cycle and admin renew share one lock and never interleave.
 
@@ -101,33 +103,61 @@ export function startScheduledJobs(): void {
     { timezone: TIMEZONE },
   );
 
+  // Every 10 seconds — finish durable payment receipts created atomically by
+  // wallet/top-up/subscription/lead settlement. Advisory locking keeps multiple
+  // API replicas from sending the same row concurrently; channel-level dedupe
+  // remains the crash-recovery backstop.
+  cron.schedule(
+    "*/10 * * * * *",
+    () => {
+      void runJob(
+        "billing-receipt-outbox",
+        BILLING_RECEIPT_OUTBOX_LOCK_KEY,
+        processBillingReceiptOutbox,
+        { quietWhenZero: true },
+      );
+    },
+    { timezone: TIMEZONE },
+  );
+
   logger.info({ timezone: TIMEZONE }, "Scheduled maintenance jobs registered");
 }
 
 /**
- * One-shot startup migrations. Advisory-locked so that with multiple instances
- * only one performs the work. Currently: backfill staff roles for pre-existing
- * admins (idempotent, safe to run on every boot).
+ * One-shot startup maintenance. Advisory-locked so that with multiple instances
+ * only one performs each task. Backfills staff roles, then immediately drains
+ * receipts left pending by a prior process stop; both operations are idempotent.
  */
 export async function runStartupBackfills(): Promise<void> {
   await runJob("backfill-staff-roles", STAFF_ROLE_BACKFILL_LOCK_KEY, backfillStaffRoles);
+  await runJob(
+    "billing-receipt-outbox-startup",
+    BILLING_RECEIPT_OUTBOX_LOCK_KEY,
+    processBillingReceiptOutbox,
+    { quietWhenZero: true },
+  );
 }
 
 async function runJob(
   name: string,
   lockKey: number,
   fn: () => Promise<number>,
+  options: { quietWhenZero?: boolean } = {},
 ): Promise<void> {
   const start = Date.now();
   try {
+    let affected = 0;
     const ran = await withAdvisoryLock(lockKey, async () => {
-      await fn();
+      affected = await fn();
     });
     if (!ran) {
-      logger.info({ job: name }, "Job skipped — lock held by another instance");
+      if (!options.quietWhenZero) {
+        logger.info({ job: name }, "Job skipped — lock held by another instance");
+      }
       return;
     }
-    logger.info({ job: name, duration_ms: Date.now() - start }, "Job completed");
+    if (options.quietWhenZero && affected === 0) return;
+    logger.info({ job: name, affected, duration_ms: Date.now() - start }, "Job completed");
   } catch (err) {
     logger.error({ job: name, err }, "Scheduled job failed");
   }

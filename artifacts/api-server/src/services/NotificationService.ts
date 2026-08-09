@@ -34,33 +34,49 @@ export interface NotificationDTO {
   created_at: string;
 }
 
-/**
- * Insert an in-app notification. Best-effort: a failure here must never break
- * the originating action (sending a message, tracking a lead), so errors are
- * swallowed after logging.
- */
-export async function createNotification(input: {
+interface CreateNotificationInput {
   userId: string;
   type: NotificationType;
   title: string;
   body: string;
   data?: Record<string, unknown> | null;
-}): Promise<void> {
+}
+
+async function isInAppChannelEnabled(input: CreateNotificationInput): Promise<boolean> {
+  const [pref] = await db
+    .select({ inApp: notificationPreferences.inApp })
+    .from(notificationPreferences)
+    .where(
+      and(
+        eq(notificationPreferences.userId, input.userId),
+        eq(notificationPreferences.type, input.type),
+      ),
+    )
+    .limit(1);
+  return !pref || pref.inApp !== false;
+}
+
+function fanOutPush(input: CreateNotificationInput): void {
+  // Push remains best-effort. The durable contract is the in-app row; push has
+  // its own provider handling and must never roll that row back.
+  void sendPushToUser(input.userId, {
+    title: input.title,
+    body: input.body,
+    data: { type: input.type, ...(input.data ?? {}) },
+  });
+}
+
+/**
+ * Insert an in-app notification. Best-effort: a failure here must never break
+ * the originating action (sending a message, tracking a lead), so errors are
+ * swallowed after logging.
+ */
+export async function createNotification(input: CreateNotificationInput): Promise<void> {
   try {
     // Respect per-category mute (Task #38): if the user explicitly disabled
     // in-app notifications for this category, skip creation entirely. Absence
     // of a preference row means the category is enabled (implicit default).
-    const [pref] = await db
-      .select({ inApp: notificationPreferences.inApp })
-      .from(notificationPreferences)
-      .where(
-        and(
-          eq(notificationPreferences.userId, input.userId),
-          eq(notificationPreferences.type, input.type),
-        ),
-      )
-      .limit(1);
-    if (pref && pref.inApp === false) return;
+    if (!(await isInAppChannelEnabled(input))) return;
 
     await db.insert(notifications).values({
       userId: input.userId,
@@ -74,14 +90,40 @@ export async function createNotification(input: {
     // addition to the in-app record. Same recipient + same per-category mute
     // gate above, so push never fires for a category the user disabled. Fully
     // fire-and-forget — a push failure must not affect notification creation.
-    void sendPushToUser(input.userId, {
-      title: input.title,
-      body: input.body,
-      data: { type: input.type, ...(input.data ?? {}) },
-    });
+    fanOutPush(input);
   } catch (err) {
     console.error("[Notification create]", err);
   }
+}
+
+/**
+ * Durable/idempotent variant for retryable workers.
+ *
+ * Unlike createNotification, database failures are deliberately propagated so
+ * the caller can retry. A unique source key prevents a crash between INSERT and
+ * outbox acknowledgement from creating a second row or push fan-out.
+ */
+export async function createNotificationOnce(
+  input: CreateNotificationInput & { dedupeKey: string },
+): Promise<"created" | "duplicate" | "muted"> {
+  if (!(await isInAppChannelEnabled(input))) return "muted";
+
+  const inserted = await db
+    .insert(notifications)
+    .values({
+      userId: input.userId,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      data: input.data ?? null,
+      dedupeKey: input.dedupeKey,
+    })
+    .onConflictDoNothing({ target: notifications.dedupeKey })
+    .returning({ id: notifications.id });
+
+  if (inserted.length === 0) return "duplicate";
+  fanOutPush(input);
+  return "created";
 }
 
 export async function listNotifications(

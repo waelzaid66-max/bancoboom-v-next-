@@ -87,6 +87,8 @@ router.get("/readyz", async (_req, res) => {
           await db.execute(sql`SELECT 1 FROM payment_intents LIMIT 0`);
           await db.execute(sql`SELECT 1 FROM transactions LIMIT 0`);
           await db.execute(sql`SELECT 1 FROM promo_ad_transactions LIMIT 0`);
+          await db.execute(sql`SELECT 1 FROM billing_receipt_outbox LIMIT 0`);
+          await db.execute(sql`SELECT dedupe_key FROM notifications LIMIT 0`);
         })(),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error("schema check timed out")), DB_CHECK_TIMEOUT_MS),
