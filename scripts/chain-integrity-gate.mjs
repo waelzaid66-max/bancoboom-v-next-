@@ -2144,6 +2144,17 @@ const CHECKS = [
       ).test(s),
     why: "Both Next surfaces must run the bounded stale-export cleanup before every build",
   })),
+  {
+    id: "P-next-build-export-cleanup-aws-docker",
+    file: "deploy/aws/Dockerfile.banco-web",
+    test: (s) => {
+      const copy =
+        "COPY scripts/prepare-next-build.mjs ./scripts/prepare-next-build.mjs";
+      const build = "RUN pnpm --filter @workspace/banco-web run build";
+      return s.includes(copy) && s.indexOf(copy) < s.indexOf(build);
+    },
+    why: "The AWS banco-web image must copy the prebuild helper before invoking the workspace build",
+  },
 ];
 
 function main() {

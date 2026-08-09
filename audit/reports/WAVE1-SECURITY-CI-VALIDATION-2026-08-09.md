@@ -154,14 +154,48 @@ claim is made for:
 
 Those remain the controlling release gates in the comprehensive master plan.
 
-## 8. Publication blocker
+## 8. Publication and exact-SHA CI result
 
-The GitHub App can read repository state and reports admin/push permission, but
-its Git Data blob write was rejected with `403 Resource not accessible by
-integration`. Plain `git push` also has no HTTPS credential, and no `GH_TOKEN` or
-`GITHUB_TOKEN` is present. Recreating the commit through the Contents API would
-change the commit SHA and violate the exact-candidate/no-history-rewrite rule.
+The owner explicitly authorized the three-commit fast-forward. A one-process
+credential was used without persisting it in Git configuration or the tracked
+tree. GitHub accepted `main` from `66771d6bec143f675217c44aa48753021c83aa3d`
+to the exact local commit `f61cb9528b3590a04e0c68dacc4faefa98bee865`.
+There was no force push, pull request, tag, deployment, or history rewrite.
 
-The safe remaining publication path is a task-scoped Git credential that can
-push the already-created local commit to `main`, followed by exact-SHA CI review.
-No tag or deploy is permitted at that point.
+GitHub then executed three push workflows against that exact SHA:
+
+| Workflow | Run | Result |
+| --- | ---: | --- |
+| CI | `31320055038` | PASS: all seven jobs, including PostgreSQL migration replay, seed, API tests, mobile, build, lint, and production gates |
+| CI Website | `31320055011` | PASS |
+| CI Website Docker | `31320055046` | FAIL: only `Docker build (banco-web AWS)` failed; the other four Docker jobs passed |
+
+The AWS Docker failure was deterministic. `artifacts/banco-web` now invokes
+`scripts/prepare-next-build.mjs` during `prebuild`, while
+`deploy/aws/Dockerfile.banco-web` copied only the preinstall helper into the
+builder. The job therefore failed with `MODULE_NOT_FOUND` for
+`/app/scripts/prepare-next-build.mjs` before Next compilation.
+
+## 9. Bounded AWS Docker hotfix candidate
+
+The hotfix candidate is based on `f61cb9528b3590a04e0c68dacc4faefa98bee865`
+and is restricted to three tracked paths:
+
+- `deploy/aws/Dockerfile.banco-web` copies the existing prebuild helper before
+  invoking the workspace build;
+- `scripts/chain-integrity-gate.mjs` enforces that copy/order contract; and
+- this report records the exact remote evidence and release boundary.
+
+The new guard reproduced the defect at `234/235`, then passed at `235/235` after
+the one-line Dockerfile repair. Script ESLint passed, the focused `banco-web`
+build generated `46/46` pages, and the literal root `npm run build` completed
+with exit code 0, including `48/48` pages for `banco-website` and the 3,563-module
+Expo/Metro export. Docker is not installed in the local runtime, so the repaired
+AWS image must still pass the exact-SHA GitHub Docker job after publication.
+
+**Decision:** `f61cb95` is not an RC1 because one required Docker job failed. The
+hotfix candidate is locally green but remains unproved in Docker until pushed.
+Even after that job passes, RC1 remains NO-GO until the live Clerk, Paymob,
+object-storage, Docker/Coolify runtime/rollback, EAS, and physical-device gates
+listed above are exercised. The rollback boundary for this hotfix is a normal
+revert of its single future commit; rewriting or resetting `main` is forbidden.
