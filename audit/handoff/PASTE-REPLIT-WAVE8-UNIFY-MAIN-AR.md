@@ -91,7 +91,7 @@ npx expo start --clear
 | CORS / splash | `EXPO_PUBLIC_DOMAIN=banco.today` في shared | **ممنوع** في development shared — `dev-env.sh` من `$REPLIT_DEV_DOMAIN` |
 | Black :5000 / 401 | placeholder `CLERK_SECRET_KEY` يغطي Secrets | السر الحقيقي `sk_test_*` من **Secret Store فقط** |
 | 401 auth | `pk_live` في shared مع `sk_test` | `pk_live` و`banco.today` في **production فقط** |
-| Clerk pair | mismatch instance | `evolving-magpie-43`: `pk_test_ZXZvbHZpbmctbWFncGllLTQz…` ↔ نفس `sk_test_*` |
+| Clerk pair | mismatch instance | `evolving-magpie-43`: `<REDACTED_ROTATE_REQUIRED>…` ↔ نفس `sk_test_*` |
 
 **لا تُعد إدخال** القيم الملوّثة في `[userenv.shared]`. راجع تقريرك: `reports/replit-env/2026-07-31-REPLIT-ENVIRONMENT-REPORT.md`.
 

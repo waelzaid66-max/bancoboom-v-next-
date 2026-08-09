@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  assertMediaWithinPolicy,
   assertVideosWithinSizeLimit,
   assertImagesWithinSizeLimit,
   MAX_VIDEO_BYTES,
   MAX_IMAGE_BYTES,
-} from "./ListingService";
+  MAX_AUDIO_BYTES,
+} from "./mediaSizeGuard";
 import {
   MediaVerifyRetryableError,
   MEDIA_VERIFY_RETRYABLE,
@@ -160,5 +162,70 @@ describe("assertImagesWithinSizeLimit", () => {
         throw new MediaVerifyRetryableError();
       })
     ).rejects.toMatchObject({ code: MEDIA_VERIFY_RETRYABLE });
+  });
+});
+
+describe("assertMediaWithinPolicy", () => {
+  it("rejects a zero-byte object", async () => {
+    await expect(
+      assertMediaWithinPolicy(
+        [{ url: "https://x/empty.jpg", type: "image" }],
+        async () => img(0),
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_DATA" });
+  });
+
+  it("rejects executable or unsupported image/video content types", async () => {
+    for (const contentType of ["image/svg+xml", "video/x-matroska"]) {
+      await expect(
+        assertMediaWithinPolicy(
+          [{ url: "https://x/media", type: contentType.startsWith("image/") ? "image" : "video" }],
+          async () => ({ contentType, size: 1024 }),
+        ),
+      ).rejects.toMatchObject({ code: "INVALID_DATA" });
+    }
+  });
+
+  it("rejects a client-declared image whose stored kind is video", async () => {
+    await expect(
+      assertMediaWithinPolicy(
+        [{ url: "https://x/disguised", type: "image" }],
+        async () => vid(1024),
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_DATA" });
+  });
+
+  it("accepts supported media at or below its authoritative cap", async () => {
+    await expect(
+      assertMediaWithinPolicy(
+        [
+          { url: "https://x/photo", type: "image" },
+          { url: "https://x/clip", type: "video" },
+          { url: "https://x/voice", type: "audio" },
+        ],
+        async (url) =>
+          url.endsWith("photo")
+            ? { contentType: "image/webp; charset=binary", size: MAX_IMAGE_BYTES }
+            : url.endsWith("clip")
+              ? { contentType: "video/quicktime", size: MAX_VIDEO_BYTES }
+              : { contentType: "audio/mp4", size: MAX_AUDIO_BYTES },
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("rejects an oversized or mislabeled audio attachment", async () => {
+    await expect(
+      assertMediaWithinPolicy(
+        [{ url: "https://x/voice", type: "audio" }],
+        async () => ({ contentType: "audio/aac", size: MAX_AUDIO_BYTES + 1 }),
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_DATA" });
+
+    await expect(
+      assertMediaWithinPolicy(
+        [{ url: "https://x/not-voice", type: "audio" }],
+        async () => ({ contentType: "video/mp4", size: 1024 }),
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_DATA" });
   });
 });

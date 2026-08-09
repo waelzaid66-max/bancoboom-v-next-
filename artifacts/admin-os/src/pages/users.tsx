@@ -47,6 +47,18 @@ const ROLE_BADGE: Record<string, string> = {
   user: "bg-muted text-muted-foreground border-border",
 };
 
+/** Route first-party KYC objects through this app's authenticated API origin. */
+function kycReviewUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname.startsWith("/api/v1/uploads/objects/")
+      ? `${parsed.pathname}${parsed.search}`
+      : url;
+  } catch {
+    return url;
+  }
+}
+
 function KycReviewDialog({
   user,
   open,
@@ -215,24 +227,27 @@ function KycReviewDialog({
                 <p className="text-muted-foreground">{t("usersPage.kycNoDocs")}</p>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
-                  {docs.map((url, i) => (
-                    <a
-                      key={`${url}-${i}`}
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="border rounded-md overflow-hidden bg-muted/40 hover:border-primary"
-                    >
-                      <img
-                        src={url}
-                        alt={`doc-${i + 1}`}
-                        className="w-full h-28 object-cover"
-                      />
-                      <div className="px-2 py-1 text-[11px] truncate text-muted-foreground">
-                        {t("usersPage.kycOpenDoc")} #{i + 1}
-                      </div>
-                    </a>
-                  ))}
+                  {docs.map((url, i) => {
+                    const reviewUrl = kycReviewUrl(url);
+                    return (
+                      <a
+                        key={`${url}-${i}`}
+                        href={reviewUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="border rounded-md overflow-hidden bg-muted/40 hover:border-primary"
+                      >
+                        <img
+                          src={reviewUrl}
+                          alt={`doc-${i + 1}`}
+                          className="w-full h-28 object-cover"
+                        />
+                        <div className="px-2 py-1 text-[11px] truncate text-muted-foreground">
+                          {t("usersPage.kycOpenDoc")} #{i + 1}
+                        </div>
+                      </a>
+                    );
+                  })}
                 </div>
               )}
             </div>

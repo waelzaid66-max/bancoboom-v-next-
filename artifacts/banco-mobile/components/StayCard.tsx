@@ -176,6 +176,9 @@ function StayCardComponent({ item, onPress, onSave, isSaved }: StayCardProps) {
                 style={StyleSheet.absoluteFill}
                 contentFit="cover"
                 transition={200}
+                cachePolicy="memory-disk"
+                recyclingKey={item.id}
+                enforceEarlyResizing
               />
             ) : null}
 

@@ -89,6 +89,8 @@ import { useAuthGate } from "@/hooks/useAuthGate";
 import { useColors } from "@/hooks/useColors";
 
 const PAGE_SIZE = 20;
+const PREFETCH_INITIAL_COUNT = 8;
+const PREFETCH_TRACK_LIMIT = 256;
 const SCROLL_SIGNAL_THROTTLE_MS = 3000;
 const RAIL_CARD_WIDTH = 260;
 const MIN_INSTALLMENT_ITEMS = 3;
@@ -496,12 +498,16 @@ export default function FeedScreen() {
     const urls: string[] = [];
     for (const it of list) {
       if (it.media_preview && !prefetchedRef.current.has(it.media_preview)) {
+        if (prefetchedRef.current.size >= PREFETCH_TRACK_LIMIT) {
+          const oldest = prefetchedRef.current.values().next().value;
+          if (oldest) prefetchedRef.current.delete(oldest);
+        }
         prefetchedRef.current.add(it.media_preview);
         urls.push(it.media_preview);
       }
     }
     if (urls.length) {
-      Image.prefetch(urls).catch(() => {});
+      Image.prefetch(urls, "disk").catch(() => {});
     }
   }, []);
 
@@ -547,7 +553,7 @@ export default function FeedScreen() {
         setCursor(meta?.cursor);
         setHasNext(meta?.has_next ?? false);
         setError(false);
-        prefetchImages(data);
+        prefetchImages(data.slice(0, PREFETCH_INITIAL_COUNT));
       } catch {
         if (reset) setError(true);
       }

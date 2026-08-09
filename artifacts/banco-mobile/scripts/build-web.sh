@@ -31,6 +31,7 @@ echo "  Domain : $DOMAIN"
 echo "  BasePath: $BASE"
 echo "  Output : $PROJECT_DIR/static-build/web/"
 
+EXPO_NO_TELEMETRY=1 \
 EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_KEY" \
 EXPO_PUBLIC_DOMAIN="$DOMAIN" \
 EXPO_WEB_BASE_URL="$BASE" \

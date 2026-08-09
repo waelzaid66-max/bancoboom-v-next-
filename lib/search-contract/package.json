@@ -13,7 +13,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test tests/*.test.mjs"
+    "test": "node --import tsx --test tests/*.test.mjs"
   },
   "dependencies": {
     "@workspace/api-client-react": "workspace:*",

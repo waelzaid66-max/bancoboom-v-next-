@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { Readable } from "stream";
 
 // Mock the AWS SDK so the unit test verifies OUR logic (path mapping, ACL
 // evaluation, presign invocation, self-copy-on-ACL) without hitting real S3.
@@ -32,6 +33,7 @@ vi.mock("@aws-sdk/s3-request-presigner", () => ({
 import { S3ObjectStorageService } from "./objectStorage.s3";
 import { ObjectPermission } from "./objectAcl";
 import { ObjectNotFoundError, UploadOwnershipError } from "./objectStorage";
+import { parseSingleByteRange } from "./httpByteRange";
 
 function svc() {
   process.env.AWS_REGION = "eu-central-1";
@@ -78,6 +80,91 @@ describe("S3ObjectStorageService", () => {
     );
   });
 
+  it("copies a temp upload to its deterministic write-once immutable key", async () => {
+    const id = "12345678-1234-1234-1234-123456789abc";
+    send
+      .mockResolvedValueOnce({ ETag: '"source-etag"' })
+      .mockResolvedValueOnce({});
+
+    const finalPath = await svc().copyUploadToImmutableObject(
+      `/objects/uploads/${id}`,
+    );
+
+    expect(finalPath).toBe(`/objects/final/${id}`);
+    const copy = send.mock.calls[1][0] as {
+      input: {
+        Bucket: string;
+        Key: string;
+        CopySource: string;
+        CopySourceIfMatch: string;
+        IfNoneMatch: string;
+      };
+    };
+    expect(copy.input).toMatchObject({
+      Bucket: "banco-media",
+      Key: `private/final/${id}`,
+      CopySourceIfMatch: '"source-etag"',
+      IfNoneMatch: "*",
+    });
+    expect(decodeURIComponent(copy.input.CopySource)).toBe(
+      `banco-media/private/uploads/${id}`,
+    );
+  });
+
+  it("returns the existing final identity when settlement already removed the temp", async () => {
+    const id = "12345678-1234-1234-1234-123456789abc";
+    send
+      .mockRejectedValueOnce({ $metadata: { httpStatusCode: 404 } })
+      .mockResolvedValueOnce({});
+
+    await expect(
+      svc().copyUploadToImmutableObject(`/objects/uploads/${id}`),
+    ).resolves.toBe(`/objects/final/${id}`);
+
+    const destinationHead = send.mock.calls[1][0] as {
+      input: { Bucket: string; Key: string };
+    };
+    expect(destinationHead.input).toEqual({
+      Bucket: "banco-media",
+      Key: `private/final/${id}`,
+    });
+  });
+
+  it("treats a destination precondition conflict as an idempotent retry", async () => {
+    const id = "12345678-1234-1234-1234-123456789abc";
+    send
+      .mockResolvedValueOnce({ ETag: '"source-etag"' })
+      .mockRejectedValueOnce({ $metadata: { httpStatusCode: 412 } })
+      .mockResolvedValueOnce({});
+
+    await expect(
+      svc().copyUploadToImmutableObject(`/objects/uploads/${id}`),
+    ).resolves.toBe(`/objects/final/${id}`);
+    expect(send).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not hide a destination conflict when no final object exists", async () => {
+    const id = "12345678-1234-1234-1234-123456789abc";
+    const conflict = { $metadata: { httpStatusCode: 412 } };
+    send
+      .mockResolvedValueOnce({ ETag: '"source-etag"' })
+      .mockRejectedValueOnce(conflict)
+      .mockRejectedValueOnce({ $metadata: { httpStatusCode: 404 } });
+
+    await expect(
+      svc().copyUploadToImmutableObject(`/objects/uploads/${id}`),
+    ).rejects.toBe(conflict);
+  });
+
+  it("rejects a non-temporary source before calling S3", async () => {
+    await expect(
+      svc().copyUploadToImmutableObject(
+        "/objects/final/12345678-1234-1234-1234-123456789abc",
+      ),
+    ).rejects.toThrow(/temporary upload/i);
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("getObjectEntityFile throws ObjectNotFoundError when the key is missing", async () => {
     send.mockRejectedValueOnce({ $metadata: { httpStatusCode: 404 } });
     await expect(svc().getObjectEntityFile("/objects/uploads/missing")).rejects.toBeInstanceOf(
@@ -104,6 +191,29 @@ describe("S3ObjectStorageService", () => {
     ).toBe(true);
   });
 
+  it("passes a single byte range to S3 and returns a 206 response without an ACL HEAD", async () => {
+    send.mockResolvedValueOnce({
+      Body: Readable.from(Buffer.from("0123456789")),
+      ContentType: "video/mp4",
+      ContentLength: 10,
+      ContentRange: "bytes 0-9/100",
+      AcceptRanges: "bytes",
+      ETag: '"etag-1"',
+    });
+
+    const response = await svc().downloadObject(
+      { key: "private/uploads/video" },
+      { range: parseSingleByteRange("bytes=0-9") },
+    );
+
+    expect(response.status).toBe(206);
+    expect(response.headers.get("content-range")).toBe("bytes 0-9/100");
+    expect(response.headers.get("accept-ranges")).toBe("bytes");
+    expect(send).toHaveBeenCalledTimes(1);
+    const command = send.mock.calls[0][0] as { input: { Range?: string } };
+    expect(command.input.Range).toBe("bytes=0-9");
+  });
+
   it("promoteServingUrlToPublic self-copies with a public ACL (owner match)", async () => {
     const s = svc();
     send
@@ -120,6 +230,7 @@ describe("S3ObjectStorageService", () => {
     expect(JSON.parse(copy.input.Metadata["acl-policy"])).toEqual({
       owner: "owner-1",
       visibility: "public",
+      mediaPurpose: "public-media",
     });
   });
 
@@ -136,6 +247,33 @@ describe("S3ObjectStorageService", () => {
         "owner-1",
       ),
     ).rejects.toBeInstanceOf(UploadOwnershipError);
+  });
+
+  it("trySetObjectEntityAclPolicy cannot replace another owner's final ACL", async () => {
+    const s = svc();
+    send
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Metadata: {
+          "acl-policy": JSON.stringify({
+            owner: "owner-a",
+            visibility: "private",
+            mediaPurpose: "private-media",
+          }),
+        },
+      });
+
+    await expect(
+      s.trySetObjectEntityAclPolicy(
+        "/objects/final/12345678-1234-1234-1234-123456789abc",
+        {
+          owner: "owner-b",
+          visibility: "public",
+          mediaPurpose: "public-media",
+        },
+      ),
+    ).rejects.toBeInstanceOf(UploadOwnershipError);
+    expect(send).toHaveBeenCalledTimes(2);
   });
 
   it("promoteServingUrlToPublic no-ops for a non-first-party URL", async () => {

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # BANCO — apply the database schema on AWS.
 #
-# The project uses Drizzle in PUSH mode (lib/db: `drizzle-kit push`), not
-# versioned SQL migration files. Push is idempotent and additive-by-default; the
-# schema history in this codebase has only ever ADDED tables/columns/enum values.
+# The project uses reviewed, versioned Drizzle SQL migrations. Existing databases
+# created before that authority must be baselined exactly once (see
+# lib/db/MIGRATIONS.md); fresh databases run the committed history directly.
 #
 # IMPORTANT: pg_trgm must exist (fuzzy search). RDS lets you CREATE EXTENSION as
 # the master user. The app also self-heals this at boot (ensureDbExtensions),

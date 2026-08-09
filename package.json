@@ -5,6 +5,7 @@
   "packageManager": "pnpm@11.9.0",
   "scripts": {
     "preinstall": "node scripts/preinstall-enforce-pnpm.mjs",
+    "prebuild": "pnpm run workspace:verify",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
@@ -17,7 +18,8 @@
     "ops:website-staging-smoke": "node scripts/website-staging-smoke.mjs",
     "ops:website-soft-launch-prep": "node scripts/website-soft-launch-prep-audit.mjs",
     "ops:live-cutover": "node scripts/ops-live-cutover-check.mjs",
-    "confidence": "node scripts/production-confidence-check.mjs"
+    "confidence": "node scripts/production-confidence-check.mjs",
+    "workspace:verify": "node scripts/workspace-verify.mjs"
   },
   "private": true,
   "devDependencies": {

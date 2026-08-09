@@ -9,7 +9,7 @@ description: Three .replit config bugs that caused blank screens and CORS blocks
    - All Expo API calls hit production → CORS block → splash screen freeze
    - **Fix:** Remove from shared; `dev-env.sh` sets it from `$REPLIT_DEV_DOMAIN` automatically
 
-2. `CLERK_SECRET_KEY = "sk_test_banco_dev_placeholder_replace_with_real"` in `[userenv.development]`
+2. `CLERK_SECRET_KEY = "<REDACTED_ROTATE_REQUIRED>"` in `[userenv.development]`
    - `.replit` env vars override encrypted secrets store
    - Placeholder key → Clerk SSR fails → black screen on Next.js (port 5000)
    - **Fix:** Remove from `.replit`; real key from encrypted store takes effect

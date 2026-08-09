@@ -517,9 +517,11 @@ const CHECKS = [
     id: "P-poster-claim-assert",
     file: "artifacts/api-server/src/services/ListingService.ts",
     test: (s) =>
-      /if \(m\.thumbnail_url\)/.test(s) &&
-      /assertCallerMayUseUpload\(m\.thumbnail_url/.test(s),
-    why: "thumbnail_url must be ownership-asserted like media.url",
+      /const prepareUrl = async/.test(s) &&
+      /assertCallerMayUseUpload\(sourceUrl, ownerId\)/.test(s) &&
+      /if \(item\.thumbnail_url\)/.test(s) &&
+      /await prepareUrl\(item\.thumbnail_url, "image"\)/.test(s),
+    why: "thumbnail_url must traverse the same ownership/finalization path as media.url",
   },
   {
     id: "P-expo-identity-canonical",
@@ -1159,8 +1161,9 @@ const CHECKS = [
     file: "artifacts/api-server/src/controllers/paymentsController.ts",
     test: (s) =>
       /findIntentIdByPaymobOrderId/.test(s) &&
-      /boundIntentId/.test(s),
-    why: "Webhook must settle the intent already bound to signed order.id",
+      /const intentId = await findIntentIdByPaymobOrderId/.test(s) &&
+      /order_not_bound/.test(s),
+    why: "Webhook must settle only the intent already bound to signed order.id",
   },
   {
     id: "P-trending-market-country",
@@ -1441,12 +1444,23 @@ const CHECKS = [
     why: "Public comments must require active + public visibility",
   },
   {
-    id: "P-paymob-prebind-intention-order",
+    id: "P-paymob-require-prebound-intention-order",
     file: "artifacts/api-server/src/lib/paymentProvider.ts",
     test: (s) =>
       /intention_order_id/.test(s) &&
-      /providerOrderId/.test(s),
-    why: "Intention create must capture order id when Paymob returns it (first-bind TOFU)",
+      /providerOrderId: string/.test(s) &&
+      /!providerOrderId/.test(s) &&
+      /has_order_id/.test(s),
+    why: "Intention create must fail closed unless Paymob returns the order id used for signed-webhook routing",
+  },
+  {
+    id: "P-paymob-webhook-no-unsigned-first-bind",
+    file: "artifacts/api-server/src/controllers/paymentsController.ts",
+    test: (s) =>
+      /findIntentIdByPaymobOrderId/.test(s) &&
+      /order_not_bound/.test(s) &&
+      !/boundIntentId\s*\?\?\s*verification\.intentId/.test(s),
+    why: "Signed order.id must already be bound; unsigned merchant_order_id cannot establish first-use ownership",
   },
   // ── Round 15 ──────────────────────────────────────────────
   {
@@ -1527,13 +1541,31 @@ const CHECKS = [
   },
   // ── Round 16 ──────────────────────────────────────────────
   {
-    id: "P-paymob-partial-refund-claw",
+    id: "P-paymob-refund-requires-reconciliation",
     file: "artifacts/api-server/src/controllers/paymentsController.ts",
     test: (s) =>
-      /isPspReverse/.test(s) &&
-      /clawAmountEgp/.test(s) &&
-      /amountCents > intentCents/.test(s),
-    why: "Refund/void must claw partial amount_cents instead of ACK no-op on mismatch",
+      /markPaymobRefundForReconciliation/.test(s) &&
+      /refund requires authenticated amount reconciliation/.test(s) &&
+      /else if \(verification\.success\)/.test(s),
+    why: "Refund callbacks must not treat signed original amount_cents as an unsigned partial-refund delta",
+  },
+  {
+    id: "P-paymob-refund-blocks-late-settlement",
+    file: "artifacts/api-server/src/services/PaymentIntentService.ts",
+    test: (s) =>
+      /psp_refund_reconciliation_required/.test(s) &&
+      /markPaymobRefundForReconciliation/.test(s) &&
+      /pspReversedFromMeta/.test(s),
+    why: "A refund awaiting provider inquiry must durably block late success settlement",
+  },
+  {
+    id: "P-admin-refund-reconciliation-alert",
+    file: "artifacts/api-server/src/services/AdminService.ts",
+    test: (s) =>
+      /psp_refund_reconciliation_required/.test(s) &&
+      /payment_refund_reconciliation/.test(s) &&
+      /Refunds require Paymob reconciliation/.test(s),
+    why: "Signed refunds awaiting authoritative amount inquiry must remain visible to operations",
   },
   {
     id: "P-boost-seller-tombstone",
@@ -1903,6 +1935,42 @@ const CHECKS = [
     },
     why: "Notification copy is stored, not re-rendered — every user-facing string must be bilingual `عربي · English` or Arabic speakers get English-only alerts",
   })),
+  // Operational documentation and cutover surfaces are executable guidance.
+  // A stale repository here can deploy a valid build from the wrong tree, which
+  // is more dangerous than an ordinary broken link. Historical audit reports
+  // are deliberately outside this list; they may name predecessor repos as
+  // evidence, but no live operator surface may name one as the deploy source.
+  ...[
+    ["deployment-sot", "docs/DEPLOYMENT_SOURCE_OF_TRUTH.md"],
+    ["coolify-now", "COOLIFY_DEPLOY_NOW.md"],
+    ["go-live", "OPS_GO_LIVE_CHECKLIST.md"],
+    ["coolify-compose", "docker-compose.coolify.yml"],
+    ["coolify-guide", "docs/DEPLOY_COOLIFY.md"],
+    ["deployment-plan", "docs/DEPLOYMENT_PLAN.md"],
+    ["recovery-plan", "docs/BANCO-SAFE-RECOVERY-EXECUTION-PLAN.md"],
+    ["live-cutover-script", "scripts/ops-live-cutover-check.mjs"],
+    ["cloudflare-config", "wrangler.toml"],
+    ["project-index", "projects/README.md"],
+    ["status-ui", "projects/banco-status/src/App.tsx"],
+    ["status-readme", "projects/banco-status/README.md"],
+    ["cloudflare-stub", "deploy/cloudflare/stub-worker.ts"],
+  ].map(([name, file]) => ({
+    id: `P-canonical-deploy-repo-${name}`,
+    file,
+    test: (s) =>
+      /waelzaid66-max\/bancoboomstor/.test(s) &&
+      !/waelzaid66-max\/banco-with-wael/.test(s),
+    why: "Every live deployment surface must name bancoboomstor as the only canonical repository",
+  })),
+  {
+    id: "P-canonical-deploy-repo-dual-status",
+    file: "DUAL_REPO_STATUS.md",
+    test: (s) =>
+      /waelzaid66-max\/bancoboomstor/.test(s) &&
+      /السجل التاريخي المؤرشف/.test(s) &&
+      !/\*\*أساسي\*\*\s*\|\s*https:\/\/github\.com\/waelzaid66-max\/-BANCO-CA-OOM-/.test(s),
+    why: "The repository-status entry point must not present the retired pre-consolidation repo as primary",
+  },
 ];
 
 function main() {

@@ -26,6 +26,9 @@ test("OrderDocuments reuses shared upload + fullscreen viewer", () => {
   assert.match(orderDocs, /useAttachImportOrderDocument/);
   assert.match(orderDocs, /useDeleteImportOrderDocument/);
   assert.match(orderDocs, /useListImportOrderDocuments/);
+  assert.match(orderDocs, /useAuthenticatedMediaHeaders/);
+  assert.match(orderDocs, /authenticatedMediaSource/);
+  assert.match(orderDocs, /requestHeaders=\{requestHeaders\}/);
 });
 
 test("delete dismiss uses common.cancel (not order-cancel Keep copy)", () => {

@@ -292,14 +292,15 @@ export const ListingMediaEditor = forwardRef<
         quality: 0.7,
       });
       if (result.canceled) return;
-      const { accepted, rejectedLong, rejectedBig } = partitionPickedAssets(
-        result.assets,
-      );
+      const { accepted, rejectedLong, rejectedBig, rejectedUnsupported } =
+        partitionPickedAssets(result.assets);
       const next = capMedia([...photos, ...accepted]);
       const added = next.filter((p) => !photos.some((prev) => prev.uri === p.uri));
       setPhotos(next);
       handleAddedAssets(added);
-      if (rejectedLong) {
+      if (rejectedUnsupported) {
+        Alert.alert(t("common.error"), t("create.errVideoUnsupported"));
+      } else if (rejectedLong) {
         Alert.alert(
           t("common.error"),
           t("create.errVideoTooLong", { seconds: MAX_VIDEO_SECONDS }),
@@ -327,14 +328,15 @@ export const ListingMediaEditor = forwardRef<
         videoMaxDuration: MAX_VIDEO_SECONDS,
       });
       if (result.canceled) return;
-      const { accepted, rejectedLong, rejectedBig } = partitionPickedAssets(
-        result.assets,
-      );
+      const { accepted, rejectedLong, rejectedBig, rejectedUnsupported } =
+        partitionPickedAssets(result.assets);
       const next = capMedia([...photos, ...accepted]);
       const added = next.filter((p) => !photos.some((prev) => prev.uri === p.uri));
       setPhotos(next);
       handleAddedAssets(added);
-      if (rejectedLong) {
+      if (rejectedUnsupported) {
+        Alert.alert(t("common.error"), t("create.errVideoUnsupported"));
+      } else if (rejectedLong) {
         Alert.alert(
           t("common.error"),
           t("create.errVideoTooLong", { seconds: MAX_VIDEO_SECONDS }),

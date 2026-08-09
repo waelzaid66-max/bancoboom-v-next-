@@ -1,20 +1,36 @@
 import type { Request, Response } from "express";
 import { Readable } from "stream";
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { listingMedia, listings, users } from "@workspace/db/schema";
+import {
+  companyProfiles,
+  conversations,
+  importOrderDocuments,
+  importOrders,
+  listingMedia,
+  listings,
+  messages,
+  users,
+} from "@workspace/db/schema";
 import { ObjectNotFoundError, UploadOwnershipError } from "../lib/objectStorage";
 import { getObjectStorageService } from "../lib/objectStorageProvider";
 import { publicVisibilityConditions } from "../lib/feedVisibility";
-import { getObjectAclPolicy } from "../lib/objectAcl";
 import {
   recordUploadClaim,
   assertCallerMayUseUpload,
-  consumeUploadClaim,
+  settleFinalizedUploadBestEffort,
   extendUploadClaimAfterVerify,
-  parseServingWildcard,
   servingWildcardToObjectPath,
 } from "../lib/uploadClaims";
+import {
+  parseTrustedServingWildcard,
+  resolveUploadServingOrigin,
+} from "../lib/uploadPaths";
+import { finalizePublicUpload } from "../lib/uploadFinalization";
+import {
+  decidePrivateMediaAccess,
+  type PrivateMediaAccessDecision,
+} from "../lib/privateMediaAccess";
 import {
   successResponse,
   errorResponse,
@@ -27,32 +43,28 @@ import {
 } from "../validators/schemas";
 import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "../services/ListingService";
 import { MEDIA_VERIFY_RETRYABLE } from "../lib/mediaVerify";
+import {
+  ALLOWED_IMAGE_CONTENT_TYPES,
+  SERVABLE_CONTENT_TYPES,
+  classifyVisualContentType,
+  normalizeStoredContentType,
+} from "../lib/mediaContentTypes";
+import {
+  InvalidByteRangeError,
+  RangeNotSatisfiableError,
+  parseSingleByteRange,
+} from "../lib/httpByteRange";
+import {
+  ObjectPermission,
+  canAccessObjectAclPolicy,
+  isTrustedPublicMediaPolicy,
+} from "../lib/objectAcl";
 
 /**
  * MIME types that may be served inline from the BANCO origin.
  * Excludes anything a browser can execute or render as markup:
  * text/html, text/javascript, application/javascript, image/svg+xml, etc.
  */
-const ALLOWED_CONTENT_TYPES = new Set([
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "image/avif",
-  "image/heic",
-  "image/heif",
-  "video/mp4",
-  "video/webm",
-  "video/ogg",
-  "video/quicktime",
-  "audio/mpeg",
-  "audio/ogg",
-  "audio/wav",
-  "audio/webm",
-  "application/pdf",
-]);
-
 const UPLOADS_PATH_PREFIX = "/api/v1/uploads/objects/";
 
 /** Escape `%`, `_`, and `\` so user-supplied path segments cannot widen SQL LIKE. */
@@ -93,12 +105,88 @@ async function isLegacyListingMedia(wildcardPath: string): Promise<boolean> {
   return row !== undefined;
 }
 
+/** Public company branding fallback for objects created before ACL metadata. */
+async function isLegacyCompanyMedia(wildcardPath: string): Promise<boolean> {
+  const urlSuffix = `%${UPLOADS_PATH_PREFIX}${escapeLikeLiteral(wildcardPath)}`;
+  const [row] = await db
+    .select({ id: companyProfiles.id })
+    .from(companyProfiles)
+    .innerJoin(users, eq(companyProfiles.userId, users.id))
+    .where(
+      and(
+        isNull(users.deletedAt),
+        eq(users.isShadowBanned, false),
+        or(
+          sql`${companyProfiles.logoUrl} LIKE ${urlSuffix} ESCAPE '\\'`,
+          sql`${companyProfiles.coverUrl} LIKE ${urlSuffix} ESCAPE '\\'`,
+        ),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
+ * Relationship authorization for every private media surface. This check runs
+ * before ACL authorization so a legacy chat/KYC/import object that was once
+ * marked public cannot bypass the participant/owner boundary.
+ */
+async function getPrivateReferenceAccess(
+  wildcardPath: string,
+  viewerClerkId?: string,
+): Promise<PrivateMediaAccessDecision> {
+  const escapedPath = escapeLikeLiteral(wildcardPath);
+  const urlSuffix = `%${UPLOADS_PATH_PREFIX}${escapedPath}`;
+  const jsonNeedle = `%${UPLOADS_PATH_PREFIX}${escapedPath}%`;
+
+  const viewerPromise = viewerClerkId
+    ? db
+        .select({ id: users.id, isAdmin: users.isAdmin })
+        .from(users)
+        .where(and(eq(users.clerkId, viewerClerkId), isNull(users.deletedAt)))
+        .limit(1)
+    : Promise.resolve([]);
+
+  const [viewerRows, kycRows, chatRows, importRows] = await Promise.all([
+    viewerPromise,
+    db
+      .select({ ownerId: users.id })
+      .from(users)
+      .where(
+        and(
+          isNull(users.deletedAt),
+          sql`${users.companyDetails}::text LIKE ${jsonNeedle} ESCAPE '\\'`,
+        ),
+      )
+      .limit(20),
+    db
+      .select({ buyerId: conversations.buyerId, sellerId: conversations.sellerId })
+      .from(messages)
+      .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+      .where(sql`${messages.mediaUrl} LIKE ${urlSuffix} ESCAPE '\\'`)
+      .limit(20),
+    db
+      .select({ ownerId: importOrders.userId })
+      .from(importOrderDocuments)
+      .innerJoin(importOrders, eq(importOrderDocuments.orderId, importOrders.id))
+      .where(sql`${importOrderDocuments.url} LIKE ${urlSuffix} ESCAPE '\\'`)
+      .limit(20),
+  ]);
+
+  const viewer = viewerRows[0];
+  return decidePrivateMediaAccess(viewer, {
+    kycOwnerIds: kycRows.map((row) => row.ownerId),
+    chatParticipants: chatRows,
+    importOwnerIds: importRows.map((row) => row.ownerId),
+  });
+}
+
 /**
  * POST /v1/uploads/request-url
  *
  * Returns a presigned PUT URL for the client to upload a file directly to
- * object storage, plus the persistent public serving URL to store on the
- * listing media record. The client sends JSON metadata only — never the file.
+ * object storage, plus the persistent BANCO serving URL to store on the eventual
+ * domain record. The client sends JSON metadata only — never the file.
  */
 export async function requestUploadUrlHandler(req: Request, res: Response): Promise<Response> {
   const clerkId = req.userId;
@@ -112,11 +200,21 @@ export async function requestUploadUrlHandler(req: Request, res: Response): Prom
     await recordUploadClaim(objectPath, clerkId);
 
     const servingPath = `${UPLOADS_PATH_PREFIX}${objectPath.replace(/^\/objects\//, "")}`;
-    const proto =
-      (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() ||
-      req.protocol;
-    const host = (req.headers["x-forwarded-host"] as string | undefined) || req.get("host");
-    const url = `${proto}://${host}${servingPath}`;
+    const forwardedProto = req.headers["x-forwarded-proto"];
+    const protoValue = Array.isArray(forwardedProto)
+      ? forwardedProto[0]
+      : forwardedProto;
+    const proto = protoValue?.split(",")[0]?.trim() || req.protocol;
+
+    const forwardedHost = req.headers["x-forwarded-host"];
+    const hostValue = Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost;
+    const host = hostValue?.split(",")[0]?.trim() || req.get("host")?.trim();
+    if (!host) throw new Error("Request host is unavailable");
+
+    // The configured deployment origin is authoritative. Proxy headers are a
+    // local/dev fallback only and still pass through the strict HTTP(S) parser.
+    const servingOrigin = resolveUploadServingOrigin(proto, host);
+    const url = `${servingOrigin}${servingPath}`;
 
     const result = validateResponse(UploadUrlResultSchema, {
       upload_url: uploadURL,
@@ -152,7 +250,9 @@ export async function requestUploadUrlHandler(req: Request, res: Response): Prom
 /**
  * GET /v1/uploads/objects/*path
  *
- * Serves uploaded listing media.  Access is permitted only when:
+ * Serves uploaded media. Private KYC/chat/import references are authorized by
+ * their database relationship first, even if a legacy ACL incorrectly says
+ * public. Other objects are permitted only when:
  *   (a) the object carries a public ACL policy (set at listing-creation time
  *       via promoteServingUrlToPublic), OR
  *   (b) the object is referenced by an active, publicly-visible listing
@@ -166,30 +266,54 @@ export async function requestUploadUrlHandler(req: Request, res: Response): Prom
  */
 export async function serveObjectHandler(req: Request, res: Response): Promise<void> {
   try {
+    const range = parseSingleByteRange(req.headers.range);
     const raw = (req.params as Record<string, unknown>).path;
     const wildcardPath = Array.isArray(raw) ? raw.join("/") : String(raw ?? "");
     const objectPath = `/objects/${wildcardPath}`;
     const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
 
-    const canAccess = await objectStorageService.canAccessObjectEntity({
-      userId: req.userId,
-      objectFile,
-    });
+    const aclPolicy = await objectStorageService.getObjectEntityAclPolicy(objectFile);
+    // New public media carries a server-written purpose marker and can avoid
+    // the legacy KYC/chat/import relationship queries entirely. Missing or
+    // private purpose still takes the relationship path, protecting old private
+    // objects that may have an incorrect public ACL.
+    const privateReference: PrivateMediaAccessDecision =
+      isTrustedPublicMediaPolicy(aclPolicy)
+        ? { referenced: false, allowed: false }
+        : await getPrivateReferenceAccess(wildcardPath, req.userId);
 
+    const aclPublic = await canAccessObjectAclPolicy({
+      aclPolicy,
+      requestedPermission: ObjectPermission.READ,
+    });
+    const aclViewer =
+      aclPublic ||
+      (!!req.userId &&
+        (await canAccessObjectAclPolicy({
+          userId: req.userId,
+          aclPolicy,
+          requestedPermission: ObjectPermission.READ,
+        })));
+
+    let canAccess = privateReference.referenced ? privateReference.allowed : aclViewer;
+    if (!canAccess && !privateReference.referenced) {
+      const [legacyListing, legacyCompany] = await Promise.all([
+        isLegacyListingMedia(wildcardPath),
+        isLegacyCompanyMedia(wildcardPath),
+      ]);
+      canAccess = legacyListing || legacyCompany;
+    }
     if (!canAccess) {
-      const legacy = await isLegacyListingMedia(wildcardPath);
-      if (!legacy) {
-        res.status(403).json(errorResponse("FORBIDDEN", "Access denied"));
-        return;
-      }
+      res.status(403).json(errorResponse("FORBIDDEN", "Access denied"));
+      return;
     }
 
-    const response = await objectStorageService.downloadObject(objectFile);
+    const response = await objectStorageService.downloadObject(objectFile, { range });
 
     const rawContentType = response.headers.get("Content-Type") ?? "application/octet-stream";
-    const contentType = rawContentType.split(";")[0].trim().toLowerCase();
+    const contentType = normalizeStoredContentType(rawContentType);
 
-    if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+    if (!SERVABLE_CONTENT_TYPES.has(contentType)) {
       req.log.warn({ contentType, path: wildcardPath }, "Blocked object serve: disallowed content type");
       res.status(403).json(errorResponse("FORBIDDEN", "File type not permitted"));
       return;
@@ -217,8 +341,7 @@ export async function serveObjectHandler(req: Request, res: Response): Promise<v
     // The authorization decision is untouched — this only decides who may STORE
     // the reply. Public listing media keeps the identical 24h public caching it
     // has today; anything else becomes uncacheable by shared caches.
-    const aclPolicy = await getObjectAclPolicy(objectFile);
-    const isPublicObject = aclPolicy?.visibility === "public";
+    const isPublicObject = !privateReference.referenced && aclPublic;
     res.setHeader(
       "Cache-Control",
       isPublicObject ? "public, max-age=86400" : "private, no-store",
@@ -231,6 +354,19 @@ export async function serveObjectHandler(req: Request, res: Response): Promise<v
       res.end();
     }
   } catch (error) {
+    if (error instanceof InvalidByteRangeError) {
+      res.setHeader("Accept-Ranges", "bytes");
+      res.status(416).end();
+      return;
+    }
+    if (error instanceof RangeNotSatisfiableError) {
+      res.setHeader("Accept-Ranges", "bytes");
+      if (error.totalSize != null) {
+        res.setHeader("Content-Range", `bytes */${error.totalSize}`);
+      }
+      res.status(416).end();
+      return;
+    }
     if (error instanceof ObjectNotFoundError) {
       res.status(404).json(errorResponse("NOT_FOUND", "Object not found"));
       return;
@@ -245,7 +381,7 @@ export async function serveObjectHandler(req: Request, res: Response): Promise<v
  *
  * Promotes a previously-uploaded, first-party image object to a public ACL so it
  * can be served by serveObjectHandler without auth. Used for media that is
- * attached outside listing creation (profile covers, company logos, chat images)
+ * attached outside listing creation (profile covers and other public branding)
  * where there is no other server hook to promote on attach.
  *
  * Hardening: requires auth (route), accepts ONLY our own /api/v1/uploads/objects/
@@ -268,36 +404,58 @@ export async function promoteUploadHandler(req: Request, res: Response): Promise
 
   const { url } = parsed.data;
   try {
-    await assertCallerMayUseUpload(url, ownerId);
-
-    const meta = await objectStorageService.getServingObjectMetadata(url);
-    if (!meta) {
+    if (!parseTrustedServingWildcard(url)) {
       return res
         .status(400)
         .json(errorResponse("INVALID_DATA", "Not a first-party upload URL"));
     }
-    const contentType = (meta.contentType ?? "").toLowerCase();
-    if (!contentType.startsWith("image/")) {
+    await assertCallerMayUseUpload(url, ownerId);
+
+    const finalized = await finalizePublicUpload(
+      objectStorageService,
+      url,
+      ownerId,
+      {
+        // Validate the immutable snapshot, not the mutable presigned source.
+        validateFinal: async (finalUrl) => {
+          const meta = await objectStorageService.getServingObjectMetadata(finalUrl);
+          if (!meta) {
+            throw Object.assign(new Error("Not a first-party upload URL"), {
+              code: "INVALID_DATA",
+            });
+          }
+          const contentType = normalizeStoredContentType(meta.contentType);
+          if (!ALLOWED_IMAGE_CONTENT_TYPES.has(contentType)) {
+            throw Object.assign(new Error("Only image uploads can be promoted"), {
+              code: "INVALID_DATA",
+            });
+          }
+          if (
+            meta.size == null ||
+            !Number.isFinite(meta.size) ||
+            meta.size <= 0 ||
+            meta.size > MAX_IMAGE_BYTES
+          ) {
+            const maxMb = Math.round(MAX_IMAGE_BYTES / (1024 * 1024));
+            throw Object.assign(
+              new Error(`Image exceeds the maximum allowed size of ${maxMb} MB`),
+              { code: "INVALID_DATA" },
+            );
+          }
+        },
+      },
+    );
+    if (!finalized) {
       return res
         .status(400)
-        .json(errorResponse("INVALID_DATA", "Only image uploads can be promoted"));
+        .json(errorResponse("INVALID_DATA", "Not a first-party upload URL"));
     }
-    if (meta.size == null || meta.size > MAX_IMAGE_BYTES) {
-      const maxMb = Math.round(MAX_IMAGE_BYTES / (1024 * 1024));
-      return res
-        .status(400)
-        .json(
-          errorResponse("INVALID_DATA", `Image exceeds the maximum allowed size of ${maxMb} MB`)
-        );
-    }
+    await settleFinalizedUploadBestEffort(finalized);
 
-    await objectStorageService.promoteServingUrlToPublic(url, ownerId);
-    const wildcard = parseServingWildcard(url);
-    if (wildcard) {
-      await consumeUploadClaim(servingWildcardToObjectPath(wildcard));
-    }
-
-    const result = validateResponse(PromoteUploadResultSchema, { url, promoted: true });
+    const result = validateResponse(PromoteUploadResultSchema, {
+      url: finalized.url,
+      promoted: true,
+    });
     return res.status(200).json(successResponse(result));
   } catch (error) {
     if (error instanceof UploadOwnershipError) {
@@ -305,6 +463,21 @@ export async function promoteUploadHandler(req: Request, res: Response): Promise
     }
     if (error instanceof ObjectNotFoundError) {
       return res.status(404).json(errorResponse("NOT_FOUND", "Upload not found"));
+    }
+    if ((error as { code?: string } | null)?.code === MEDIA_VERIFY_RETRYABLE) {
+      return res
+        .status(503)
+        .json(errorResponse("INTERNAL_ERROR", "Storage promotion temporarily unavailable"));
+    }
+    if ((error as { code?: string } | null)?.code === "INVALID_DATA") {
+      return res
+        .status(400)
+        .json(
+          errorResponse(
+            "INVALID_DATA",
+            error instanceof Error ? error.message : "Invalid uploaded image",
+          ),
+        );
     }
     req.log.error({ err: error }, "Error promoting upload");
     return res
@@ -339,6 +512,12 @@ export async function verifyUploadHandler(req: Request, res: Response): Promise<
 
   const { url } = parsed.data;
   try {
+    const wildcard = parseTrustedServingWildcard(url);
+    if (!wildcard) {
+      return res
+        .status(400)
+        .json(errorResponse("INVALID_DATA", "Not a first-party upload URL"));
+    }
     await assertCallerMayUseUpload(url, req.userId);
 
     const meta = await objectStorageService.getServingObjectMetadata(url);
@@ -347,17 +526,16 @@ export async function verifyUploadHandler(req: Request, res: Response): Promise<
         .status(400)
         .json(errorResponse("INVALID_DATA", "Not a first-party upload URL"));
     }
-    const contentType = (meta.contentType ?? "").toLowerCase();
-    const isImage = contentType.startsWith("image/");
-    const isVideo = contentType.startsWith("video/");
-    if (!isImage && !isVideo) {
+    const contentType = normalizeStoredContentType(meta.contentType);
+    const mediaKind = classifyVisualContentType(contentType);
+    if (!mediaKind) {
       return res
         .status(400)
         .json(errorResponse("INVALID_DATA", "Unsupported media type"));
     }
     // Size is always present for a real GCS object; a missing size means we can't
     // prove it's within limit, so fail closed (consistent with the create gate).
-    if (meta.size == null) {
+    if (meta.size == null || !Number.isFinite(meta.size) || meta.size <= 0) {
       return res
         .status(400)
         .json(
@@ -367,10 +545,10 @@ export async function verifyUploadHandler(req: Request, res: Response): Promise<
           )
         );
     }
-    const maxBytes = isImage ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
+    const maxBytes = mediaKind === "image" ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
     if (meta.size > maxBytes) {
       const maxMb = Math.round(maxBytes / (1024 * 1024));
-      const kind = isImage ? "Image" : "Video";
+      const kind = mediaKind === "image" ? "Image" : "Video";
       return res
         .status(400)
         .json(
@@ -378,18 +556,15 @@ export async function verifyUploadHandler(req: Request, res: Response): Promise<
         );
     }
 
-    const wildcard = parseServingWildcard(url);
-    if (wildcard) {
-      await extendUploadClaimAfterVerify(
-        servingWildcardToObjectPath(wildcard),
-        req.userId,
-      );
-    }
+    await extendUploadClaimAfterVerify(
+      servingWildcardToObjectPath(wildcard),
+      req.userId,
+    );
 
     const result = validateResponse(VerifyUploadResultSchema, {
       url,
       ok: true,
-      type: isImage ? "image" : "video",
+      type: mediaKind,
       content_type: contentType,
       size: meta.size,
     });

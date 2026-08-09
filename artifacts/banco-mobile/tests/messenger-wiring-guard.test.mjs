@@ -116,6 +116,18 @@ test("mobile chat stays poll-only (G47 — no WebSocket client)", () => {
   );
 });
 
+test("private chat media stays in-app and sends scoped auth headers", () => {
+  assert.match(thread, /useAuthenticatedMediaHeaders/);
+  assert.match(thread, /authenticatedMediaSource\(mediaUrl, mediaRequestHeaders\)/);
+  assert.match(thread, /FullscreenImageViewer/);
+  assert.match(thread, /requestHeaders=\{mediaRequestHeaders\}/);
+  assert.doesNotMatch(
+    thread,
+    /mediaKind === "video" \|\| mediaKind === "audio"\) \{\s*void Linking\.openURL/,
+    "video must use the authenticated native viewer rather than an external public URL",
+  );
+});
+
 test("MSG-06/10 deliver seeds cache and preserves reply on retry", () => {
   assert.match(thread, /setQueryData/);
   assert.match(thread, /reply_to_id\?: string/);

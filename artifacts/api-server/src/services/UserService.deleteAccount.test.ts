@@ -405,6 +405,33 @@ describe("deleteAccount", () => {
     expect(saves).toHaveLength(0);
   });
 
+  it("still deletes the Clerk user when post-commit media cleanup throws", async () => {
+    const f = await seedUserWithFootprint();
+    const KYC_URL =
+      "https://app.example.com/api/v1/uploads/objects/final/kyc-cleanup-failure";
+    await db
+      .update(users)
+      .set({
+        companyDetails: {
+          activity_type: "financial_institution",
+          business_name: "Cleanup Test Bank",
+          city: "Cairo",
+          documents: [KYC_URL],
+        },
+      })
+      .where(eq(users.id, f.userId));
+    deleteServingUrlsMock.mockRejectedValueOnce(new Error("storage unavailable"));
+
+    await expect(deleteAccount(f.clerkId)).resolves.toEqual({ deleted: true });
+    expect(deleteServingUrlsMock).toHaveBeenCalledWith([KYC_URL]);
+    expect(deleteUserMock).toHaveBeenCalledTimes(1);
+    expect(deleteUserMock).toHaveBeenCalledWith(f.clerkId);
+
+    const [user] = await db.select().from(users).where(eq(users.id, f.userId));
+    expect(user.deletedAt).toBeInstanceOf(Date);
+    expect(user.companyDetails).toBeNull();
+  });
+
   it("purges mobile KYC documents stored as string[] (not only object maps)", async () => {
     const f = await seedUserWithFootprint();
     const DOC_A =

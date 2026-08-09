@@ -1,5 +1,5 @@
 # Cloudflare Workers Builds stub.
-# Coolify SoT repo: waelzaid66-max/banco-with-wael (NOT sister bancoo).
+# Coolify SoT repo: waelzaid66-max/bancoboomstor (NOT a pre-consolidation clone).
 # Production host remains Coolify — see deploy/coolify + docker-compose.coolify.yml
 # + COOLIFY_DEPLOY_NOW.md. Worker name "bancoo" is historical CI project id only —
 # do NOT treat it as product SoT or attach production domains.

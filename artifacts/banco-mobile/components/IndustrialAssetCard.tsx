@@ -156,6 +156,9 @@ function IndustrialAssetCardComponent({ item, onPress }: Props) {
           style={[styles.thumb, { borderRadius: colors.radius - 2 }]}
           contentFit="cover"
           transition={150}
+          cachePolicy="memory-disk"
+          recyclingKey={item.id}
+          enforceEarlyResizing
         />
         {item.is_sponsored && (
           <View style={styles.adBadge}>

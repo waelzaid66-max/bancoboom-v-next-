@@ -232,12 +232,12 @@ export default function App() {
         </div>
         <div style={{ marginTop: 8 }}>
           <a
-            href="https://github.com/waelzaid66-max/banco-with-wael"
+            href="https://github.com/waelzaid66-max/bancoboomstor"
             target="_blank"
             rel="noreferrer"
             style={{ color: "var(--text-dim)", textDecoration: "underline" }}
           >
-            waelzaid66-max/banco-with-wael
+            waelzaid66-max/bancoboomstor
           </a>
         </div>
       </footer>

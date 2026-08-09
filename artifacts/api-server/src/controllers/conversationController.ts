@@ -22,6 +22,7 @@ import {
   validateResponse,
 } from "../validators/schemas";
 import { z, ZodError } from "zod";
+import { MEDIA_VERIFY_RETRYABLE } from "../lib/mediaVerify";
 
 function handleError(err: unknown, res: Response, ctx: string) {
   if (err instanceof ZodError) {
@@ -40,6 +41,8 @@ function handleError(err: unknown, res: Response, ctx: string) {
     return res.status(403).json(errorResponse("FORBIDDEN", e.message ?? "Forbidden"));
   if (e.code === "RATE_LIMITED")
     return res.status(429).json(errorResponse("RATE_LIMITED", e.message ?? "Too many requests"));
+  if (e.code === MEDIA_VERIFY_RETRYABLE)
+    return res.status(503).json(errorResponse("INTERNAL_ERROR", e.message ?? "Storage verification temporarily unavailable"));
   console.error(ctx, err);
   return res.status(500).json(errorResponse("INTERNAL_ERROR", "Internal error"));
 }

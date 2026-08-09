@@ -33,7 +33,26 @@ export interface ObjectAclRule {
 export interface ObjectAclPolicy {
   owner: string;
   visibility: "public" | "private";
+  /**
+   * Explicit media intent written by trusted server attach/finalize paths.
+   * Missing means legacy/unknown and must never qualify for the public-media
+   * serving fast path.
+   */
+  mediaPurpose?: "public-media" | "private-media";
   aclRules?: Array<ObjectAclRule>;
+}
+
+/**
+ * Only a server-finalized public object may bypass private-reference lookups.
+ * Legacy ACLs deliberately fail closed because some old private objects may
+ * have been marked public before the relationship guard existed.
+ */
+export function isTrustedPublicMediaPolicy(
+  policy: ObjectAclPolicy | null,
+): boolean {
+  return (
+    policy?.visibility === "public" && policy.mediaPurpose === "public-media"
+  );
 }
 
 function isPermissionAllowed(
@@ -104,6 +123,19 @@ export async function canAccessObject({
   requestedPermission: ObjectPermission;
 }): Promise<boolean> {
   const aclPolicy = await getObjectAclPolicy(objectFile);
+  return canAccessObjectAclPolicy({ userId, aclPolicy, requestedPermission });
+}
+
+/** Evaluate a previously-loaded ACL policy without another storage metadata read. */
+export async function canAccessObjectAclPolicy({
+  userId,
+  aclPolicy,
+  requestedPermission,
+}: {
+  userId?: string;
+  aclPolicy: ObjectAclPolicy | null;
+  requestedPermission: ObjectPermission;
+}): Promise<boolean> {
   if (!aclPolicy) {
     return false;
   }

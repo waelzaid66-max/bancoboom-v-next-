@@ -1,6 +1,6 @@
 # DEPLOYMENT_PLAN — BANCO / B-OOM
 
-> **SUPERSEDED (2026-07-30):** Coolify / product Source of Truth is **`waelzaid66-max/banco-with-wael`** only — mobile identity **`com.bancooom.app`**. See `docs/DEPLOYMENT_SOURCE_OF_TRUTH.md`. This file is historical (written when target was sister repo `bancoo`); do **not** deploy Coolify from it.
+> **SUPERSEDED (reconciled 2026-08-09):** Coolify / product Source of Truth is **`waelzaid66-max/bancoboomstor`** only — mobile identity **`com.bancooom.app`**. See `docs/DEPLOYMENT_SOURCE_OF_TRUTH.md`. This file is historical; do **not** deploy Coolify from it.
 
 > Phase 4.5 · repo `bancoo` @ `66d2949` (historical). Detected targets: Replit · Docker · AWS (EB/EC2) · GCP (Cloud Build) · Coolify · Vercel.
 
@@ -27,7 +27,7 @@
 - **Native:** Expo/EAS (`eas.json`) → AAB. Verify `expo-doctor` before store builds.
 
 ## 4. Recommended zero-downtime path (for expansion)
-1. **Single source of truth = `waelzaid66-max/banco-with-wael` (see `DEPLOYMENT_SOURCE_OF_TRUTH.md`).** Historical drafts named sister `bancoo`; that is obsolete for Coolify.
+1. **Single source of truth = `waelzaid66-max/bancoboomstor` (see `DEPLOYMENT_SOURCE_OF_TRUTH.md`).** Historical drafts named pre-consolidation repositories; those are obsolete for Coolify.
 2. **API:** container (Docker) behind LB — rolling deploy (EB/Cloud Run/Coolify all support it). Health `/status` + `/api/healthz|readyz`.
 3. **DB migrations:** run as a gated pre-deploy step (see `deploy/gcp/TRIGGER_MIGRATION.md`) — additive, reversible, never blocking `app.listen`.
 4. **Mobile web:** rebuild `static-build` on every deploy; cache-bust the served bundle.

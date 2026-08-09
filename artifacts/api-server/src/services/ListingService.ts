@@ -24,121 +24,151 @@ import { publicVisibilityConditions } from "../lib/feedVisibility";
 import { getObjectStorageService } from "../lib/objectStorageProvider";
 import {
   assertCallerMayUseUpload,
-  consumeUploadClaim,
-  parseServingWildcard,
-  servingWildcardToObjectPath,
+  settleFinalizedUploadBestEffort,
 } from "../lib/uploadClaims";
-import { MEDIA_VERIFY_RETRYABLE } from "../lib/mediaVerify";
+import {
+  finalizePrivateUpload,
+  finalizePublicUpload,
+  getAttachMediaMetadata,
+  type FinalizedUploadReference,
+} from "../lib/uploadFinalization";
+import { logger } from "../lib/logger";
+import {
+  assertMediaWithinPolicy,
+  assertImagesWithinSizeLimit,
+  assertVideosWithinSizeLimit,
+} from "./mediaSizeGuard";
 import { normalizeListingCurrency, enforceListingCurrencySpec } from "../lib/supportedCurrencies";
 import type { CreateListingSchema } from "../validators/schemas";
 import type { z } from "zod";
 
+export {
+  assertMediaWithinPolicy,
+  assertImagesWithinSizeLimit,
+  assertVideosWithinSizeLimit,
+  MAX_IMAGE_BYTES,
+  MAX_VIDEO_BYTES,
+} from "./mediaSizeGuard";
+
 const objectStorageService = getObjectStorageService();
 
+type ListingMediaInput = {
+  type: "image" | "video";
+  url: string;
+  thumbnail_url?: string;
+};
+
+/**
+ * Convert every new first-party listing asset (including a video poster) to an
+ * immutable, owner-private final identity before any listing transaction can
+ * reference it. Existing final/legacy URLs are validated but not re-copied.
+ */
+async function prepareListingMediaForPersistence<T extends ListingMediaInput>(
+  media: T[],
+  ownerId: string,
+  existingUrls: ReadonlySet<string> = new Set<string>(),
+): Promise<{ media: T[]; references: FinalizedUploadReference[] }> {
+  const references: FinalizedUploadReference[] = [];
+  const preparedBySource = new Map<
+    string,
+    { url: string; reference: FinalizedUploadReference | null }
+  >();
+
+  const prepareUrl = async (
+    sourceUrl: string,
+    type: "image" | "video",
+  ): Promise<string> => {
+    const cached = preparedBySource.get(sourceUrl);
+    if (cached) {
+      // A URL reused in another slot must still satisfy that slot's declared
+      // kind (for example a poster must remain an image).
+      await assertMediaWithinPolicy(
+        [{ url: cached.url, type }],
+        (url) => objectStorageService.getServingObjectMetadata(url),
+      );
+      return cached.url;
+    }
+
+    await assertCallerMayUseUpload(sourceUrl, ownerId);
+    await assertMediaWithinPolicy(
+      [{ url: sourceUrl, type }],
+      (url) => getAttachMediaMetadata(objectStorageService, url),
+    );
+
+    if (existingUrls.has(sourceUrl)) {
+      preparedBySource.set(sourceUrl, { url: sourceUrl, reference: null });
+      return sourceUrl;
+    }
+
+    const reference = await finalizePrivateUpload(
+      objectStorageService,
+      sourceUrl,
+      ownerId,
+      {
+        validateFinal: (finalUrl) =>
+          assertMediaWithinPolicy(
+            [{ url: finalUrl, type }],
+            (url) => objectStorageService.getServingObjectMetadata(url),
+          ),
+      },
+    );
+    const durableUrl = reference?.url ?? sourceUrl;
+    preparedBySource.set(sourceUrl, { url: durableUrl, reference });
+    if (reference) references.push(reference);
+    return durableUrl;
+  };
+
+  const prepared: T[] = [];
+  for (const item of media) {
+    const durableUrl = await prepareUrl(item.url, item.type);
+    let durableThumbnail = item.thumbnail_url;
+    if (item.thumbnail_url) {
+      durableThumbnail =
+        item.thumbnail_url === item.url
+          ? durableUrl
+          : await prepareUrl(item.thumbnail_url, "image");
+    }
+    prepared.push({
+      ...item,
+      url: durableUrl,
+      ...(durableThumbnail !== undefined
+        ? { thumbnail_url: durableThumbnail }
+        : {}),
+    });
+  }
+
+  return { media: prepared, references };
+}
+
+async function promotePreparedListingMediaBestEffort(
+  references: FinalizedUploadReference[],
+  ownerId: string,
+): Promise<void> {
+  await Promise.all(
+    references.map(async (reference) => {
+      try {
+        const promoted = await finalizePublicUpload(
+          objectStorageService,
+          reference.url,
+          ownerId,
+        );
+        if (promoted) {
+          await settleFinalizedUploadBestEffort(reference);
+        }
+      } catch (error) {
+        // The listing row is already durable. The active-listing reference
+        // fallback keeps bytes available without pretending the ACL write
+        // succeeded; operators still get a loud error for remediation.
+        logger.error(
+          { err: error, url: reference.url, ownerId },
+          "Listing media ACL finalization failed",
+        );
+      }
+    }),
+  );
+}
+
 type CreateListingInput = z.infer<typeof import("../validators/schemas").CreateListingSchema>;
-
-// Mirror of the mobile client cap (banco-mobile lib/listingMedia.ts
-// MAX_VIDEO_MB). The presigned PUT can't enforce size and the client check can
-// be bypassed, so this is the authoritative gate that keeps an oversized video
-// from ever becoming public listing media.
-export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
-
-type StoredMediaMeta = { contentType: string | null; size: number | null };
-
-/**
- * Reject media whose ACTUAL stored object is an oversized video before it can be
- * persisted/promoted to a public listing. The media kind is derived from the
- * STORED content type (`metaLookup`), never the client-declared `media.type`, so
- * a client can't smuggle an oversized video past the gate by labeling it an
- * image. `metaLookup` returns null for URLs that aren't ours (external hosts —
- * skipped); a THROWN lookup means a first-party object we couldn't verify, so we
- * fail closed (an unverifiable upload must never become public listing media).
- */
-export async function assertVideosWithinSizeLimit(
-  media: Array<{ url: string }>,
-  metaLookup: (url: string) => Promise<StoredMediaMeta | null>,
-  maxBytes: number = MAX_VIDEO_BYTES
-): Promise<void> {
-  const maxMb = Math.round(maxBytes / (1024 * 1024));
-  await Promise.all(
-    media.map(async (m) => {
-      let meta: StoredMediaMeta | null;
-      try {
-        meta = await metaLookup(m.url);
-      } catch (err) {
-        // A transient storage read failure must not discard an otherwise-valid
-        // listing — propagate it so the caller returns 503 and the client can
-        // retry, rather than telling the seller their media is invalid.
-        if ((err as { code?: string } | null)?.code === MEDIA_VERIFY_RETRYABLE) {
-          throw err;
-        }
-        // First-party object that couldn't be verified (missing/unreadable) —
-        // fail closed: an unverifiable upload must never become public media.
-        throw Object.assign(
-          new Error("Could not verify uploaded media. Please re-upload and try again."),
-          { code: "INVALID_DATA" }
-        );
-      }
-      if (!meta) return; // Not our upload URL (external host) — nothing to gate.
-      const isVideo = (meta.contentType ?? "").toLowerCase().startsWith("video/");
-      // Reject confirmed-oversize videos. A stored video whose size can't be
-      // read is also rejected (fail closed) — size is always present for real
-      // GCS objects, so a missing size means we can't prove it's within limit.
-      if (isVideo && (meta.size == null || meta.size > maxBytes)) {
-        throw Object.assign(
-          new Error(`Video exceeds the maximum allowed size of ${maxMb} MB`),
-          { code: "INVALID_DATA" }
-        );
-      }
-    })
-  );
-}
-
-// Authoritative server-side cap for stored IMAGE objects. The presigned PUT
-// can't enforce size and the mobile client downscales but can be bypassed, so
-// this is the gate that keeps an oversized image from becoming public media.
-export const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
-
-/**
- * Reject media whose ACTUAL stored object is an oversized image before it can be
- * persisted/promoted to public media. Mirrors assertVideosWithinSizeLimit: kind
- * is derived from the STORED content-type, never the client-declared type;
- * `metaLookup` returning null = external host (skipped); a THROWN lookup = a
- * first-party object we couldn't verify, so we fail closed.
- */
-export async function assertImagesWithinSizeLimit(
-  media: Array<{ url: string }>,
-  metaLookup: (url: string) => Promise<StoredMediaMeta | null>,
-  maxBytes: number = MAX_IMAGE_BYTES
-): Promise<void> {
-  const maxMb = Math.round(maxBytes / (1024 * 1024));
-  await Promise.all(
-    media.map(async (m) => {
-      let meta: StoredMediaMeta | null;
-      try {
-        meta = await metaLookup(m.url);
-      } catch (err) {
-        // Transient storage read failure → propagate (caller maps to 503/retry).
-        if ((err as { code?: string } | null)?.code === MEDIA_VERIFY_RETRYABLE) {
-          throw err;
-        }
-        // Unverifiable first-party object (missing/unreadable) → fail closed.
-        throw Object.assign(
-          new Error("Could not verify uploaded media. Please re-upload and try again."),
-          { code: "INVALID_DATA" }
-        );
-      }
-      if (!meta) return;
-      const isImage = (meta.contentType ?? "").toLowerCase().startsWith("image/");
-      if (isImage && (meta.size == null || meta.size > maxBytes)) {
-        throw Object.assign(
-          new Error(`Image exceeds the maximum allowed size of ${maxMb} MB`),
-          { code: "INVALID_DATA" }
-        );
-      }
-    })
-  );
-}
 
 /* ── Attribute Validation ──────────────────────────────── */
 
@@ -260,23 +290,14 @@ export async function createListing(
     }
   }
 
-  // Server-side guard: an oversized video must never become public listing
-  // media. Verifies the actual stored object metadata (type + size) before
-  // persisting — never trusts the client-declared media type.
-  await assertVideosWithinSizeLimit(input.media, (url) =>
-    objectStorageService.getServingObjectMetadata(url)
+  // Ownership/type/size are checked both before and after the provider snapshot.
+  // From this line onward every new first-party URL is immutable and private;
+  // the transaction persists only those final identities.
+  const preparedMedia = await prepareListingMediaForPersistence(
+    input.media,
+    userId,
   );
-  await assertImagesWithinSizeLimit(input.media, (url) =>
-    objectStorageService.getServingObjectMetadata(url)
-  );
-
-  for (const m of input.media) {
-    await assertCallerMayUseUpload(m.url, userId);
-    // Poster URLs are first-party uploads too — never accept an unclaimed poster.
-    if (m.thumbnail_url) {
-      await assertCallerMayUseUpload(m.thumbnail_url, userId);
-    }
-  }
+  input = { ...input, media: preparedMedia.media };
 
   // Ensure DB user exists
   const [user] = await db
@@ -459,26 +480,11 @@ export async function createListing(
     });
   }
 
-  // Best-effort: promote all media objects to public ACL so they can be served
-  // by the ACL-gated serve handler without authentication. Uses Promise.all
-  // since promoteServingUrlToPublic already handles failures silently — a
-  // failed promotion means the object won't be publicly accessible, but it
-  // must not fail the listing creation that already committed.
-  await Promise.all(
-    input.media.map(async (m) => {
-      await assertCallerMayUseUpload(m.url, userId);
-      await objectStorageService.promoteServingUrlToPublic(m.url, userId);
-      const wildcard = parseServingWildcard(m.url);
-      if (wildcard) await consumeUploadClaim(servingWildcardToObjectPath(wildcard));
-      if (m.thumbnail_url && m.thumbnail_url !== m.url) {
-        await assertCallerMayUseUpload(m.thumbnail_url, userId);
-        await objectStorageService.promoteServingUrlToPublic(m.thumbnail_url, userId);
-        const posterWild = parseServingWildcard(m.thumbnail_url);
-        if (posterWild) {
-          await consumeUploadClaim(servingWildcardToObjectPath(posterWild));
-        }
-      }
-    })
+  // Public ACL is post-commit; the active-listing reference fallback preserves
+  // availability if storage metadata is temporarily unavailable.
+  await promotePreparedListingMediaBestEffort(
+    preparedMedia.references,
+    userId,
   );
 
   // Adaptive learning (best-effort, fire-and-forget): track free-form custom spec
@@ -1194,9 +1200,14 @@ export async function updateListing(
     .where(eq(listingMedia.listingId, id))
     .orderBy(desc(listingMedia.isThumbnail), asc(listingMedia.sortOrder));
 
-  // Only NEW urls get promoted/claim-consumed after commit — re-ordering the
-  // existing photos must not re-run promotion on already-public objects.
-  const previousMediaUrls = new Set(mediaRows.map((m) => m.url));
+  // Re-ordering existing photos/posters must not copy or temporarily privatize
+  // an already-public object. Only genuinely new URLs enter finalization.
+  const previousReferencedUrls = new Set(
+    mediaRows.flatMap((m) =>
+      m.thumbnailUrl ? [m.url, m.thumbnailUrl] : [m.url],
+    ),
+  );
+  let preparedUpdateReferences: FinalizedUploadReference[] = [];
 
   if (updates.media !== undefined) {
     // Sale listings must keep at least one media item; buyer requests may be
@@ -1204,20 +1215,13 @@ export async function updateListing(
     if (!listing.isRequest && updates.media.length === 0) {
       throw Object.assign(new Error("At least one media file is required"), { code: "INVALID_DATA" });
     }
-    // Same server-side guards as create: verify the ACTUAL stored objects
-    // (type + size) and that the caller owns every upload it references.
-    await assertVideosWithinSizeLimit(updates.media, (url) =>
-      objectStorageService.getServingObjectMetadata(url)
+    const prepared = await prepareListingMediaForPersistence(
+      updates.media,
+      clerkUserId,
+      previousReferencedUrls,
     );
-    await assertImagesWithinSizeLimit(updates.media, (url) =>
-      objectStorageService.getServingObjectMetadata(url)
-    );
-    for (const m of updates.media) {
-      await assertCallerMayUseUpload(m.url, clerkUserId);
-      if (m.thumbnail_url) {
-        await assertCallerMayUseUpload(m.thumbnail_url, clerkUserId);
-      }
-    }
+    updates = { ...updates, media: prepared.media };
+    preparedUpdateReferences = prepared.references;
   }
 
   const mediaForNormalize =
@@ -1357,43 +1361,11 @@ export async function updateListing(
     }
   });
 
-  // Best-effort: promote only the NEWLY-added objects to public ACL and consume
-  // their upload claims (existing photos were already promoted at create time).
-  // Runs after commit — a failed promotion must not roll back the edit.
-  if (updates.media !== undefined) {
-    await Promise.all(
-      updates.media
-        .filter((m) => !previousMediaUrls.has(m.url))
-        .map(async (m) => {
-          await assertCallerMayUseUpload(m.url, clerkUserId);
-          await objectStorageService.promoteServingUrlToPublic(m.url, clerkUserId);
-          const wildcard = parseServingWildcard(m.url);
-          if (wildcard) await consumeUploadClaim(servingWildcardToObjectPath(wildcard));
-        })
-    );
-    // Promote newly referenced posters (may be an existing image URL already
-    // public — promote/claim helpers are idempotent for owned objects).
-    const previousPosterUrls = new Set(
-      mediaRows.map((m) => m.thumbnailUrl).filter((u): u is string => !!u),
-    );
-    await Promise.all(
-      updates.media
-        .filter(
-          (m) =>
-            !!m.thumbnail_url &&
-            m.thumbnail_url !== m.url &&
-            !previousPosterUrls.has(m.thumbnail_url) &&
-            !previousMediaUrls.has(m.thumbnail_url),
-        )
-        .map(async (m) => {
-          const poster = m.thumbnail_url!;
-          await assertCallerMayUseUpload(poster, clerkUserId);
-          await objectStorageService.promoteServingUrlToPublic(poster, clerkUserId);
-          const wildcard = parseServingWildcard(poster);
-          if (wildcard) await consumeUploadClaim(servingWildcardToObjectPath(wildcard));
-        }),
-    );
-  }
+  // Runs after commit — a failed public ACL write must not roll back the edit.
+  await promotePreparedListingMediaBestEffort(
+    preparedUpdateReferences,
+    clerkUserId,
+  );
 
   // Durable audit trail for any abuse-flagged/demoted listing on edit.
   await auditListingFlag({

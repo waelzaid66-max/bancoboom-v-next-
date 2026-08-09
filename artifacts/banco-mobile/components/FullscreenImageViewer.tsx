@@ -1,14 +1,15 @@
 import { Feather } from "@/components/icons";
 import { Image } from "expo-image";
 import { VideoPlayer, VideoView, useVideoPlayer } from "expo-video";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dimensions,
+  FlatList,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -26,10 +27,12 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MediaItem } from "@workspace/api-client-react";
+import { authenticatedMediaSource } from "@/lib/mediaPolicy";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const MAX_SCALE = 4;
 const DOUBLE_TAP_SCALE = 2.5;
+const IGNORE_ZOOM_CHANGE = () => {};
 
 /**
  * A single pinch / double-tap / pan zoomable image slide. Each slide owns its
@@ -39,9 +42,11 @@ const DOUBLE_TAP_SCALE = 2.5;
  */
 function ZoomableImage({
   uri,
+  requestHeaders,
   onZoomChange,
 }: {
   uri: string;
+  requestHeaders?: Record<string, string>;
   onZoomChange: (zoomed: boolean) => void;
 }) {
   const scale = useSharedValue(1);
@@ -51,7 +56,7 @@ function ZoomableImage({
   const savedTx = useSharedValue(0);
   const savedTy = useSharedValue(0);
   // Pan is only enabled while zoomed in. At scale 1 it stays disabled so a
-  // single-finger horizontal drag is handled by the parent paging ScrollView
+  // single-finger horizontal drag is handled by the parent paging FlatList
   // (swipe to next image) instead of being swallowed by this child gesture.
   const [panEnabled, setPanEnabled] = useState(false);
 
@@ -139,10 +144,13 @@ function ZoomableImage({
       <Animated.View style={styles.slide}>
         <Animated.View style={[styles.fill, animStyle]}>
           <Image
-            source={{ uri }}
+            source={authenticatedMediaSource(uri, requestHeaders)}
             style={styles.fill}
             contentFit="contain"
             transition={120}
+            cachePolicy="memory-disk"
+            recyclingKey={uri}
+            enforceEarlyResizing
           />
         </Animated.View>
       </Animated.View>
@@ -150,8 +158,16 @@ function ZoomableImage({
   );
 }
 
-function FsVideoSlide({ url, active }: { url: string; active: boolean }) {
-  const player = useVideoPlayer(url, (p: VideoPlayer) => {
+function FsVideoSlide({
+  url,
+  active,
+  requestHeaders,
+}: {
+  url: string;
+  active: boolean;
+  requestHeaders?: Record<string, string>;
+}) {
+  const player = useVideoPlayer(authenticatedMediaSource(url, requestHeaders), (p: VideoPlayer) => {
     p.loop = true;
   });
 
@@ -178,6 +194,7 @@ interface FullscreenImageViewerProps {
   initialIndex: number;
   visible: boolean;
   onClose: () => void;
+  requestHeaders?: Record<string, string>;
 }
 
 /**
@@ -191,32 +208,63 @@ export function FullscreenImageViewer({
   initialIndex,
   visible,
   onClose,
+  requestHeaders,
 }: FullscreenImageViewerProps) {
   const insets = useSafeAreaInsets();
   // The parent (MediaGallery) remounts this component per open via a changing
-  // `key`, so `index`/`didInit` start fresh for every open — no reset effect
-  // (which raced with onLayout on Android and dropped the initial scroll).
+  // `key`, so the pager state starts fresh for every open.
   const [index, setIndex] = useState(initialIndex);
   const [zoomed, setZoomed] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
-  const didInit = useRef(false);
+  const scrollRef = useRef<FlatList<MediaItem>>(null);
 
-  const applyInitialOffset = () => {
-    if (!didInit.current) {
-      didInit.current = true;
-      if (initialIndex > 0) {
-        scrollRef.current?.scrollTo({
-          x: initialIndex * SCREEN_W,
-          animated: false,
-        });
-      }
-    }
-  };
-
-  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
     setIndex(i);
-  };
+    setZoomed(false);
+  }, []);
+
+  const renderSlide = useCallback(
+    ({ item, index: itemIndex }: { item: MediaItem; index: number }) => {
+      const isActive = itemIndex === index;
+
+      if (item.type === "video") {
+        return isActive ? (
+            <FsVideoSlide
+              url={item.url}
+              active
+              requestHeaders={requestHeaders}
+            />
+        ) : (
+          <View style={styles.slide}>
+            {item.thumbnail_url ? (
+              <Image
+                source={authenticatedMediaSource(
+                  item.thumbnail_url,
+                  requestHeaders,
+                )}
+                style={styles.fill}
+                contentFit="contain"
+                cachePolicy="memory-disk"
+                recyclingKey={item.id ?? item.url}
+                enforceEarlyResizing
+              />
+            ) : (
+              <Feather name="play-circle" size={58} color="#FFFFFF" />
+            )}
+          </View>
+        );
+      }
+
+      return (
+        <ZoomableImage
+          uri={item.url}
+          requestHeaders={requestHeaders}
+          onZoomChange={isActive ? setZoomed : IGNORE_ZOOM_CHANGE}
+        />
+      );
+    },
+    [index, requestHeaders],
+  );
 
   if (!visible || !media || media.length === 0) {
     return null;
@@ -231,32 +279,29 @@ export function FullscreenImageViewer({
       onRequestClose={onClose}
     >
       <GestureHandlerRootView style={styles.root}>
-        <ScrollView
+        <FlatList
           ref={scrollRef}
           horizontal
           pagingEnabled
+          data={media}
+          keyExtractor={(item, itemIndex) =>
+            String(item.id ?? `${item.url}-${itemIndex}`)
+          }
+          renderItem={renderSlide}
+          getItemLayout={(_, itemIndex) => ({
+            length: SCREEN_W,
+            offset: SCREEN_W * itemIndex,
+            index: itemIndex,
+          })}
+          initialScrollIndex={initialIndex}
+          initialNumToRender={1}
+          windowSize={3}
+          maxToRenderPerBatch={2}
+          removeClippedSubviews={Platform.OS === "android"}
           scrollEnabled={!zoomed && media.length > 1}
           showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={handleScroll}
-          onLayout={applyInitialOffset}
-          contentOffset={{ x: initialIndex * SCREEN_W, y: 0 }}
-        >
-          {media.map((item, i) =>
-            item.type === "video" ? (
-              <FsVideoSlide
-                key={item.id ?? i}
-                url={item.url}
-                active={i === index}
-              />
-            ) : (
-              <ZoomableImage
-                key={item.id ?? i}
-                uri={item.url}
-                onZoomChange={setZoomed}
-              />
-            ),
-          )}
-        </ScrollView>
+        />
 
         <Pressable
           onPress={onClose}

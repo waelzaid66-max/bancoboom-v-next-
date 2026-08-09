@@ -29,6 +29,7 @@ beforeEach(() => {
     async (input: { intentId: string }) => ({
       providerRef: `paymob_${input.intentId.slice(0, 8)}`,
       checkoutUrl: `https://accept.paymob.com/checkout/${input.intentId}`,
+      providerOrderId: `order_${input.intentId.slice(0, 8)}`,
     }),
   );
 });

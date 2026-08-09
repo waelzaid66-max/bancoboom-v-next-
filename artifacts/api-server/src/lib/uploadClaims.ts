@@ -3,6 +3,21 @@ import { db } from "@workspace/db";
 import { uploadClaims } from "@workspace/db/schema";
 import { getObjectStorageService } from "./objectStorageProvider";
 import { UploadOwnershipError } from "./objectStorage";
+import {
+  UPLOADS_SERVING_PREFIX,
+  immutableObjectPathForUpload,
+  parseServingWildcard,
+  servingUrlForObjectPath,
+  servingWildcardToObjectPath,
+} from "./uploadPaths";
+import type { FinalizedUploadReference } from "./uploadFinalization";
+import { logger } from "./logger";
+
+export {
+  UPLOADS_SERVING_PREFIX,
+  parseServingWildcard,
+  servingWildcardToObjectPath,
+} from "./uploadPaths";
 
 /** Matches presign TTL in object storage backends (15 minutes). */
 export const UPLOAD_CLAIM_TTL_MS = 15 * 60 * 1000;
@@ -12,24 +27,6 @@ export const UPLOAD_CLAIM_TTL_MS = 15 * 60 * 1000;
  * Extend the attach window so publish does not fail with a 403 expired claim.
  */
 export const UPLOAD_CLAIM_VERIFIED_TTL_MS = 60 * 60 * 1000;
-
-export const UPLOADS_SERVING_PREFIX = "/api/v1/uploads/objects/";
-
-/** Parse a first-party serving URL into the wildcard path segment after /objects/. */
-export function parseServingWildcard(servingUrl: string): string | null {
-  try {
-    const parsed = new URL(servingUrl);
-    if (!parsed.pathname.startsWith(UPLOADS_SERVING_PREFIX)) return null;
-    const wildcard = parsed.pathname.slice(UPLOADS_SERVING_PREFIX.length);
-    return wildcard || null;
-  } catch {
-    return null;
-  }
-}
-
-export function servingWildcardToObjectPath(wildcardPath: string): string {
-  return `/objects/${wildcardPath}`;
-}
 
 /**
  * Record that `clerkId` presigned this upload slot. Called from request-url
@@ -76,6 +73,16 @@ export async function assertCallerMayUseUpload(
     .limit(1);
 
   if (!claim || claim.clerkId !== clerkId) {
+    // A completed immutable finalization may already have consumed the temp
+    // claim and deleted the temp object. Derive the deterministic final URL and
+    // accept only its proven ACL owner, preserving safe endpoint retries.
+    const finalObjectPath = immutableObjectPathForUpload(objectPath);
+    const finalOwner = finalObjectPath
+      ? await storage.getAclOwnerForServingUrl(
+          servingUrlForObjectPath(servingUrl, finalObjectPath),
+        )
+      : null;
+    if (finalOwner === clerkId) return;
     throw new UploadOwnershipError();
   }
 }
@@ -83,6 +90,50 @@ export async function assertCallerMayUseUpload(
 /** Remove the presign claim after a successful promote (optional cleanup). */
 export async function consumeUploadClaim(objectPath: string): Promise<void> {
   await db.delete(uploadClaims).where(eq(uploadClaims.objectPath, objectPath));
+}
+
+/**
+ * Claim cleanup happens after the durable entity write. A cleanup outage must
+ * never turn that committed write into a client-visible failure/retry (which
+ * can duplicate a listing, message, or order document). Claims expire anyway;
+ * log the cleanup failure and preserve the successful domain operation.
+ */
+export async function consumeUploadClaimBestEffort(objectPath: string): Promise<void> {
+  try {
+    await consumeUploadClaim(objectPath);
+  } catch (error) {
+    logger.warn({ err: error, objectPath }, "Failed to consume upload claim after commit");
+  }
+}
+
+/**
+ * Complete a successful durable attach: remove the DB claim and delete only the
+ * now-unreferenced temporary object. The immutable final object is never a
+ * deletion target. A still-valid presigned URL could recreate the temp key, but
+ * it cannot mutate the final identity; lifecycle GC remains the backstop.
+ */
+export async function settleFinalizedUploadBestEffort(
+  reference: FinalizedUploadReference,
+): Promise<void> {
+  await consumeUploadClaimBestEffort(reference.sourceObjectPath);
+  if (reference.sourceObjectPath === reference.objectPath) return;
+
+  try {
+    const cleanup = await getObjectStorageService().deleteServingUrls([
+      reference.sourceUrl,
+    ]);
+    if (cleanup.failed > 0) {
+      logger.warn(
+        { sourceObjectPath: reference.sourceObjectPath, cleanup },
+        "Immutable upload finalized but temporary object cleanup failed",
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      { err: error, sourceObjectPath: reference.sourceObjectPath },
+      "Immutable upload finalized but temporary object cleanup threw",
+    );
+  }
 }
 
 /** Reset claim expiry after verify so slow listing drafts can still publish. */

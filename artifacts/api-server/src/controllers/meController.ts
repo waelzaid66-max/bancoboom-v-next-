@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { users } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { ZodError } from "zod";
+import { MEDIA_VERIFY_RETRYABLE } from "../lib/mediaVerify";
 import {
   getOrCreateUser,
   syncRoleToClerk,
@@ -111,6 +112,11 @@ export async function getMeHandler(req: Request, res: Response) {
     const validated = validateResponse(UserStateSchema, payload);
     return res.json(successResponse(validated));
   } catch (err) {
+    if ((err as { code?: string })?.code === "ACCOUNT_DELETED") {
+      return res
+        .status(401)
+        .json(errorResponse("ACCOUNT_DELETED", "This account has been deleted"));
+    }
     console.error("[Me]", err);
     return res.status(500).json(errorResponse("INTERNAL_ERROR", "Failed to load user state"));
   }
@@ -164,6 +170,34 @@ export async function updateMeHandler(req: Request, res: Response) {
       return res
         .status(403)
         .json(errorResponse("FORBIDDEN", (err as Error).message ?? "Demotion blocked"));
+    }
+    if ((err as { code?: string })?.code === "ACCOUNT_DELETED") {
+      return res
+        .status(401)
+        .json(errorResponse("ACCOUNT_DELETED", "This account has been deleted"));
+    }
+    if ((err as { code?: string })?.code === "CONFLICT") {
+      return res
+        .status(409)
+        .json(errorResponse("INVALID_DATA", (err as Error).message ?? "Profile changed"));
+    }
+    if ((err as { code?: string })?.code === "INVALID_DATA") {
+      return res
+        .status(400)
+        .json(errorResponse("INVALID_DATA", (err as Error).message ?? "Invalid data"));
+    }
+    if ((err as { code?: string })?.code === "FORBIDDEN") {
+      return res
+        .status(403)
+        .json(errorResponse("FORBIDDEN", (err as Error).message ?? "Forbidden"));
+    }
+    if ((err as { code?: string })?.code === MEDIA_VERIFY_RETRYABLE) {
+      return res.status(503).json(
+        errorResponse(
+          "INTERNAL_ERROR",
+          (err as Error).message ?? "Storage verification temporarily unavailable",
+        ),
+      );
     }
     if ((err as { code?: string })?.code === "NOT_FOUND") {
       return res.status(404).json(errorResponse("NOT_FOUND", "User not found"));

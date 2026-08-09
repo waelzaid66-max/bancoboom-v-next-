@@ -1,6 +1,6 @@
 # BANCO — Deployment Source of Truth (SoT)
 
-**Generated:** 2026-07-30 (restituted)
+**Generated:** 2026-07-30 (restituted) · **Reconciled:** 2026-08-09
 **Authority:** Lead DevOps + Monorepo Architect
 **Rule:** Verified paths only. No invented services.
 
@@ -8,7 +8,7 @@
 
 | Field | Value |
 |-------|--------|
-| **ONLY deploy SoT repository** | `https://github.com/waelzaid66-max/banco-with-wael` |
+| **ONLY deploy SoT repository** | `https://github.com/waelzaid66-max/bancoboomstor` |
 | **Mobile package / bundle** | `com.bancooom.app` |
 | **App scheme** | `bancooom` |
 | **App display name** | `BANCO` |
@@ -22,7 +22,7 @@
 | **Package manager** | `pnpm@11.9.0` |
 | **Node (Docker)** | **24** |
 
-> **Sister repos (`bancoo`, `bancoboom`, …) are NOT Coolify SoT.**
+> **Pre-consolidation repos (`banco-with-wael`, `bancoo`, `bancoboom`, …) are NOT Coolify SoT.**
 > Do not enter them in Coolify. Do not ship store builds from their package ids.
 
 ---
@@ -34,7 +34,7 @@
 | Prior mistake | Agent environment was bound to `bancoo`; certification was briefly delivered there |
 | Correct local SoT commit (pre-restitution add-ons) | `442e68a` on `cursor/production-gap-certification-5cf0` |
 | Mobile identity on SoT | **`com.bancooom.app`** (verified) |
-| This document | Written **only** against `banco-with-wael` |
+| This document | Reconciled against **`bancoboomstor`** after repository consolidation |
 
 See also: `reports/production-verification/53-SOT-RECOVERY-AND-MOBILE-RESTITUTION.md`
 
@@ -105,7 +105,7 @@ Nginx map (`deploy/coolify/nginx.conf`): `/` landing · `/market/` dealer-os · 
 | Field | Value |
 |-------|--------|
 | Resource type | **Docker Compose** |
-| Repository URL | `https://github.com/waelzaid66-max/banco-with-wael` |
+| Repository URL | `https://github.com/waelzaid66-max/bancoboomstor` |
 | Compose path | `docker-compose.coolify.yml` |
 | Branch | `main` (after merge) or the restitution PR branch until merged |
 | Build | Per-service Dockerfiles under `deploy/coolify/` |
@@ -184,7 +184,7 @@ Runtime: `PORT` · `NODE_ENV` · `CLERK_SECRET_KEY` · `BANCO_WEBSITE_HOST_PORT`
 
 ## FIRST DEPLOYMENT CHECKLIST
 
-□ Coolify → Docker Compose → repo **`waelzaid66-max/banco-with-wael`** → file **`docker-compose.coolify.yml`**
+□ Coolify → Docker Compose → repo **`waelzaid66-max/bancoboomstor`** → file **`docker-compose.coolify.yml`**
 □ Set `POSTGRES_PASSWORD` `CLERK_SECRET_KEY` `SESSION_SECRET` `PAYMENT_CONFIG_ENCRYPTION_KEY`
 □ Set S3: `OBJECT_STORAGE_PROVIDER=s3` + `AWS_*` / `S3_BUCKET` / object paths
 □ Set build-time `NEXT_PUBLIC_*` / `VITE_*` / public URLs
@@ -197,4 +197,4 @@ Runtime: `PORT` · `NODE_ENV` · `CLERK_SECRET_KEY` · `BANCO_WEBSITE_HOST_PORT`
 □ EAS bake `EXPO_PUBLIC_*` for `com.bancooom.app`
 □ Final smoke
 
-**End of SoT.** Deploy only from this file + `docker-compose.coolify.yml` on **`banco-with-wael`**.
+**End of SoT.** Deploy only from this file + `docker-compose.coolify.yml` on **`bancoboomstor`**.

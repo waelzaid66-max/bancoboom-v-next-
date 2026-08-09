@@ -666,9 +666,8 @@ export default function CreateListingScreen() {
       // Validation policy (oversize/over-length videos) lives in lib/listingMedia
       // — the server can't enforce it on a presigned PUT. Images always pass;
       // only their count is capped by capMedia.
-      const { accepted, rejectedLong, rejectedBig } = partitionPickedAssets(
-        result.assets,
-      );
+      const { accepted, rejectedLong, rejectedBig, rejectedUnsupported } =
+        partitionPickedAssets(result.assets);
       const next = capMedia([...photos, ...accepted]);
       const added = next.filter(
         (p) => !photos.some((prev) => prev.uri === p.uri),
@@ -676,11 +675,13 @@ export default function CreateListingScreen() {
       setPhotos(next);
       handleAddedAssets(added);
       setError(
-        rejectedLong
-          ? t("create.errVideoTooLong", { seconds: MAX_VIDEO_SECONDS })
-          : rejectedBig
-            ? t("create.errVideoTooLarge", { mb: MAX_VIDEO_MB })
-            : null,
+        rejectedUnsupported
+          ? t("create.errVideoUnsupported")
+          : rejectedLong
+            ? t("create.errVideoTooLong", { seconds: MAX_VIDEO_SECONDS })
+            : rejectedBig
+              ? t("create.errVideoTooLarge", { mb: MAX_VIDEO_MB })
+              : null,
       );
     } catch {
       Alert.alert(t("common.error"), t("create.errUpload"));
@@ -706,9 +707,8 @@ export default function CreateListingScreen() {
         videoMaxDuration: MAX_VIDEO_SECONDS,
       });
       if (result.canceled) return;
-      const { accepted, rejectedLong, rejectedBig } = partitionPickedAssets(
-        result.assets,
-      );
+      const { accepted, rejectedLong, rejectedBig, rejectedUnsupported } =
+        partitionPickedAssets(result.assets);
       const next = capMedia([...photos, ...accepted]);
       const added = next.filter(
         (p) => !photos.some((prev) => prev.uri === p.uri),
@@ -716,11 +716,13 @@ export default function CreateListingScreen() {
       setPhotos(next);
       handleAddedAssets(added);
       setError(
-        rejectedLong
-          ? t("create.errVideoTooLong", { seconds: MAX_VIDEO_SECONDS })
-          : rejectedBig
-            ? t("create.errVideoTooLarge", { mb: MAX_VIDEO_MB })
-            : null,
+        rejectedUnsupported
+          ? t("create.errVideoUnsupported")
+          : rejectedLong
+            ? t("create.errVideoTooLong", { seconds: MAX_VIDEO_SECONDS })
+            : rejectedBig
+              ? t("create.errVideoTooLarge", { mb: MAX_VIDEO_MB })
+              : null,
       );
     } catch {
       Alert.alert(t("common.error"), t("create.errUpload"));

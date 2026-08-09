@@ -10,11 +10,19 @@ import { createNotification } from "./NotificationService";
 import { getOrCreateUser } from "./UserService";
 import {
   assertCallerMayUseUpload,
-  consumeUploadClaim,
-  parseServingWildcard,
-  servingWildcardToObjectPath,
+  settleFinalizedUploadBestEffort,
 } from "../lib/uploadClaims";
-import { getObjectStorageService } from "../lib/objectStorageProvider";
+import { assertMediaWithinPolicy } from "./mediaSizeGuard";
+import {
+  getObjectStorageService,
+  type ObjectStorage,
+} from "../lib/objectStorageProvider";
+import {
+  finalizePrivateUpload,
+  getAttachMediaMetadata,
+  type FinalizedUploadReference,
+} from "../lib/uploadFinalization";
+import { logger } from "../lib/logger";
 import type {
   ImportOrder,
   ImportOrderDocument,
@@ -32,6 +40,22 @@ export interface CreateImportOrderInput {
   currency?: string;
   note?: string;
 }
+
+type ImportDocumentAttachDeps = {
+  storage: Pick<ObjectStorage, "getServingObjectMetadata">;
+  assertOwner: (servingUrl: string, clerkId: string) => Promise<void>;
+  finalizePrivate: (
+    servingUrl: string,
+    clerkId: string,
+    validateFinal: (finalUrl: string) => Promise<void>,
+  ) => Promise<FinalizedUploadReference | null>;
+  settle: (reference: FinalizedUploadReference) => Promise<void>;
+};
+
+type ImportDocumentDeleteDeps = {
+  privatize: (servingUrl: string, clerkId: string) => Promise<void>;
+  deleteServingUrls: ObjectStorage["deleteServingUrls"];
+};
 
 /**
  * Resolve the DB user id for the CALLING Clerk principal, creating it on first
@@ -327,7 +351,8 @@ export async function listImportOrderDocuments(
 export async function attachImportOrderDocument(
   clerkId: string,
   orderId: string,
-  input: { kind: string; url: string }
+  input: { kind: string; url: string },
+  deps?: ImportDocumentAttachDeps,
 ): Promise<ImportOrderDocument> {
   const order = await requireOwnOrder(clerkId, orderId);
   // Terminal orders are read-only — paperwork can no longer change anything.
@@ -337,10 +362,8 @@ export async function attachImportOrderDocument(
       { code: "INVALID_DATA" }
     );
 
-  // Same ownership gate as listings/chat/company: never persist a first-party
-  // upload URL the caller did not presign (or already own via ACL).
-  await assertCallerMayUseUpload(input.url, clerkId);
-
+  // Reject before any immutable copy is created. Finalizing first would leave
+  // an owner-only orphan whenever an already-full order receives another file.
   const existing = await db
     .select({ id: importOrderDocuments.id })
     .from(importOrderDocuments)
@@ -350,16 +373,44 @@ export async function attachImportOrderDocument(
       code: "INVALID_DATA",
     });
 
+  const storage = deps?.storage ?? objectStorageService;
+  const assertOwner = deps?.assertOwner ?? assertCallerMayUseUpload;
+  const finalizePrivate =
+    deps?.finalizePrivate ??
+    ((servingUrl: string, ownerId: string, validateFinal: (url: string) => Promise<void>) =>
+      finalizePrivateUpload(objectStorageService, servingUrl, ownerId, {
+        validateFinal,
+      }));
+  const settle = deps?.settle ?? settleFinalizedUploadBestEffort;
+
+  // Same ownership gate as listings/chat/company: never persist a first-party
+  // upload URL the caller did not presign (or already own via ACL).
+  await assertOwner(input.url, clerkId);
+  await assertMediaWithinPolicy(
+    [{ url: input.url, type: "image" }],
+    (url) => getAttachMediaMetadata(storage, url),
+  );
+  const finalized = await finalizePrivate(
+    input.url,
+    clerkId,
+    (finalUrl) =>
+      assertMediaWithinPolicy(
+        [{ url: finalUrl, type: "image" }],
+        (url) => storage.getServingObjectMetadata(url),
+      ),
+  );
+  if (!finalized) {
+    throw Object.assign(new Error("Import documents must use a first-party upload URL"), {
+      code: "INVALID_DATA",
+    });
+  }
+
   const [created] = await db
     .insert(importOrderDocuments)
-    .values({ orderId, kind: input.kind, url: input.url })
+    .values({ orderId, kind: input.kind, url: finalized.url })
     .returning();
 
-  // Promote so the buyer's Image viewer (no bearer) can load the file; then
-  // consume the claim so the slot cannot be re-attached elsewhere.
-  await objectStorageService.promoteServingUrlToPublic(created.url, clerkId);
-  const wildcard = parseServingWildcard(created.url);
-  if (wildcard) await consumeUploadClaim(servingWildcardToObjectPath(wildcard));
+  await settle(finalized);
 
   return docToDto(created);
 }
@@ -367,7 +418,8 @@ export async function attachImportOrderDocument(
 export async function deleteImportOrderDocument(
   clerkId: string,
   orderId: string,
-  documentId: string
+  documentId: string,
+  deps?: ImportDocumentDeleteDeps,
 ): Promise<void> {
   const order = await requireOwnOrder(clerkId, orderId);
   if (order.stage === "cancelled" || order.stage === "delivered")
@@ -375,6 +427,28 @@ export async function deleteImportOrderDocument(
       new Error(`Cannot delete documents on a ${order.stage} order`),
       { code: "INVALID_DATA" }
     );
+
+  const [document] = await db
+    .select({ id: importOrderDocuments.id, url: importOrderDocuments.url })
+    .from(importOrderDocuments)
+    .where(
+      and(
+        eq(importOrderDocuments.id, documentId),
+        eq(importOrderDocuments.orderId, orderId),
+      ),
+    )
+    .limit(1);
+  if (!document)
+    throw Object.assign(new Error("Document not found"), { code: "NOT_FOUND" });
+
+  // Legacy rows may still carry a public ACL. Make the blob private before the
+  // database reference disappears, then delete it best-effort after commit.
+  const privatize =
+    deps?.privatize ??
+    (async (servingUrl: string, ownerId: string) => {
+      await finalizePrivateUpload(objectStorageService, servingUrl, ownerId);
+    });
+  await privatize(document.url, clerkId);
 
   const [deleted] = await db
     .delete(importOrderDocuments)
@@ -387,4 +461,15 @@ export async function deleteImportOrderDocument(
     .returning({ id: importOrderDocuments.id });
   if (!deleted)
     throw Object.assign(new Error("Document not found"), { code: "NOT_FOUND" });
+
+  const deleteServingUrls =
+    deps?.deleteServingUrls ??
+    ((urls: string[]) => objectStorageService.deleteServingUrls(urls));
+  const storageCleanup = await deleteServingUrls([document.url]);
+  if (storageCleanup.failed > 0) {
+    logger.error(
+      { documentId, orderId, storageCleanup },
+      "Import document row deleted but object cleanup failed",
+    );
+  }
 }

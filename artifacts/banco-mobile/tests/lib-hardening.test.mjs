@@ -185,7 +185,7 @@ test("account-type gate keeps Skip + dismiss-first anti-trap", () => {
   // Include demote guard preamble before dismiss/updateMe (slice must be long enough).
   const slice = src.slice(fn, fn + 3200);
   const dismiss = slice.indexOf("setNeedsAccountType(false)");
-  const update = slice.indexOf("await updateMe({ account_type");
+  const update = slice.indexOf("await updateMe({");
   const chosen = slice.indexOf("accountTypeChosen: true");
   assert.ok(dismiss >= 0 && update >= 0, "chooseAccountType must dismiss + updateMe");
   assert.ok(

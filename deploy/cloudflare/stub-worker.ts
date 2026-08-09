@@ -1,7 +1,7 @@
 /**
  * Cloudflare Workers stub for GitHub "Workers Builds" status checks.
  *
- * Coolify SoT: waelzaid66-max/banco-with-wael + docker-compose.coolify.yml.
+ * Coolify SoT: waelzaid66-max/bancoboomstor + docker-compose.coolify.yml.
  * Sister repo name "bancoo" in the service string is CI historical only.
  *
  * Production API traffic is Coolify/Docker, not this worker. Do NOT attach
@@ -13,7 +13,7 @@ export default {
       JSON.stringify({
         ok: true,
         service: "banco-workers-ci-stub",
-        sot: "waelzaid66-max/banco-with-wael",
+        sot: "waelzaid66-max/bancoboomstor",
         message:
           "BANCO production API is Coolify-hosted. This Cloudflare Worker is a CI stub only.",
       }),

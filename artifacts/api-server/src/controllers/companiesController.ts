@@ -23,6 +23,7 @@ import {
   FollowResultSchema,
   FeedItemSchema,
 } from "../validators/schemas";
+import { MEDIA_VERIFY_RETRYABLE } from "../lib/mediaVerify";
 
 function mapError(res: Response, err: unknown, label: string) {
   if (err instanceof ZodError) {
@@ -140,6 +141,12 @@ export async function updateMyCompanyHandler(req: Request, res: Response) {
     if (e.code === "UNAUTHORIZED") return res.status(401).json(errorResponse("UNAUTHORIZED", e.message ?? "Unauthorized"));
     if (e.code === "FORBIDDEN" || e.name === "UploadOwnershipError") {
       return res.status(403).json(errorResponse("FORBIDDEN", e.message ?? "Forbidden"));
+    }
+    if (e.code === "INVALID_DATA") {
+      return res.status(400).json(errorResponse("INVALID_DATA", e.message ?? "Invalid media"));
+    }
+    if (e.code === MEDIA_VERIFY_RETRYABLE) {
+      return res.status(503).json(errorResponse("INTERNAL_ERROR", e.message ?? "Storage verification temporarily unavailable"));
     }
     console.error("[Company update]", err);
     return res.status(500).json(errorResponse("INTERNAL_ERROR", "Failed to update company"));

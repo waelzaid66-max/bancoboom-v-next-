@@ -21,6 +21,7 @@ import {
   ImportOrderDocumentSchema,
   AttachImportOrderDocumentSchema,
 } from "../validators/schemas";
+import { MEDIA_VERIFY_RETRYABLE } from "../lib/mediaVerify";
 
 function mapError(res: Response, err: unknown, label: string) {
   if (err instanceof ZodError) {
@@ -39,6 +40,8 @@ function mapError(res: Response, err: unknown, label: string) {
   // listings / company / upload controllers.
   if (e.code === "FORBIDDEN" || e.name === "UploadOwnershipError")
     return res.status(403).json(errorResponse("FORBIDDEN", e.message ?? "Forbidden"));
+  if (e.code === MEDIA_VERIFY_RETRYABLE)
+    return res.status(503).json(errorResponse("INTERNAL_ERROR", e.message ?? "Storage verification temporarily unavailable"));
   // Missing migrate (e.g. import_order_documents) → honest 503, not opaque 500.
   const pgCode = e.code ?? (err as { cause?: { code?: string } })?.cause?.code;
   const msg = String(e.message ?? "");

@@ -112,15 +112,20 @@ Until step 1 above has produced real migration files, **the callers below must
 stay on `push`**. Switching them first would point them at an empty migrations
 folder and break a flow that currently works.
 
-Three places invoke the schema tooling. **All three have now been switched** —
-the precondition above is met: `0000_fantastic_warbird.sql` (293 `CREATE`s, zero
-`DROP`s) and `0001_minor_stingray.sql` exist and are journalled.
+Production/runtime callers and disposable-PostgreSQL test gates now use the
+same committed authority. The precondition above is met:
+`0000_fantastic_warbird.sql` (293 `CREATE`s, zero `DROP`s) plus the later
+journalled migrations exist in Git.
 
 | Where | Was | Now |
 | --- | --- | --- |
 | `docker-compose.coolify.yml` → `migrate` service | `push -- --force` | `run migrate` ✅ |
 | `docker-compose.prod.yml` → `migrate` service | `push -- --force` | `run migrate` ✅ |
 | `scripts/post-merge.sh` | `push-force` | `run migrate` ✅ |
+| `deploy/aws/scripts/db-migrate.sh` | `push-force` | `run migrate` ✅ |
+| `.github/workflows/ci.yml` PostgreSQL 16 gate | `push-force` | `check` + `migrate` twice ✅ |
+| `.github/workflows/deploy.yml` verification DB | `push-force` | `check` + `migrate` twice ✅ |
+| `scripts/run-api-tests-local.mjs` disposable DB | `push-force` | `check` + `migrate` twice ✅ |
 
 > **Step 3 above must be run once against every existing database before the
 > next merge lands.** `migrate` on an un-stamped database dies on its first

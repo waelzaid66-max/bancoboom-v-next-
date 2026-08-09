@@ -69,11 +69,11 @@ export interface ProviderChargeResult {
   /** Hosted Unified Checkout URL the buyer is sent to. */
   checkoutUrl: string;
   /**
-   * Paymob order id when the Intention API returns it (e.g. intention_order_id).
-   * Pre-binding this at checkout creation closes first-webhook TOFU remaps that
-   * rely on unsigned merchant_order_id before any claim exists.
+   * Paymob order id returned as intention_order_id. Pre-binding this at checkout
+   * creation closes first-webhook TOFU remaps that rely on unsigned
+   * merchant_order_id before any claim exists.
    */
-  providerOrderId?: string | null;
+  providerOrderId: string;
 }
 
 const HTTP_TIMEOUT_MS = 15_000;
@@ -222,22 +222,25 @@ export async function createProviderCharge(
     order?: { id?: string | number };
   } | null;
 
-  if (!data?.client_secret || data.id == null) {
-    console.error(
-      "[Paymob] intention missing fields",
-      JSON.stringify(data ?? {}).slice(0, 500)
-    );
+  const rawOrder =
+    data?.intention_order_id ?? data?.order_id ?? data?.order?.id ?? null;
+  const providerOrderId =
+    rawOrder != null && String(rawOrder).trim().length > 0
+      ? String(rawOrder).trim()
+      : null;
+
+  if (!data?.client_secret || data.id == null || !providerOrderId) {
+    console.error("[Paymob] intention missing required fields", {
+      has_client_secret: Boolean(data?.client_secret),
+      has_intention_id: data?.id != null,
+      has_order_id: Boolean(providerOrderId),
+    });
     throw invalidData("The payment gateway returned an unexpected response.");
   }
 
   const checkoutUrl =
     `${cfg.apiBase}/unifiedcheckout/?publicKey=${encodeURIComponent(cfg.publicKey)}` +
     `&clientSecret=${encodeURIComponent(data.client_secret)}`;
-
-  const rawOrder =
-    data.intention_order_id ?? data.order_id ?? data.order?.id ?? null;
-  const providerOrderId =
-    rawOrder != null && String(rawOrder).length > 0 ? String(rawOrder) : null;
 
   return { providerRef: String(data.id), checkoutUrl, providerOrderId };
 }

@@ -10,6 +10,9 @@ import {
 } from "./objectAcl";
 import { logger } from "./logger";
 import { readWithRetry } from "./mediaVerify";
+import { resolveByteRange } from "./httpByteRange";
+import type { ObjectDownloadOptions } from "./objectStorageProvider";
+import { immutableObjectPathForUpload } from "./uploadPaths";
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
@@ -117,23 +120,37 @@ export class ObjectStorageService {
     return null;
   }
 
-  async downloadObject(file: File, cacheTtlSec: number = 3600): Promise<Response> {
+  async downloadObject(file: File, options: ObjectDownloadOptions = {}): Promise<Response> {
+    const cacheTtlSec = options.cacheTtlSec ?? 3600;
     const [metadata] = await file.getMetadata();
-    const aclPolicy = await getObjectAclPolicy(file);
-    const isPublic = aclPolicy?.visibility === "public";
+    const totalSize = metadata.size == null ? null : Number(metadata.size);
+    const range = options.range
+      ? resolveByteRange(options.range, totalSize ?? Number.NaN)
+      : undefined;
 
-    const nodeStream = file.createReadStream();
+    const nodeStream = file.createReadStream(
+      range ? { start: range.start, end: range.end } : undefined,
+    );
     const webStream = Readable.toWeb(nodeStream) as ReadableStream;
 
     const headers: Record<string, string> = {
       "Content-Type": (metadata.contentType as string) || "application/octet-stream",
-      "Cache-Control": `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}`,
+      // The serving controller owns the public/private decision. The provider
+      // defaults private so a future caller cannot accidentally make bytes
+      // share-cacheable without an authorization decision.
+      "Cache-Control": `private, max-age=${cacheTtlSec}`,
+      "Accept-Ranges": "bytes",
     };
-    if (metadata.size) {
-      headers["Content-Length"] = String(metadata.size);
+    if (range) {
+      headers["Content-Length"] = String(range.length);
+      headers["Content-Range"] = range.contentRange;
+    } else if (totalSize != null && Number.isFinite(totalSize)) {
+      headers["Content-Length"] = String(totalSize);
     }
+    if (metadata.etag) headers.ETag = String(metadata.etag);
+    if (metadata.updated) headers["Last-Modified"] = new Date(metadata.updated).toUTCString();
 
-    return new Response(webStream, { headers });
+    return new Response(webStream, { status: range ? 206 : 200, headers });
   }
 
   async getObjectEntityUploadURL(): Promise<string> {
@@ -158,23 +175,77 @@ export class ObjectStorageService {
     });
   }
 
-  async getObjectEntityFile(objectPath: string): Promise<File> {
+  private resolveObjectEntityLocation(objectPath: string): {
+    bucketName: string;
+    objectName: string;
+  } {
     if (!objectPath.startsWith("/objects/")) {
       throw new ObjectNotFoundError();
     }
+    const entityId = objectPath.slice("/objects/".length);
+    if (!entityId) throw new ObjectNotFoundError();
 
-    const parts = objectPath.slice(1).split("/");
-    if (parts.length < 2) {
+    const entityDir = this.getPrivateObjectDir().replace(/\/+$/, "");
+    return parseObjectPath(`${entityDir}/${entityId}`);
+  }
+
+  /**
+   * Snapshot one GCS generation into a deterministic destination that may be
+   * created only when no live object exists there. Selecting the source File by
+   * generation prevents a concurrent presigned overwrite from changing the
+   * bytes copied after the metadata read.
+   */
+  async copyUploadToImmutableObject(
+    temporaryObjectPath: string,
+  ): Promise<string> {
+    const finalObjectPath = immutableObjectPathForUpload(temporaryObjectPath);
+    if (!finalObjectPath) {
+      throw new Error("Immutable finalization requires a temporary upload UUID path");
+    }
+
+    const sourceLocation = this.resolveObjectEntityLocation(temporaryObjectPath);
+    const finalLocation = this.resolveObjectEntityLocation(finalObjectPath);
+    if (sourceLocation.bucketName !== finalLocation.bucketName) {
+      throw new Error("Immutable upload copy must remain in the same bucket");
+    }
+
+    const bucket = objectStorageClient.bucket(sourceLocation.bucketName);
+    const source = bucket.file(sourceLocation.objectName);
+    const destination = bucket.file(finalLocation.objectName);
+    const [exists] = await source.exists();
+    if (!exists) {
+      // The normal settlement path removes the temp object after the durable
+      // reference commits. Safe retries resolve to the already-created final
+      // identity, but never invent success when that destination is absent.
+      const [destinationExists] = await destination.exists();
+      if (destinationExists) return finalObjectPath;
       throw new ObjectNotFoundError();
     }
-
-    const entityId = parts.slice(1).join("/");
-    let entityDir = this.getPrivateObjectDir();
-    if (!entityDir.endsWith("/")) {
-      entityDir = `${entityDir}/`;
+    const [metadata] = await source.getMetadata();
+    const generation = metadata.generation;
+    if (generation == null || String(generation).length === 0) {
+      throw new Error("Storage did not return a generation for the temporary upload");
     }
-    const objectEntityPath = `${entityDir}${entityId}`;
-    const { bucketName, objectName } = parseObjectPath(objectEntityPath);
+
+    const pinnedSource = bucket.file(sourceLocation.objectName, { generation });
+    try {
+      await pinnedSource.copy(destination, {
+        preconditionOpts: { ifGenerationMatch: 0 },
+      });
+    } catch (error) {
+      const code = Number((error as { code?: number | string })?.code);
+      if (code !== 409 && code !== 412) throw error;
+      const [destinationExists] = await destination.exists();
+      if (!destinationExists) throw error;
+      // A prior/concurrent atomic rewrite already produced this deterministic
+      // final key, so retrying finalization returns the same identity.
+    }
+
+    return finalObjectPath;
+  }
+
+  async getObjectEntityFile(objectPath: string): Promise<File> {
+    const { bucketName, objectName } = this.resolveObjectEntityLocation(objectPath);
     const bucket = objectStorageClient.bucket(bucketName);
     const objectFile = bucket.file(objectName);
     const [exists] = await objectFile.exists();
@@ -182,6 +253,10 @@ export class ObjectStorageService {
       throw new ObjectNotFoundError();
     }
     return objectFile;
+  }
+
+  async getObjectEntityAclPolicy(objectFile: File): Promise<ObjectAclPolicy | null> {
+    return getObjectAclPolicy(objectFile);
   }
 
   normalizeObjectEntityPath(rawPath: string): string {
@@ -224,7 +299,11 @@ export class ObjectStorageService {
       if (existing && existing.owner !== ownerId) {
         throw new UploadOwnershipError();
       }
-      await setObjectAclPolicy(objectFile, { owner: ownerId, visibility: "public" });
+      await setObjectAclPolicy(objectFile, {
+        owner: ownerId,
+        visibility: "public",
+        mediaPurpose: "public-media",
+      });
     } catch (err) {
       if (err instanceof UploadOwnershipError) throw err;
       // Object may not exist yet or path is malformed.  Log for observability
@@ -305,6 +384,10 @@ export class ObjectStorageService {
     }
 
     const objectFile = await this.getObjectEntityFile(normalizedPath);
+    const existing = await this.getObjectEntityAclPolicy(objectFile);
+    if (existing && existing.owner !== aclPolicy.owner) {
+      throw new UploadOwnershipError();
+    }
     await setObjectAclPolicy(objectFile, aclPolicy);
     return normalizedPath;
   }

@@ -1,6 +1,16 @@
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { requestUploadUrl, verifyUpload } from "@workspace/api-client-react";
+import { Platform } from "react-native";
+import {
+  CONTENT_TYPE_TO_PICKED_EXT,
+  SUPPORTED_IMAGE_CONTENT_TYPES,
+  SUPPORTED_VIDEO_CONTENT_TYPES,
+  inferSupportedPickedContentType,
+  normalizePickedContentType,
+  pickedExtension,
+} from "./mediaPolicy";
 
 export type UploadedMedia = { url: string; type: "image" | "video" };
 
@@ -85,41 +95,9 @@ type UploadAssetInfo = {
 
 // Image/video types accepted by the server serve allowlist. Keep in sync with
 // ALLOWED_CONTENT_TYPES in api-server uploadController.ts.
-const EXT_TO_CONTENT_TYPE: Record<string, string> = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  gif: "image/gif",
-  webp: "image/webp",
-  avif: "image/avif",
-  heic: "image/heic",
-  heif: "image/heif",
-  mp4: "video/mp4",
-  m4v: "video/mp4",
-  mov: "video/quicktime",
-  webm: "video/webm",
-};
-
-const CONTENT_TYPE_TO_EXT: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/jpg": "jpg",
-  "image/png": "png",
-  "image/gif": "gif",
-  "image/webp": "webp",
-  "image/avif": "avif",
-  "image/heic": "heic",
-  "image/heif": "heif",
-  "video/mp4": "mp4",
-  "video/quicktime": "mov",
-  "video/webm": "webm",
-};
-
 /** Lower-cased file extension from a filename or local URI, ignoring query/hash. */
 function extFromName(name?: string | null): string | null {
-  if (!name) return null;
-  const clean = name.split("?")[0].split("#")[0];
-  const m = clean.match(/\.([a-z0-9]+)$/i);
-  return m ? m[1].toLowerCase() : null;
+  return pickedExtension(name);
 }
 
 /**
@@ -136,15 +114,14 @@ export function resolveUploadDescriptor(
 ): { filename: string; contentType: string } {
   const fileNameExt = extFromName(asset.fileName);
   const sourceExt = fileNameExt ?? extFromName(asset.uri);
-  const mime = asset.mimeType?.split(";")[0].trim().toLowerCase() || null;
-
+  const mime = normalizePickedContentType(asset.mimeType);
   const contentType =
+    inferSupportedPickedContentType(asset, isVideo) ||
     mime ||
-    (sourceExt ? EXT_TO_CONTENT_TYPE[sourceExt] : undefined) ||
-    (isVideo ? "video/mp4" : "image/jpeg");
+    "application/octet-stream";
 
   const ext =
-    sourceExt || CONTENT_TYPE_TO_EXT[contentType] || (isVideo ? "mp4" : "jpg");
+    sourceExt || CONTENT_TYPE_TO_PICKED_EXT[contentType] || (isVideo ? "bin" : "jpg");
 
   let filename: string;
   if (asset.fileName && fileNameExt) {
@@ -177,11 +154,12 @@ async function prepareImageForUpload(
 ): Promise<PreparedUpload> {
   const ct = descriptor.contentType.toLowerCase();
   const isHeic = ct === "image/heic" || ct === "image/heif";
+  const isSupportedImage = SUPPORTED_IMAGE_CONTENT_TYPES.has(ct);
   const w = asset.width ?? 0;
   const h = asset.height ?? 0;
   const needsResize = w > 0 && h > 0 && Math.max(w, h) > MAX_IMAGE_DIM;
 
-  if (!isHeic && !needsResize) {
+  if (isSupportedImage && !isHeic && !needsResize) {
     return {
       uri: asset.uri,
       contentType: descriptor.contentType,
@@ -225,6 +203,7 @@ async function prepareImageForUpload(
 /** Read a local file URI into a Blob for the PUT body. */
 async function readAsBlob(uri: string): Promise<Blob> {
   const resp = await fetch(uri);
+  if (!resp.ok) throw new Error("upload_local_file_unreadable");
   return resp.blob();
 }
 
@@ -284,6 +263,9 @@ export function uploadErrorMessageKey(err: unknown): string {
     }
   }
   if (err instanceof Error) {
+    if (err.message === "unsupported_video_format") {
+      return "create.errVideoUnsupported";
+    }
     if (
       err.message === "upload_network_error" ||
       err.message === "upload_timeout" ||
@@ -359,6 +341,120 @@ function xhrPut(
 }
 
 /**
+ * Native file PUT. Unlike `fetch(uri).blob()` + XHR, Expo streams the local file
+ * from the native filesystem and never materializes a 50 MB video in the JS
+ * heap. The task remains cancellable and reports byte progress.
+ */
+function nativeFilePut(
+  url: string,
+  fileUri: string,
+  contentType: string,
+  opts: { onProgress?: UploadProgress; signal?: AbortSignal; timeoutMs: number },
+): Promise<void> {
+  const { onProgress, signal, timeoutMs } = opts;
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new UploadAbortError());
+      return;
+    }
+
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const task = FileSystem.createUploadTask(
+      url,
+      fileUri,
+      {
+        httpMethod: "PUT",
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: { "Content-Type": contentType },
+        sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
+      },
+      ({ totalBytesExpectedToSend, totalBytesSent }) => {
+        if (onProgress && totalBytesExpectedToSend > 0) {
+          onProgress(Math.min(1, totalBytesSent / totalBytesExpectedToSend));
+        }
+      },
+    );
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn();
+    };
+    const cancelTask = () => {
+      void task.cancelAsync().catch(() => {});
+    };
+    const onAbort = () => {
+      cancelTask();
+      finish(() => reject(new UploadAbortError()));
+    };
+
+    signal?.addEventListener("abort", onAbort);
+    timer = setTimeout(() => {
+      cancelTask();
+      finish(() => reject(new Error("upload_timeout")));
+    }, timeoutMs);
+
+    task.uploadAsync().then(
+      (result) =>
+        finish(() => {
+          if (signal?.aborted) {
+            reject(new UploadAbortError());
+          } else if (!result) {
+            reject(new Error("upload_network_error"));
+          } else if (result.status >= 200 && result.status < 300) {
+            resolve();
+          } else {
+            reject(new UploadHttpError(result.status));
+          }
+        }),
+      (error: unknown) =>
+        finish(() =>
+          reject(
+            signal?.aborted
+              ? new UploadAbortError()
+              : error instanceof Error
+                ? error
+                : new Error("upload_network_error"),
+          ),
+        ),
+    );
+  });
+}
+
+function isPermanentPutFailure(error: unknown): boolean {
+  const status = error instanceof UploadHttpError ? error.status : null;
+  return status != null && status < 500 && status !== 408 && status !== 429;
+}
+
+async function retryPut(
+  attempt: () => Promise<void>,
+  signal?: AbortSignal,
+): Promise<void> {
+  let lastErr: unknown;
+  for (let index = 1; index <= MAX_PUT_ATTEMPTS; index += 1) {
+    if (signal?.aborted) throw new UploadAbortError();
+    try {
+      await attempt();
+      return;
+    } catch (error) {
+      if (isUploadAbortError(error)) throw error;
+      lastErr = error;
+      if (isPermanentPutFailure(error)) throw error;
+    }
+    if (index < MAX_PUT_ATTEMPTS) {
+      await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** (index - 1)));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("upload_failed");
+}
+
+/**
  * PUT with a per-attempt timeout and bounded retries. Network errors, timeouts,
  * and 5xx/408/429 are retried with exponential backoff; other 4xx are permanent
  * and fail fast. A caller abort short-circuits immediately (never retried). On a
@@ -376,29 +472,23 @@ async function putWithProgress(
   opts?: UploadControl & { timeoutMs?: number }
 ): Promise<void> {
   const { onProgress, signal, timeoutMs = PUT_TIMEOUT_MS_IMAGE } = opts ?? {};
-  let lastErr: unknown;
-  for (let attempt = 1; attempt <= MAX_PUT_ATTEMPTS; attempt++) {
-    if (signal?.aborted) throw new UploadAbortError();
-    try {
-      await xhrPut(url, blob, contentType, {
-        onProgress,
-        signal,
-        timeoutMs,
-      });
-      return;
-    } catch (err) {
-      if (isUploadAbortError(err)) throw err;
-      lastErr = err;
-      const status = err instanceof UploadHttpError ? err.status : null;
-      const permanent =
-        status != null && status < 500 && status !== 408 && status !== 429;
-      if (permanent) throw err;
-    }
-    if (attempt < MAX_PUT_ATTEMPTS) {
-      await new Promise((r) => setTimeout(r, 500 * 2 ** (attempt - 1)));
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error("upload_failed");
+  await retryPut(
+    () => xhrPut(url, blob, contentType, { onProgress, signal, timeoutMs }),
+    signal,
+  );
+}
+
+async function putNativeFileWithProgress(
+  url: string,
+  fileUri: string,
+  contentType: string,
+  opts?: UploadControl & { timeoutMs?: number },
+): Promise<void> {
+  const { onProgress, signal, timeoutMs = PUT_TIMEOUT_MS_IMAGE } = opts ?? {};
+  await retryPut(
+    () => nativeFilePut(url, fileUri, contentType, { onProgress, signal, timeoutMs }),
+    signal,
+  );
 }
 
 /**
@@ -417,6 +507,9 @@ export async function buildResolvedMedia(
   const descriptor = resolveUploadDescriptor(asset, isVideo);
 
   if (isVideo) {
+    if (!SUPPORTED_VIDEO_CONTENT_TYPES.has(descriptor.contentType)) {
+      throw new Error("unsupported_video_format");
+    }
     return {
       uri: asset.uri,
       type: "video",
@@ -556,25 +649,53 @@ export async function uploadResolvedMedia(
   // temp file can be slower than expected; 30 s is fine for images.
   const blobReadTimeoutMs = isVideo ? PUT_TIMEOUT_MS_VIDEO : REQUEST_URL_TIMEOUT_MS;
 
-  const blob = await withDeadline(
-    readAsBlob(media.uri),
-    blobReadTimeoutMs,
-    opts?.signal
-  );
+  let nativeFileSize: number | null = null;
+  if (Platform.OS !== "web") {
+    try {
+      const info = await withDeadline(
+        FileSystem.getInfoAsync(media.uri),
+        REQUEST_URL_TIMEOUT_MS,
+        opts?.signal,
+      );
+      if (info.exists && !info.isDirectory && Number.isFinite(info.size)) {
+        nativeFileSize = info.size;
+      }
+    } catch (error) {
+      if (isUploadAbortError(error)) throw error;
+      // Some older Android content providers expose a URI that fetch() can read
+      // but FileSystem cannot stat. Preserve the proven Blob path as a fallback.
+    }
+  }
+
+  const blob =
+    nativeFileSize == null
+      ? await withDeadline(readAsBlob(media.uri), blobReadTimeoutMs, opts?.signal)
+      : null;
+  const size = nativeFileSize ?? blob?.size ?? 0;
+  if (!Number.isFinite(size) || size <= 0) {
+    throw new Error("upload_empty_file");
+  }
 
   const { upload_url, url } = await requestUploadUrlResilient(
     {
       filename: media.filename,
       content_type: media.contentType,
-      size: blob.size,
+      size,
     },
     opts?.signal
   );
 
-  await putWithProgress(upload_url, blob, media.contentType, {
-    ...opts,
-    timeoutMs: putTimeoutMs,
-  });
+  if (nativeFileSize != null) {
+    await putNativeFileWithProgress(upload_url, media.uri, media.contentType, {
+      ...opts,
+      timeoutMs: putTimeoutMs,
+    });
+  } else {
+    await putWithProgress(upload_url, blob!, media.contentType, {
+      ...opts,
+      timeoutMs: putTimeoutMs,
+    });
+  }
 
   return { url, type: media.type };
 }
@@ -590,7 +711,9 @@ export async function uploadMediaAsset(
   asset: ImagePicker.ImagePickerAsset
 ): Promise<UploadedMedia> {
   const resolved = await buildResolvedMedia(asset);
-  return uploadResolvedMedia(resolved);
+  const uploaded = await uploadResolvedMedia(resolved);
+  await verifyUploadWithRetry(uploaded.url);
+  return uploaded;
 }
 
 /**

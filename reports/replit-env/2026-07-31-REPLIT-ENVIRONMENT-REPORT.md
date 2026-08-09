@@ -39,14 +39,14 @@ instead of the local API server → CORS policy blocked all responses → app st
 
 ### Problem B — Clerk secret key placeholder
 ```
-CLERK_SECRET_KEY = "sk_test_banco_dev_placeholder_replace_with_real"  ← was in [userenv.development]
+CLERK_SECRET_KEY = "<REDACTED_ROTATE_REQUIRED>"  ← was in [userenv.development]
 ```
 This **overrode** the real `sk_test_*` key stored in the encrypted Replit secrets store  
 → Clerk server-side auth (Next.js SSR) silently failed → black screen at port 5000.
 
 ### Problem C — Production Clerk key baked into shared env
 ```
-EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsuYmFuY28udG9kYXkk"  ← was in [userenv.shared]
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = "<REDACTED_ROTATE_REQUIRED>"  ← was in [userenv.shared]
 ```
 The `pk_live_` key was applying to the development environment, creating a  
 prod-key ↔ test-secret-key mismatch → 401 on every authenticated endpoint.
@@ -60,7 +60,7 @@ prod-key ↔ test-secret-key mismatch → 401 on every authenticated endpoint.
 - `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_live_..."` → moved to `[userenv.production]` only
 
 ### Removed from `[userenv.development]`:
-- `CLERK_SECRET_KEY = "sk_test_banco_dev_placeholder_replace_with_real"` → real key from encrypted secrets store now takes effect
+- `CLERK_SECRET_KEY = "<REDACTED_ROTATE_REQUIRED>"` → real key from encrypted secrets store now takes effect
 
 ### Added to `[userenv.production]` (already there + additions):
 - `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_live_..."` ✅
@@ -92,7 +92,7 @@ prod-key ↔ test-secret-key mismatch → 401 on every authenticated endpoint.
 | Key | Value |
 |-----|-------|
 | Instance | `evolving-magpie-43` (development) |
-| Publishable | `pk_test_ZXZvbHZpbmctbWFncGllLTQzLmNsZXJrLmFjY291bnRzLmRldiQ` |
+| Publishable | `<REDACTED_ROTATE_REQUIRED>` |
 | Secret | In Replit encrypted secrets store (real `sk_test_*`, not placeholder) |
 | Auth methods | Email + password + OTP (social/Google/Apple not enabled in this dev instance) |
 

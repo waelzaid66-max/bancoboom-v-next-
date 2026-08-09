@@ -79,8 +79,16 @@ export default function BusinessOnboardingScreen() {
   const insets = useSafeAreaInsets();
   // Same safe-area contract as Search/Section — fake web 67 crushed chrome.
   const topPad = Math.max(insets.top, Platform.OS === "web" ? 12 : 0);
-  const params = useLocalSearchParams<{ intent?: string }>();
+  const params = useLocalSearchParams<{ intent?: string; fiType?: string }>();
   const fiIntent = params.intent === "fi";
+  const requestedFiLicenseType: FiLicenseType | null =
+    !fiIntent
+      ? null
+      : params.fiType === "bank"
+        ? "bank"
+        : params.fiType === "financing_company"
+          ? "financing_company"
+          : null;
 
   const visibleActivities = useMemo(
     () =>
@@ -101,7 +109,8 @@ export default function BusinessOnboardingScreen() {
   // FI-only regulatory identity. A financial institution must not be verified on
   // the same evidence as a car dealer (audit S2: shared onboarding form).
   const [fiLicenseNumber, setFiLicenseNumber] = useState("");
-  const [fiLicenseType, setFiLicenseType] = useState<FiLicenseType | null>(null);
+  const [fiLicenseType, setFiLicenseType] =
+    useState<FiLicenseType | null>(requestedFiLicenseType);
   const [fiRegulator, setFiRegulator] = useState("");
   const [fiRegistryNumber, setFiRegistryNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);

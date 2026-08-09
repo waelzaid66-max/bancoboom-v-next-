@@ -1796,12 +1796,17 @@ test("no fake web topPad 67 remains under banco-mobile", () => {
   );
 });
 
-test("Profile FI account type pushes onboarding with intent=fi", () => {
+test("Profile bank and funder families push distinct FI onboarding paths", () => {
   const src = fs.readFileSync(PROFILE, "utf8");
   assert.match(
     src,
-    /type === "financial_institution"[\s\S]*?onboarding\?intent=fi/,
-    "choosing FI must force intent=fi (F-ORD-05)",
+    /family === "bank"[\s\S]*?onboarding\?intent=fi&fiType=bank/,
+    "choosing Bank must force the bank FI path (F-ORD-05)",
+  );
+  assert.match(
+    src,
+    /family === "funder"[\s\S]*?onboarding\?intent=fi&fiType=financing_company/,
+    "choosing Funder must force the financier FI path (F-ORD-05)",
   );
   assert.match(
     src,

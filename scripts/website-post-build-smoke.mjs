@@ -23,7 +23,6 @@ const BASE = (process.env.BANCO_WEB_URL || "http://127.0.0.1:3000").replace(
 );
 const isWin = process.platform === "win32";
 const pnpm = isWin ? "pnpm.cmd" : "pnpm";
-const npx = isWin ? "npx.cmd" : "npx";
 
 let server = null;
 
@@ -56,20 +55,35 @@ function startServer() {
   });
 }
 
-function waitForHealth() {
-  const result = spawnSync(
-    npx,
-    ["--yes", "wait-on@8.0.1", "-t", "120000", `${BASE}/api/health`],
-    { cwd: ROOT, stdio: "inherit", shell: isWin },
-  );
-  return result.status === 0;
+async function waitForHealth() {
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${BASE}/api/health`, {
+        signal: AbortSignal.timeout(2_000),
+      });
+      if (response.ok) return true;
+    } catch {
+      // Server is still starting.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return false;
 }
 
 function runStagingSmoke() {
   return spawnSync("node", ["scripts/website-staging-smoke.mjs"], {
     cwd: ROOT,
     stdio: "inherit",
-    env: { ...process.env, BANCO_WEB_URL: BASE },
+    env: {
+      ...process.env,
+      BANCO_WEB_URL: BASE,
+      BANCO_WEB_EXPECT_AUTH:
+        process.env.BANCO_WEB_EXPECT_AUTH ||
+        (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+          ? "configured"
+          : "unconfigured"),
+    },
     shell: isWin,
   });
 }
@@ -87,7 +101,7 @@ process.on("SIGTERM", () => {
 console.log("Post-build smoke — isolated from mobile/API deploy\n");
 startServer();
 
-if (!waitForHealth()) {
+if (!(await waitForHealth())) {
   console.error("[FAIL] banco-web did not become healthy in time");
   shutdownServer();
   process.exit(1);

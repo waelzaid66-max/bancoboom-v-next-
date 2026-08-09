@@ -15,7 +15,7 @@
 
 1. اذهب إلى [replit.com](https://replit.com) → **+ Create Repl**
 2. اختر **Import from GitHub**
-3. الريبو: `waelzaid66-max/banco-with-wael`
+3. الريبو: `waelzaid66-max/bancoboomstor`
 4. بعد الـ import، في Terminal:
    ```bash
    cd projects/banco-status

@@ -131,3 +131,94 @@ test("Auth provider tree: AuthGate wraps SessionProvider", () => {
   const sessionIdx = layout.indexOf("<SessionProvider>");
   assert.ok(gateIdx > 0 && sessionIdx > gateIdx, "AuthGate must wrap Session");
 });
+
+test("native Metro preserves the canonical Expo Clerk publishable key", () => {
+  const build = read("artifacts/banco-mobile/scripts/build.js");
+  const startMetro = build.slice(
+    build.indexOf("async function startMetro"),
+    build.indexOf("async function downloadFile"),
+  );
+  assert.match(
+    startMetro,
+    /process\.env\.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY\s*\|\|\s*process\.env\.CLERK_PUBLISHABLE_KEY\s*\|\|\s*["']{2}/,
+    "native Metro must prefer an existing EXPO_PUBLIC key before the shared alias",
+  );
+});
+
+test("account UI exposes the four product families and routes bank/funder separately", () => {
+  const profile = read("artifacts/banco-mobile/app/(tabs)/profile.tsx");
+  const onboarding = read("artifacts/banco-mobile/app/business/onboarding.tsx");
+
+  for (const family of ["individual", "business", "bank", "funder"]) {
+    assert.match(
+      profile,
+      new RegExp(`type: ["']${family}["']`),
+      `missing account family ${family}`,
+    );
+  }
+  assert.match(
+    profile,
+    /if \(family === ["']business["']\)[\s\S]{0,240}return currentRole === ["']company["'] \? ["']company["'] : ["']dealer["']/,
+  );
+  assert.match(
+    profile,
+    /family === ["']bank["'] \|\| family === ["']funder["']/,
+  );
+  assert.match(profile, /intent=fi&fiType=bank/);
+  assert.match(profile, /intent=fi&fiType=financing_company/);
+
+  assert.match(onboarding, /fiType\?: string/);
+  assert.match(onboarding, /params\.fiType === ["']bank["']/);
+  assert.match(onboarding, /params\.fiType === ["']financing_company["']/);
+});
+
+test("financial-institution profile success waits for idempotent workspace provisioning", () => {
+  const service = read("artifacts/api-server/src/services/UserService.ts");
+
+  assert.doesNotMatch(
+    service,
+    /void ensureFiWorkspace\(/,
+    "PATCH /me must not report FI success while workspace provisioning is still in flight",
+  );
+  assert.match(
+    service,
+    /if \(updated\.role === ["']financial_institution["']\) \{\s*await ensureFiWorkspace\(updated\.id\);/,
+    "every FI retry must idempotently ensure its workspace before PATCH /me succeeds",
+  );
+});
+
+test("profile write atomically rejects tombstones and stale personal demotions", () => {
+  const service = read("artifacts/api-server/src/services/UserService.ts");
+  const updateStart = service.indexOf("const profileWriteCondition");
+  const updateEnd = service.indexOf("// A financial-institution profile", updateStart);
+  const updateBlock = service.slice(updateStart, updateEnd);
+
+  assert.match(
+    updateBlock,
+    /isNull\(users\.deletedAt\)/,
+    "the UPDATE itself must not write PII back after a concurrent account tombstone",
+  );
+  assert.match(
+    updateBlock,
+    /input\.account_type === ["']individual["'][\s\S]*notInArray\(users\.role/,
+    "the UPDATE itself must reject a stale personal write after an FI/company promotion",
+  );
+});
+
+test("account deletion storage failure cannot skip the Clerk deletion attempt", () => {
+  const service = read("artifacts/api-server/src/services/UserService.ts");
+  const cleanupStart = service.indexOf("const purgeUrls =");
+  const cleanupEnd = service.indexOf("return { deleted: true }", cleanupStart);
+  const cleanupBlock = service.slice(cleanupStart, cleanupEnd);
+
+  assert.match(
+    cleanupBlock,
+    /try \{[\s\S]*deleteServingUrls\(purgeUrls\)[\s\S]*\} catch \(err\) \{/,
+    "storage exceptions after the tombstone commit must be contained and logged",
+  );
+  assert.ok(
+    cleanupBlock.indexOf("clerkClient.users.deleteUser") >
+      cleanupBlock.indexOf("deleteServingUrls(purgeUrls)"),
+    "the Clerk deletion attempt must still run after best-effort media cleanup",
+  );
+});

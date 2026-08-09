@@ -142,9 +142,13 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
     : "";
   const env = {
     ...process.env,
+    EXPO_NO_TELEMETRY: "1",
     EXPO_PUBLIC_DOMAIN: expoPublicDomain,
     EXPO_PUBLIC_REPL_ID: expoPublicReplId,
-    EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.CLERK_PUBLISHABLE_KEY || "",
+    EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:
+      process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+      process.env.CLERK_PUBLISHABLE_KEY ||
+      "",
     EXPO_PUBLIC_CLERK_PROXY_URL: clerkProxyUrl,
   };
 
@@ -539,7 +543,11 @@ async function runLightweightBuild() {
       "--platform",
       "web",
     ],
-    { cwd: projectRoot, stdio: "inherit", env: process.env },
+    {
+      cwd: projectRoot,
+      stdio: "inherit",
+      env: { ...process.env, EXPO_NO_TELEMETRY: "1" },
+    },
   );
 
   if (result.status !== 0) {
@@ -565,6 +573,7 @@ function exportWebBuild() {
   const { spawnSync } = require("child_process");
   const env = {
     ...process.env,
+    EXPO_NO_TELEMETRY: "1",
     EXPO_WEB_BASE_URL: basePath || "",
     // Same key mapping startMetro uses for the native bundles.
     EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:

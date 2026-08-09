@@ -171,25 +171,75 @@ describe("ImportOrderService — stage machine & cancel rules", () => {
 });
 
 describe("ImportOrderService — order documents (wave 3)", () => {
-  // External (non first-party) URL — assertCallerMayUseUpload no-ops; used for
-  // lifecycle tests that are not about upload ownership.
+  // Legacy rows may still contain external URLs, but every new attach now uses
+  // a BANCO temp URL and must persist the immutable final identity.
   const DOC_URL = "https://storage.banco.test/uploads/passport-page.jpg";
+  const attachDeps = {
+    storage: {
+      getServingObjectMetadata: async () => ({
+        contentType: "image/jpeg",
+        size: 1024,
+      }),
+    },
+    assertOwner: async () => undefined,
+    finalizePrivate: async (
+      sourceUrl: string,
+      _clerkId: string,
+      validateFinal: (finalUrl: string) => Promise<void>,
+    ) => {
+      const sourceObjectPath = `/objects/${sourceUrl.split("/objects/")[1]}`;
+      const objectPath = sourceObjectPath.replace("/objects/uploads/", "/objects/final/");
+      const url = sourceUrl.replace("/objects/uploads/", "/objects/final/");
+      await validateFinal(url);
+      return { sourceUrl, url, sourceObjectPath, objectPath };
+    },
+    settle: async () => undefined,
+  };
+  const deleteDeps = {
+    privatize: async () => undefined,
+    deleteServingUrls: async () => ({ deleted: 1, skipped: 0, failed: 0 }),
+  };
+
+  function uploadUrl(): string {
+    return `https://banco.example/api/v1/uploads/objects/uploads/${randomUUID()}`;
+  }
+
+  function attachTestDocument(
+    clerkId: string,
+    orderId: string,
+    kind: string,
+  ) {
+    return attachImportOrderDocument(
+      clerkId,
+      orderId,
+      { kind, url: uploadUrl() },
+      attachDeps,
+    );
+  }
+
+  function deleteTestDocument(
+    clerkId: string,
+    orderId: string,
+    documentId: string,
+  ) {
+    return deleteImportOrderDocument(
+      clerkId,
+      orderId,
+      documentId,
+      deleteDeps,
+    );
+  }
 
   it("attaches, lists (newest first) and deletes a document", async () => {
     const { clerkId } = await createBuyer();
     const { id } = await createImportOrder(clerkId, {});
     orderIds.push(id);
 
-    const older = await attachImportOrderDocument(clerkId, id, {
-      kind: "invoice",
-      url: `${DOC_URL}?n=1`,
-    });
-    const newer = await attachImportOrderDocument(clerkId, id, {
-      kind: "passport",
-      url: `${DOC_URL}?n=2`,
-    });
+    const older = await attachTestDocument(clerkId, id, "invoice");
+    const newer = await attachTestDocument(clerkId, id, "passport");
     expect(newer.order_id).toBe(id);
     expect(newer.kind).toBe("passport");
+    expect(newer.url).toContain("/objects/final/");
 
     const listed = await listImportOrderDocuments(clerkId, id);
     expect(listed.map((d) => d.id)).toEqual(
@@ -198,14 +248,14 @@ describe("ImportOrderService — order documents (wave 3)", () => {
     // Newest first.
     expect(listed[0]?.id).toBe(newer.id);
 
-    await deleteImportOrderDocument(clerkId, id, newer.id);
+    await deleteTestDocument(clerkId, id, newer.id);
     const after = await listImportOrderDocuments(clerkId, id);
     expect(after.map((d) => d.id)).not.toContain(newer.id);
     expect(after.map((d) => d.id)).toContain(older.id);
 
     // Deleting again → NOT_FOUND.
     await expect(
-      deleteImportOrderDocument(clerkId, id, newer.id),
+      deleteTestDocument(clerkId, id, newer.id),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
@@ -214,22 +264,16 @@ describe("ImportOrderService — order documents (wave 3)", () => {
     const attacker = await createBuyer();
     const { id } = await createImportOrder(owner.clerkId, {});
     orderIds.push(id);
-    const doc = await attachImportOrderDocument(owner.clerkId, id, {
-      kind: "invoice",
-      url: DOC_URL,
-    });
+    const doc = await attachTestDocument(owner.clerkId, id, "invoice");
 
     await expect(
       listImportOrderDocuments(attacker.clerkId, id),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(
-      attachImportOrderDocument(attacker.clerkId, id, {
-        kind: "id",
-        url: DOC_URL,
-      }),
+      attachTestDocument(attacker.clerkId, id, "id"),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(
-      deleteImportOrderDocument(attacker.clerkId, id, doc.id),
+      deleteTestDocument(attacker.clerkId, id, doc.id),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
@@ -237,28 +281,19 @@ describe("ImportOrderService — order documents (wave 3)", () => {
     const { clerkId } = await createBuyer();
     const { id: cancelledId } = await createImportOrder(clerkId, {});
     orderIds.push(cancelledId);
-    const cancelledDoc = await attachImportOrderDocument(clerkId, cancelledId, {
-      kind: "poa",
-      url: DOC_URL,
-    });
+    const cancelledDoc = await attachTestDocument(clerkId, cancelledId, "poa");
     await cancelImportOrder(clerkId, cancelledId);
 
     await expect(
-      attachImportOrderDocument(clerkId, cancelledId, {
-        kind: "id",
-        url: DOC_URL,
-      }),
+      attachTestDocument(clerkId, cancelledId, "id"),
     ).rejects.toMatchObject({ code: "INVALID_DATA" });
     await expect(
-      deleteImportOrderDocument(clerkId, cancelledId, cancelledDoc.id),
+      deleteTestDocument(clerkId, cancelledId, cancelledDoc.id),
     ).rejects.toMatchObject({ code: "INVALID_DATA" });
 
     const { id: deliveredId } = await createImportOrder(clerkId, {});
     orderIds.push(deliveredId);
-    const deliveredDoc = await attachImportOrderDocument(clerkId, deliveredId, {
-      kind: "customs",
-      url: DOC_URL,
-    });
+    const deliveredDoc = await attachTestDocument(clerkId, deliveredId, "customs");
     await updateImportOrderStage(deliveredId, "review");
     await updateImportOrderStage(deliveredId, "confirm");
     await updateImportOrderStage(deliveredId, "shipping");
@@ -266,13 +301,10 @@ describe("ImportOrderService — order documents (wave 3)", () => {
     await updateImportOrderStage(deliveredId, "delivered");
 
     await expect(
-      attachImportOrderDocument(clerkId, deliveredId, {
-        kind: "shipping",
-        url: DOC_URL,
-      }),
+      attachTestDocument(clerkId, deliveredId, "shipping"),
     ).rejects.toMatchObject({ code: "INVALID_DATA" });
     await expect(
-      deleteImportOrderDocument(clerkId, deliveredId, deliveredDoc.id),
+      deleteTestDocument(clerkId, deliveredId, deliveredDoc.id),
     ).rejects.toMatchObject({ code: "INVALID_DATA" });
   });
 
@@ -321,10 +353,7 @@ describe("ImportOrderService — order documents (wave 3)", () => {
   it("documents cascade away when the order is deleted", async () => {
     const { clerkId } = await createBuyer();
     const { id } = await createImportOrder(clerkId, {});
-    const doc = await attachImportOrderDocument(clerkId, id, {
-      kind: "customs",
-      url: DOC_URL,
-    });
+    const doc = await attachTestDocument(clerkId, id, "customs");
     expect(doc.id).toBeTruthy();
 
     await db.delete(importOrders).where(eq(importOrders.id, id));

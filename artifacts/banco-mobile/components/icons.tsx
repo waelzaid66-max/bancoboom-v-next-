@@ -190,9 +190,12 @@ type IconProps = {
 const ICONS: Record<string, LucideIcon> = {
   // Newly registered names that previously rendered the CircleAlert fallback
   // (caught by tests/icons.test.mjs once it is part of validation):
+  "alert-circle-outline": CircleAlert,
   "clipboard-outline": ClipboardList,
   "clock-outline": Clock,
+  "file-document-outline": FileText,
   "image-multiple-outline": Images,
+  "information-outline": Info,
   "list": List,
   "map": Map,
   "package": Package,
@@ -200,6 +203,7 @@ const ICONS: Record<string, LucideIcon> = {
   "ribbon": Award,
   "share-social-outline": Share2,
   "unlock": LockOpen,
+  "upload": CloudUpload,
   "video": Video,
   "account-cash-outline": Banknote,
   "account-group-outline": Users,

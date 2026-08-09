@@ -183,6 +183,8 @@ function SmartAssetCardComponent({
               contentFit="cover"
               transition={200}
               cachePolicy="memory-disk"
+              recyclingKey={item.id}
+              enforceEarlyResizing
             />
 
             <View style={styles.topBadges}>

@@ -1,13 +1,14 @@
 import { Ionicons } from "@/components/icons";
 import { Image } from "expo-image";
 import { VideoPlayer, VideoView, useVideoPlayer } from "expo-video";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Dimensions,
+  FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -50,6 +51,8 @@ function VideoSlide({ url, posterUrl, height, isActive }: VideoSlideProps) {
         style={{ width: SCREEN_WIDTH, height }}
         contentFit="cover"
         transition={150}
+        cachePolicy="memory-disk"
+        enforceEarlyResizing
       />
     );
   }
@@ -74,17 +77,63 @@ export function MediaGallery({ media, height = 300 }: MediaGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
-
-  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
     setActiveIndex(idx);
-  };
+  }, []);
 
-  const openViewer = (idx: number) => {
+  const openViewer = useCallback((idx: number) => {
     setViewerIndex(idx);
     setViewerOpen(true);
-  };
+  }, []);
+
+  const renderSlide = useCallback(
+    ({ item, index: idx }: { item: MediaItem; index: number }) => {
+      const isActive = idx === activeIndex;
+      return (
+        <Pressable
+          onPress={() => openViewer(idx)}
+          style={{ width: SCREEN_WIDTH, height }}
+        >
+          {item.type === "video" ? (
+            isActive ? (
+              <VideoSlide
+                url={item.url}
+                posterUrl={item.thumbnail_url}
+                height={height}
+                isActive
+              />
+            ) : item.thumbnail_url ? (
+              <Image
+                source={{ uri: item.thumbnail_url }}
+                style={styles.image}
+                contentFit="cover"
+                transition={150}
+                cachePolicy="memory-disk"
+                recyclingKey={item.id ?? item.url}
+                enforceEarlyResizing
+              />
+            ) : (
+              <View style={[styles.videoPlaceholder, { height }]}>
+                <Ionicons name="play-circle" size={52} color="#FFFFFF" />
+              </View>
+            )
+          ) : (
+            <Image
+              source={{ uri: item.url }}
+              style={styles.image}
+              contentFit="cover"
+              transition={150}
+              cachePolicy="memory-disk"
+              recyclingKey={item.id ?? item.url}
+              enforceEarlyResizing
+            />
+          )}
+        </Pressable>
+      );
+    },
+    [activeIndex, height, openViewer],
+  );
 
   if (!media || media.length === 0) {
     return (
@@ -101,39 +150,26 @@ export function MediaGallery({ media, height = 300 }: MediaGalleryProps) {
 
   return (
     <View style={[styles.wrapper, { height }]}>
-      <ScrollView
-        ref={scrollRef}
+      <FlatList
         horizontal
         pagingEnabled
+        data={media}
+        keyExtractor={(item, idx) => String(item.id ?? `${item.url}-${idx}`)}
+        renderItem={renderSlide}
+        getItemLayout={(_, idx) => ({
+          length: SCREEN_WIDTH,
+          offset: SCREEN_WIDTH * idx,
+          index: idx,
+        })}
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={handleScroll}
-        scrollEnabled={!!media.length}
+        scrollEnabled={media.length > 1}
         style={{ width: SCREEN_WIDTH }}
-      >
-        {media.map((item, idx) => (
-          <Pressable
-            key={item.id ?? idx}
-            onPress={() => openViewer(idx)}
-            style={{ width: SCREEN_WIDTH, height }}
-          >
-            {item.type === "video" ? (
-              <VideoSlide
-                url={item.url}
-                posterUrl={item.thumbnail_url}
-                height={height}
-                isActive={idx === activeIndex}
-              />
-            ) : (
-              <Image
-                source={{ uri: item.url }}
-                style={styles.image}
-                contentFit="cover"
-                transition={150}
-              />
-            )}
-          </Pressable>
-        ))}
-      </ScrollView>
+        initialNumToRender={1}
+        windowSize={3}
+        maxToRenderPerBatch={2}
+        removeClippedSubviews={Platform.OS === "android"}
+      />
 
       {media.length > 1 && (
         <View style={styles.dots}>
@@ -177,6 +213,12 @@ const styles = StyleSheet.create({
   image: {
     width: "100%",
     height: "100%",
+  },
+  videoPlaceholder: {
+    width: SCREEN_WIDTH,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#111111",
   },
   placeholder: {
     alignItems: "center",

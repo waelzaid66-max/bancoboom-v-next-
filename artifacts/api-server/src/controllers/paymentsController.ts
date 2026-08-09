@@ -4,6 +4,7 @@ import {
   getIntentMeta,
   claimPaymobOrderForIntent,
   findIntentIdByPaymobOrderId,
+  markPaymobRefundForReconciliation,
   settleTopupIntent,
   markTopupIntentFailed,
   reverseTopupAfterPspReversal,
@@ -40,15 +41,18 @@ export async function paymobWebhookHandler(req: Request, res: Response) {
   }
 
   try {
-    // Prefer the already-bound intent for this signed order.id — never let an
-    // unsigned merchant_order_id remap settlement onto a different intent.
-    const boundIntentId = await findIntentIdByPaymobOrderId(
+    // Route exclusively through the order id bound from the trusted Intention
+    // API response. merchant_order_id / extras.intent_id are not covered by
+    // Paymob's transaction HMAC and must never establish first-use ownership.
+    const intentId = await findIntentIdByPaymobOrderId(
       verification.providerOrderId,
     );
-    const intentId = boundIntentId ?? verification.intentId;
     if (!intentId) {
-      console.warn("[Paymob webhook] signed but no intent id present");
-      return res.status(200).json({ ok: true });
+      console.error(
+        "[Paymob webhook] signed order is not pre-bound to an intent",
+        verification.providerOrderId,
+      );
+      return res.status(503).json({ ok: false, error: "order_not_bound" });
     }
 
     const meta = await getIntentMeta(intentId);
@@ -63,30 +67,20 @@ export async function paymobWebhookHandler(req: Request, res: Response) {
     const isPspReverse = verification.isRefunded || verification.isVoided;
     const intentCents = Math.round(Number(meta.amount) * 100);
 
-    // Economic guards MUST run before claimPaymobOrderForIntent — otherwise a
-    // wrong-amount webhook permanently binds order.id and strands the real pay.
-    // SUCCESS path: exact amount match required.
-    // REFUND/VOID path: Paymob may send a PARTIAL refund amount_cents — require
-    // 0 < cents <= intent and claw that magnitude (never ACK with zero clawback
-    // just because cents ≠ full intent).
+    // Economic guards MUST run before claimPaymobOrderForIntent. Paymob signs
+    // amount_cents as the ORIGINAL transaction amount, including on refund
+    // callbacks. Partial-refund totals live in refunded_amount_cents, which is
+    // not part of the transaction HMAC and cannot drive the ledger directly.
     if (
       verification.amountCents == null ||
       !Number.isFinite(verification.amountCents) ||
       verification.amountCents <= 0
     ) {
-      if (isPspReverse) {
-        // Missing amount on reverse → claw the full intent (ops-conservative).
-        console.error(
-          "[Paymob webhook] reverse missing amount_cents — clawing full intent",
-          intentId,
-        );
-      } else {
-        console.error(
-          "[Paymob webhook] missing/invalid signed amount_cents for intent",
-          intentId,
-        );
-        return res.status(200).json({ ok: true });
-      }
+      console.error(
+        "[Paymob webhook] missing/invalid signed amount_cents for intent",
+        intentId,
+      );
+      return res.status(200).json({ ok: true });
     }
     if (verification.currency !== "EGP") {
       console.error(
@@ -97,25 +91,7 @@ export async function paymobWebhookHandler(req: Request, res: Response) {
       return res.status(200).json({ ok: true });
     }
 
-    let clawCents = intentCents;
-    if (isPspReverse) {
-      if (
-        verification.amountCents != null &&
-        Number.isFinite(verification.amountCents) &&
-        verification.amountCents > 0
-      ) {
-        if (verification.amountCents > intentCents) {
-          console.error(
-            "[Paymob webhook] reverse amount exceeds intent — ACK no-op",
-            intentId,
-            verification.amountCents,
-            intentCents,
-          );
-          return res.status(200).json({ ok: true });
-        }
-        clawCents = verification.amountCents;
-      }
-    } else if (intentCents !== verification.amountCents) {
+    if (intentCents !== verification.amountCents) {
       console.error(
         "[Paymob webhook] amount mismatch for intent",
         intentId,
@@ -144,7 +120,16 @@ export async function paymobWebhookHandler(req: Request, res: Response) {
       return res.status(200).json({ ok: true });
     }
 
-    if (verification.success) {
+    if (verification.isRefunded) {
+      await markPaymobRefundForReconciliation(intentId, {
+        providerTxnId: verification.providerTxnId,
+      });
+      console.error(
+        "[Paymob webhook] refund requires authenticated amount reconciliation",
+        intentId,
+        verification.providerTxnId,
+      );
+    } else if (verification.success) {
       if (meta.purpose === "subscription") {
         await settleSubscriptionIntentByWebhook(intentId, {
           providerTxnId: verification.providerTxnId,
@@ -157,8 +142,8 @@ export async function paymobWebhookHandler(req: Request, res: Response) {
     } else if (isPspReverse) {
       // Post-settlement refund/void: mark-failed is a no-op on completed intents
       // and would leave wallet credit / active subscription in place.
-      const reason = verification.isRefunded ? "refunded" : "voided";
-      const clawAmountEgp = (clawCents / 100).toFixed(2);
+      const reason = "voided";
+      const clawAmountEgp = (intentCents / 100).toFixed(2);
       if (meta.purpose === "subscription") {
         await reverseSubscriptionAfterPspReversal(intentId, {
           reason,

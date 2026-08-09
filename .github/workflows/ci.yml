@@ -82,13 +82,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client
           psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
-      - name: Push database schema
-        run: pnpm --filter @workspace/db run push-force
+      - name: Validate committed migration history
+        run: pnpm --filter @workspace/db run check
+      - name: Apply committed migrations to fresh PostgreSQL
+        run: pnpm --filter @workspace/db run migrate
+      - name: Prove migration replay is idempotent
+        run: pnpm --filter @workspace/db run migrate
       - name: Seed reference + demo data (plans/baseline, locations, brands)
         # The integration suite runs against a SEEDED database (as on Replit):
         # PlanService.resolveEffectivePlan needs a baseline plan row, and the
-        # taxonomy tests need seeded locations ("New Cairo") + car brands. A bare
-        # schema push leaves those tables empty, so seed before testing.
+        # taxonomy tests need seeded locations ("New Cairo") + car brands. Bare
+        # committed migrations leave those reference tables empty, so seed first.
         run: pnpm --filter @workspace/api-server run seed
       - name: Run api-server test suite
         run: pnpm --filter @workspace/api-server run test

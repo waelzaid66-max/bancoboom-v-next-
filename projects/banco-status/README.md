@@ -19,7 +19,7 @@
 
 ### 1. Fork أو Import من GitHub
 ```
-https://github.com/waelzaid66-max/banco-with-wael/tree/main/projects/banco-status
+https://github.com/waelzaid66-max/bancoboomstor/tree/main/projects/banco-status
 ```
 
 أو اعمل import للمجلد `projects/banco-status/` كـ Replit project جديد.

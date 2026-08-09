@@ -86,6 +86,7 @@ describe("Paymob order binding + concurrent top-up (Round 10)", () => {
       return {
         providerRef: `paymob_${input.intentId.slice(0, 8)}`,
         checkoutUrl: `https://accept.paymob.com/checkout/${input.intentId}`,
+        providerOrderId: `order_${input.intentId.slice(0, 8)}`,
       };
     });
 
@@ -165,7 +166,7 @@ describe("Failed top-up resume preserves Paymob order bind (Round 12)", () => {
     ).toBe(orderId);
   });
 
-  it("resumes a failed intent without an order id and keeps order on later bind", async () => {
+  it("resumes a failed intent without an order id and pre-binds the new checkout order", async () => {
     const userId = await createUser();
     uids.push(userId);
     const key = randomUUID();
@@ -184,6 +185,7 @@ describe("Failed top-up resume preserves Paymob order bind (Round 12)", () => {
     createProviderChargeMock.mockResolvedValue({
       providerRef: "intention_new",
       checkoutUrl: `https://accept.paymob.com/checkout/${key}`,
+      providerOrderId: "order_bound_after",
     });
 
     const result = await createTopupIntent({
@@ -195,9 +197,8 @@ describe("Failed top-up resume preserves Paymob order bind (Round 12)", () => {
     expect(result.checkout_url).toContain(key);
     expect(createProviderChargeMock).toHaveBeenCalledTimes(1);
 
-    // Simulate webhook binding an order after checkout — metadata merge must
-    // not be wiped by a subsequent charge_error-style replace.
-    await claimPaymobOrderForIntent(key, "order_bound_after");
+    // The trusted Intention response must pre-bind the order before checkout is
+    // returned; no webhook-time first-use binding is allowed.
     const [bound] = await db
       .select()
       .from(paymentIntents)

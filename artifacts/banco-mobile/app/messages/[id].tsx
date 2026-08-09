@@ -42,12 +42,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "@/components/AppText";
 import { AppTextInput } from "@/components/AppTextInput";
 import { EmojiPicker } from "@/components/EmojiPicker";
+import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
 import { PermissionRationaleModal } from "@/components/PermissionRationaleModal";
 import { useI18n } from "@/context/LanguageContext";
 import { useSession } from "@/context/SessionContext";
 import { quickReplyKeys, type ChatParty } from "@/constants/quickReplies";
 import { PresenceLabel, type Presence } from "@/components/PresenceDot";
 import { useColors } from "@/hooks/useColors";
+import { useAuthenticatedMediaHeaders } from "@/hooks/useAuthenticatedMedia";
+import { authenticatedMediaSource } from "@/lib/mediaPolicy";
 import { uploadMediaAsset, isVideoAsset } from "@/lib/upload";
 import {
   MAX_VIDEO_MB,
@@ -190,7 +193,11 @@ export default function ThreadScreen() {
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [previewAsset, setPreviewAsset] =
     useState<ImagePicker.ImagePickerAsset | null>(null);
-  const [viewerUri, setViewerUri] = useState<string | null>(null);
+  const [viewerMedia, setViewerMedia] = useState<{
+    uri: string;
+    type: "image" | "video";
+  } | null>(null);
+  const mediaRequestHeaders = useAuthenticatedMediaHeaders();
   // Negotiation: compose + send a structured price offer (listing chats only).
   const [offerOpen, setOfferOpen] = useState(false);
   const [offerAmount, setOfferAmount] = useState("");
@@ -643,9 +650,12 @@ export default function ThreadScreen() {
         videoMaxDuration: MAX_VIDEO_SECONDS,
       });
       if (result.canceled || !result.assets?.[0]) return;
-      const { accepted, rejectedLong, rejectedBig } = partitionPickedAssets(
-        result.assets,
-      );
+      const { accepted, rejectedLong, rejectedBig, rejectedUnsupported } =
+        partitionPickedAssets(result.assets);
+      if (rejectedUnsupported) {
+        Alert.alert(t("chat.uploadFailTitle"), t("create.errVideoUnsupported"));
+        return;
+      }
       if (rejectedLong) {
         Alert.alert(
           t("chat.uploadFailTitle"),
@@ -761,13 +771,16 @@ export default function ThreadScreen() {
 
     const openMedia = () => {
       if (!mediaUrl || isPending) return;
-      if (mediaKind === "video" || mediaKind === "audio") {
+      if (mediaKind === "audio") {
         void Linking.openURL(mediaUrl).catch(() => {
           Alert.alert(t("common.error"), t("chat.openMediaError"));
         });
         return;
       }
-      setViewerUri(mediaUrl);
+      setViewerMedia({
+        uri: mediaUrl,
+        type: mediaKind === "video" ? "video" : "image",
+      });
     };
 
     const bubbleInner = (
@@ -880,7 +893,7 @@ export default function ThreadScreen() {
               accessibilityRole="imagebutton"
             >
               <Image
-                source={{ uri: mediaUrl }}
+                source={authenticatedMediaSource(mediaUrl, mediaRequestHeaders)}
                 style={styles.bubbleImage}
                 contentFit="cover"
                 transition={150}
@@ -1529,35 +1542,24 @@ export default function ThreadScreen() {
         </View>
       </Modal>
 
-      {/* Full-screen image viewer — tap any sent image to open it large. */}
-      <Modal
-        visible={!!viewerUri}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setViewerUri(null)}
-      >
-        <Pressable
-          style={styles.viewerBackdrop}
-          onPress={() => setViewerUri(null)}
-        >
-          {viewerUri ? (
-            <Image
-              source={{ uri: viewerUri }}
-              style={styles.viewerImage}
-              contentFit="contain"
-            />
-          ) : null}
-          <Pressable
-            onPress={() => setViewerUri(null)}
-            style={[styles.viewerClose, { top: insets.top + 12 }]}
-            hitSlop={12}
-            accessibilityLabel={t("chat.viewerClose")}
-            testID="viewer-close"
-          >
-            <Feather name="x" size={26} color="#fff" />
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Authenticated in-app viewer: private images and videos never need a
+          public URL or an external browser hop. */}
+      {viewerMedia ? (
+        <FullscreenImageViewer
+          media={[
+            {
+              id: "chat-viewer",
+              type: viewerMedia.type,
+              url: viewerMedia.uri,
+              is_thumbnail: false,
+            },
+          ]}
+          initialIndex={0}
+          visible
+          onClose={() => setViewerMedia(null)}
+          requestHeaders={mediaRequestHeaders}
+        />
+      ) : null}
 
       {/* Negotiation — compose a structured price offer. */}
       <Modal
@@ -1891,23 +1893,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   previewBtnText: { fontSize: 14.5, fontFamily: "Inter_600SemiBold" },
-  viewerBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.92)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  viewerImage: { width: "100%", height: "80%" },
-  viewerClose: {
-    position: "absolute",
-    right: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   // Quoted reply preview inside a bubble.
   quote: {
     borderStartWidth: 3,

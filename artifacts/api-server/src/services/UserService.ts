@@ -16,7 +16,17 @@ import {
   sellerReviews,
   paymentIntents,
 } from "@workspace/db/schema";
-import { eq, and, ne, isNull, isNotNull, or, inArray, sql } from "drizzle-orm";
+import {
+  eq,
+  and,
+  ne,
+  isNull,
+  isNotNull,
+  or,
+  inArray,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 import { clerkClient } from "@clerk/express";
 import { logger } from "../lib/logger";
 import { getObjectStorageService } from "../lib/objectStorageProvider";
@@ -24,6 +34,8 @@ import { checkProfileMutationRate, flagDuplicateAccount } from "./AbuseService";
 import { sendWelcomeEmail } from "./EmailService";
 import { mergeBusinessCompanyDetails } from "../lib/mergeBusinessCompanyDetails";
 import { ensureFiWorkspace } from "./FinancingService";
+import { secureKycDocumentUploads } from "../lib/kycUploadGuard";
+import { settleFinalizedUploadBestEffort } from "../lib/uploadClaims";
 
 export async function getOrCreateUser(clerkId: string, data?: { name?: string; email?: string }) {
   const [existing] = await db
@@ -189,6 +201,16 @@ export async function updateUserProfile(
     }
   }
 
+  const incomingKycDocuments = input.business?.documents ?? [];
+  const securedKycUploads =
+    incomingKycDocuments.length > 0
+      ? await secureKycDocumentUploads(clerkId, incomingKycDocuments)
+      : { urls: [], references: [] };
+  const businessForPersistence =
+    input.business && incomingKycDocuments.length > 0
+      ? { ...input.business, documents: securedKycUploads.urls }
+      : input.business;
+
   const patch: Partial<typeof users.$inferInsert> = {};
   if (input.phone !== undefined) patch.phone = input.phone;
 
@@ -253,7 +275,10 @@ export async function updateUserProfile(
     }
 
     // F-SEC-07: merge — never wipe KYC docs on a business re-save that omits them.
-    patch.companyDetails = mergeBusinessCompanyDetails(user.companyDetails, input.business);
+    patch.companyDetails = mergeBusinessCompanyDetails(
+      user.companyDetails,
+      businessForPersistence!,
+    );
   }
 
   // Preferred language for server-written content — emails today. Set on its
@@ -265,20 +290,68 @@ export async function updateUserProfile(
   // Empty patch (no-op) — return the current row without an empty UPDATE.
   if (Object.keys(patch).length === 0) return user;
 
+  const profileWriteCondition =
+    input.account_type === "individual"
+      ? and(
+          eq(users.id, user.id),
+          isNull(users.deletedAt),
+          notInArray(users.role, ["financial_institution", "company", "enterprise"]),
+        )
+      : and(eq(users.id, user.id), isNull(users.deletedAt));
+
   const [updated] = await db
     .update(users)
     .set(patch)
-    .where(eq(users.id, user.id))
+    .where(profileWriteCondition)
     .returning();
 
-  // FI workspace auto-provisioning: when a user's role becomes financial_institution
-  // for the first time, ensure they have a draft workspace so the lifecycle
-  // can proceed without an admin manual step. Fire-and-forget — a failure must
-  // never block the profile update response.
-  if (updated.role === "financial_institution" && user.role !== "financial_institution") {
-    void ensureFiWorkspace(updated.id).catch((err) =>
-      logger.warn({ err }, "fi workspace auto-provision failed (non-blocking)"),
-    );
+  if (!updated) {
+    const [current] = await db
+      .select({ role: users.role, deletedAt: users.deletedAt })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+    if (!current) {
+      throw Object.assign(new Error("User not found"), { code: "NOT_FOUND" });
+    }
+    if (current.deletedAt) {
+      throw Object.assign(new Error("Account has been deleted"), {
+        code: "ACCOUNT_DELETED",
+      });
+    }
+    if (
+      input.account_type === "individual" &&
+      ["financial_institution", "company", "enterprise"].includes(current.role)
+    ) {
+      throw Object.assign(
+        new Error(
+          "Company and financial-institution accounts cannot switch to personal from the app",
+        ),
+        { code: "DEMOTE_BLOCKED" },
+      );
+    }
+    throw Object.assign(new Error("Profile changed concurrently; retry the request"), {
+      code: "CONFLICT",
+    });
+  }
+
+  // The durable profile now references these private objects. Claim cleanup is
+  // safe to retry/expire and must not turn a committed profile update into a
+  // false client failure if the cleanup query itself has a transient problem.
+  if (securedKycUploads.references.length > 0) {
+    void Promise.all(
+      securedKycUploads.references.map((reference) =>
+        settleFinalizedUploadBestEffort(reference),
+      ),
+    ).catch((err) => logger.warn({ err }, "KYC upload-claim cleanup failed"));
+  }
+
+  // A financial-institution profile is not complete without its operational
+  // workspace. Provision synchronously before reporting PATCH /me success.
+  // ensureFiWorkspace is idempotent, so every retry also repairs the narrow
+  // crash window where the role commit succeeded but provisioning did not.
+  if (updated.role === "financial_institution") {
+    await ensureFiWorkspace(updated.id);
   }
 
   // Best-effort mirror of the resolved role (+ business profile) into Clerk
@@ -544,11 +617,18 @@ export async function deleteAccount(clerkId: string): Promise<{ deleted: boolean
   // source of truth, is already scrubbed.
   const purgeUrls = [...chatMediaUrls, ...storyMediaUrls, ...kycUrls];
   if (purgeUrls.length > 0) {
-    const media = await getObjectStorageService().deleteServingUrls(purgeUrls);
-    if (media.failed > 0) {
+    try {
+      const media = await getObjectStorageService().deleteServingUrls(purgeUrls);
+      if (media.failed > 0) {
+        logger.error(
+          { user_id: user.id, ...media },
+          "Media cleanup incomplete after account deletion",
+        );
+      }
+    } catch (err) {
       logger.error(
-        { user_id: user.id, ...media },
-        "Media cleanup incomplete after account deletion",
+        { err, user_id: user.id, media_count: purgeUrls.length },
+        "Media cleanup failed after account deletion — continuing with auth deletion",
       );
     }
   }

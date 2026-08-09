@@ -15,10 +15,16 @@ import { createNotification } from "./NotificationService";
 import { getObjectStorageService } from "../lib/objectStorageProvider";
 import {
   assertCallerMayUseUpload,
-  consumeUploadClaim,
-  parseServingWildcard,
-  servingWildcardToObjectPath,
+  settleFinalizedUploadBestEffort,
 } from "../lib/uploadClaims";
+import { assertMediaWithinPolicy } from "./mediaSizeGuard";
+import {
+  finalizePrivateUpload,
+  finalizePublicUpload,
+  getAttachMediaMetadata,
+  type FinalizedUploadReference,
+} from "../lib/uploadFinalization";
+import { logger } from "../lib/logger";
 import type {
   CompanyProfile,
   CompanyDirectoryItem,
@@ -357,6 +363,37 @@ export async function upsertMyCompanyProfile(
     throw Object.assign(new Error("A business account is required"), { code: "FORBIDDEN" });
   }
 
+  // Snapshot new first-party branding into immutable, owner-private objects
+  // before the database can reference them. Public promotion happens only
+  // after the profile write; the existing company-reference fallback preserves
+  // availability if that post-commit metadata write is temporarily unavailable.
+  const finalizedBrandUploads: FinalizedUploadReference[] = [];
+  for (const key of ["logo_url", "cover_url"] as const) {
+    const value = input[key];
+    if (typeof value !== "string" || value.length === 0) continue;
+    await assertCallerMayUseUpload(value, clerkId);
+    await assertMediaWithinPolicy(
+      [{ url: value, type: "image" }],
+      (url) => getAttachMediaMetadata(objectStorageService, url),
+    );
+    const finalized = await finalizePrivateUpload(
+      objectStorageService,
+      value,
+      clerkId,
+      {
+        validateFinal: (finalUrl) =>
+          assertMediaWithinPolicy(
+            [{ url: finalUrl, type: "image" }],
+            (url) => objectStorageService.getServingObjectMetadata(url),
+          ),
+      },
+    );
+    if (finalized) {
+      finalizedBrandUploads.push(finalized);
+      input = { ...input, [key]: finalized.url };
+    }
+  }
+
   const patch: Partial<typeof companyProfiles.$inferInsert> = {};
   if (input.about !== undefined) patch.about = input.about;
   if (input.year_established !== undefined) patch.yearEstablished = input.year_established;
@@ -376,15 +413,6 @@ export async function upsertMyCompanyProfile(
   if (input.industry !== undefined) patch.industry = input.industry;
   if (input.hq_country !== undefined) patch.hqCountry = input.hq_country;
 
-  // Prove upload ownership BEFORE writing URLs onto the company profile —
-  // otherwise a failed assert leaves another user's first-party media attached.
-  const brandUrls = [input.logo_url, input.cover_url].filter(
-    (u): u is string => typeof u === "string" && u.length > 0,
-  );
-  for (const u of brandUrls) {
-    await assertCallerMayUseUpload(u, clerkId);
-  }
-
   await db
     .insert(companyProfiles)
     .values({ userId: user.id, ...patch })
@@ -393,14 +421,25 @@ export async function upsertMyCompanyProfile(
       set: { ...patch, updatedAt: new Date() },
     });
 
-  // Promote any newly-attached brand media to public ACL so the ACL-gated serve
-  // handler returns them without auth (mirrors listing media). Best-effort:
-  // promoteServingUrlToPublic swallows failures and no-ops non-first-party URLs.
+  // The profile row now references only immutable final identities. Promote
+  // those to public and consume the ORIGINAL temp claims after commit.
   await Promise.all(
-    brandUrls.map(async (u) => {
-      await objectStorageService.promoteServingUrlToPublic(u, clerkId);
-      const wildcard = parseServingWildcard(u);
-      if (wildcard) await consumeUploadClaim(servingWildcardToObjectPath(wildcard));
+    finalizedBrandUploads.map(async (reference) => {
+      try {
+        const promoted = await finalizePublicUpload(
+          objectStorageService,
+          reference.url,
+          clerkId,
+        );
+        if (promoted) {
+          await settleFinalizedUploadBestEffort(reference);
+        }
+      } catch (error) {
+        logger.error(
+          { err: error, url: reference.url },
+          "Company media ACL finalization failed",
+        );
+      }
     }),
   );
 

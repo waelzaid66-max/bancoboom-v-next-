@@ -272,6 +272,28 @@ test("usesAppleSignIn is backed by expo-apple-authentication plugin", () => {
   assert.ok(Array.isArray(types) && types.length > 0, "iOS privacy manifests must not be empty");
 });
 
+test("native production config keeps ATS and location scope least-privilege", () => {
+  const json = JSON.parse(fs.readFileSync(path.join(APP_ROOT, "app.json"), "utf8"));
+  const ats = json.expo.ios?.infoPlist?.NSAppTransportSecurity;
+  assert.equal(ats?.NSAllowsArbitraryLoads, false);
+  assert.equal(ats?.NSAllowsLocalNetworking, true);
+  assert.deepEqual(Object.keys(ats?.NSExceptionDomains ?? {}), ["localhost"]);
+  assert.equal(
+    ats.NSExceptionDomains.localhost.NSExceptionAllowsInsecureHTTPLoads,
+    true,
+  );
+
+  const locationPlugin = (json.expo.plugins ?? []).find(
+    (plugin) => Array.isArray(plugin) && plugin[0] === "expo-location",
+  );
+  assert.ok(locationPlugin, "expo-location config plugin must remain installed");
+  assert.equal(locationPlugin[1]?.locationAlwaysPermission, false);
+  assert.equal(locationPlugin[1]?.locationAlwaysAndWhenInUsePermission, false);
+  assert.match(locationPlugin[1]?.locationWhenInUsePermission ?? "", /BANCO/);
+  assert.notEqual(locationPlugin[1]?.isIosBackgroundLocationEnabled, true);
+  assert.notEqual(locationPlugin[1]?.isAndroidBackgroundLocationEnabled, true);
+});
+
 test("EAS builds refuse replit.com router origin fallback", () => {
   const src = fs.readFileSync(APP_CONFIG, "utf8");
   assert.match(src, /EAS_BUILD/);

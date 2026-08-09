@@ -50,6 +50,93 @@ function run(cmd, args, cwd = ROOT) {
   };
 }
 
+function gitGrepFileNames(pattern, pathspecs = []) {
+  const r = spawnSync(
+    "git",
+    ["grep", "-I", "-l", "-E", pattern, "--", ...pathspecs],
+    {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  if (r.status === 1) return { ok: true, files: [] };
+  if (r.status === 0) {
+    return {
+      ok: true,
+      files: (r.stdout ?? "").trim().split("\n").filter(Boolean),
+    };
+  }
+  return {
+    ok: false,
+    files: [],
+    error: (r.stderr ?? `git grep exited ${r.status ?? 1}`).trim(),
+  };
+}
+
+function checkTrackedSourceHygiene() {
+  const secrets = gitGrepFileNames("sk_(test|live)_[-[:alnum:]_$]{20,}");
+  if (!secrets.ok) {
+    fail("tracked source hygiene", `secret scan failed: ${secrets.error}`);
+    return;
+  }
+  if (secrets.files.length) {
+    fail(
+      "tracked source hygiene",
+      `high-entropy Clerk secret found in: ${secrets.files.join(", ")}`,
+    );
+    return;
+  }
+
+  const replitConfig = fs.readFileSync(path.join(ROOT, ".replit"), "utf8");
+  if (
+    /^\s*(?:CLERK|NEXT_PUBLIC_CLERK|VITE_CLERK|EXPO_PUBLIC_CLERK)_(?:SECRET|PUBLISHABLE)_KEY\s*=/m.test(
+      replitConfig,
+    )
+  ) {
+    fail(
+      "tracked source hygiene",
+      "Clerk keys must be injected together by the environment, not pinned in .replit",
+    );
+    return;
+  }
+
+  const sourcePathspecs = [
+    "*.ts",
+    "*.tsx",
+    "*.js",
+    "*.jsx",
+    "*.mjs",
+    "*.cjs",
+    "*.json",
+    "*.yaml",
+    "*.yml",
+    "*.toml",
+    "*.sh",
+    "*.ps1",
+  ];
+  const conflicts = gitGrepFileNames(
+    "^(<<<<<<< .+|=======|>>>>>>> .+)$",
+    sourcePathspecs,
+  );
+  if (!conflicts.ok) {
+    fail("tracked source hygiene", `conflict-marker scan failed: ${conflicts.error}`);
+    return;
+  }
+  if (conflicts.files.length) {
+    fail(
+      "tracked source hygiene",
+      `unresolved merge markers found in: ${conflicts.files.join(", ")}`,
+    );
+    return;
+  }
+
+  pass(
+    "tracked source hygiene",
+    "no pinned Clerk keys or unresolved merge markers",
+  );
+}
+
 function readJson(relPath) {
   const full = path.join(ROOT, relPath);
   return JSON.parse(fs.readFileSync(full, "utf8"));
@@ -124,8 +211,10 @@ function checkExpoConfig() {
       const metroSrc = fs.readFileSync(metro, "utf8");
       if (!metroSrc.includes("watchFolders")) {
         fail("metro monorepo", "watchFolders not configured");
+      } else if (!metroSrc.includes("blockList") || !metroSrc.includes(".old-")) {
+        fail("metro monorepo", "Replit .local/skills/.old-* exclusion missing");
       } else {
-        pass("metro monorepo");
+        pass("metro monorepo", "workspace roots + Replit ephemeral-path exclusion");
       }
     }
   } catch (e) {
@@ -152,6 +241,43 @@ function checkExpoSdkAlignment() {
   }
 }
 
+function checkReplitWorkflowSafety() {
+  const replitPath = path.join(ROOT, ".replit");
+  const source = fs.readFileSync(replitPath, "utf8");
+  const names = [...source.matchAll(/^name = "([^"]+)"$/gm)].map(
+    (match) => match[1],
+  );
+  const duplicates = [...new Set(names.filter((name, index) => names.indexOf(name) !== index))];
+  if (duplicates.length) {
+    fail("Replit workflows", `duplicate workflow names: ${duplicates.join(", ")}`);
+    return;
+  }
+
+  const freshServe =
+    'args = "pnpm --filter @workspace/banco-mobile run build:web && ' +
+    'PORT=3000 BASE_PATH=/banco-mobile node artifacts/banco-mobile/server/serve.js"';
+  const buildOnly =
+    'args = "pnpm --filter @workspace/banco-mobile run build:web"';
+  const serveInvocations =
+    source.match(/node artifacts\/banco-mobile\/server\/serve\.js/g) ?? [];
+  if (!source.includes(freshServe) || !source.includes(buildOnly)) {
+    fail(
+      "Replit workflows",
+      "Mobile Serve must build fresh; Mobile Web Build must remain build-only",
+    );
+    return;
+  }
+  if (serveInvocations.length !== 1) {
+    fail(
+      "Replit workflows",
+      `expected one mobile serve invocation, found ${serveInvocations.length}`,
+    );
+    return;
+  }
+
+  pass("Replit workflows", "unique names; fresh mobile build then one server");
+}
+
 function checkWorkspaceRefs() {
   try {
     const mobile = readJson("artifacts/banco-mobile/package.json");
@@ -170,6 +296,79 @@ function checkWorkspaceRefs() {
   } catch (e) {
     fail("workspace refs", e instanceof Error ? e.message : String(e));
   }
+}
+
+function checkPackageManagerContract() {
+  try {
+    const packageManager = readJson("package.json").packageManager;
+    const expectedVersion = String(packageManager).match(/^pnpm@(.+)$/)?.[1];
+    if (!expectedVersion) {
+      fail("package manager contract", "package.json must pin pnpm@<exact-version>");
+      return;
+    }
+
+    const version = run("pnpm", ["--version"], ROOT);
+    if (!version.ok) {
+      fail("package manager contract", version.stderr || version.stdout);
+      return;
+    }
+    if (version.stdout !== expectedVersion) {
+      fail(
+        "package manager contract",
+        `expected pnpm ${expectedVersion}; received ${version.stdout}`,
+      );
+      return;
+    }
+    pass("package manager contract", `pnpm ${expectedVersion}`);
+  } catch (error) {
+    fail(
+      "package manager contract",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+function checkDependencyPeerPolicy() {
+  const peerCheck = run("pnpm", ["peers", "check"], ROOT);
+  if (!peerCheck.ok) {
+    fail(
+      "dependency peer policy",
+      (peerCheck.stderr || peerCheck.stdout || `exit ${peerCheck.status}`)
+        .split("\n")
+        .slice(-20)
+        .join(" "),
+    );
+    return;
+  }
+
+  const sourceRoots = ["artifacts", "lib", "scripts"];
+  const sourceExtensions = new Set([".cjs", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"]);
+  const forbiddenImport = /(?:from\s+|require\s*\(|import\s*\()\s*["'](?:@solana\/|bs58["'])/;
+  const violations = [];
+
+  function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (["dist", "node_modules", ".next"].includes(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (sourceExtensions.has(path.extname(entry.name))) {
+        const source = fs.readFileSync(full, "utf8");
+        if (forbiddenImport.test(source)) violations.push(path.relative(ROOT, full));
+      }
+    }
+  }
+
+  for (const rel of sourceRoots) walk(path.join(ROOT, rel));
+  if (violations.length) {
+    fail(
+      "dependency peer policy",
+      `Solana/bs58 became a direct product dependency; review optional-peer policy: ${violations.join(", ")}`,
+    );
+    return;
+  }
+
+  pass("dependency peer policy", "pnpm peers check clean; no direct Solana/bs58 product imports");
 }
 
 function checkGcpDockerConfig() {
@@ -308,6 +507,75 @@ function checkCoolifyProductionLocks() {
   pass(
     "coolify production locks",
     "S3 required · legacy banco-web profile · SEO scheme bancooom · /market|/admin · trust hops",
+  );
+}
+
+function checkMigrationAuthority() {
+  const ciFiles = [
+    ".github/workflows/ci.yml",
+    ".github/workflows/deploy.yml",
+  ];
+  const runtimeFiles = [
+    "docker-compose.coolify.yml",
+    "docker-compose.prod.yml",
+    "deploy/aws/scripts/db-migrate.sh",
+    "scripts/post-merge.sh",
+    "scripts/run-api-tests-local.mjs",
+  ];
+
+  for (const relPath of [...ciFiles, ...runtimeFiles]) {
+    const fullPath = path.join(ROOT, relPath);
+    if (!fs.existsSync(fullPath)) {
+      fail("database migration authority", `missing ${relPath}`);
+      return;
+    }
+    const executableLines = fs
+      .readFileSync(fullPath, "utf8")
+      .split(/\r?\n/)
+      .filter((line) => !line.trimStart().startsWith("#"));
+    const executableSource = executableLines.join("\n");
+    const executes = (scriptName) =>
+      new RegExp(`\\brun\\s+${scriptName}\\b`).test(executableSource) ||
+      new RegExp(`["']run["']\\s*,\\s*["']${scriptName}["']`).test(
+        executableSource,
+      );
+    if (executes("push-force")) {
+      fail(
+        "database migration authority",
+        `${relPath} executes push-force instead of committed migrations`,
+      );
+      return;
+    }
+    if (!executes("migrate")) {
+      fail(
+        "database migration authority",
+        `${relPath} does not execute the committed migration runner`,
+      );
+      return;
+    }
+  }
+
+  for (const relPath of ciFiles) {
+    const source = fs.readFileSync(path.join(ROOT, relPath), "utf8");
+    if (!/\brun\s+check\b/.test(source)) {
+      fail(
+        "database migration authority",
+        `${relPath} does not validate migration history before connecting`,
+      );
+      return;
+    }
+    if ((source.match(/\brun\s+migrate\b/g) ?? []).length < 2) {
+      fail(
+        "database migration authority",
+        `${relPath} must replay migrate to prove idempotency on PostgreSQL 16`,
+      );
+      return;
+    }
+  }
+
+  pass(
+    "database migration authority",
+    "CI/deploy use check + committed migrate replay; push-force is non-authoritative",
   );
 }
 
@@ -573,14 +841,19 @@ function main() {
     process.exit(2);
   }
 
+  checkTrackedSourceHygiene();
   checkEasConfig();
   checkExpoConfig();
   checkExpoSdkAlignment();
+  checkReplitWorkflowSafety();
   checkWorkspaceRefs();
+  checkPackageManagerContract();
+  checkDependencyPeerPolicy();
   checkOpenApi();
   checkOpenApiCodegenFreshness();
   checkCoolifyDocsApex();
   checkCoolifyProductionLocks();
+  checkMigrationAuthority();
   checkLandingDomainHops();
   checkReplitWipePollution();
   checkWellKnownTemplates();

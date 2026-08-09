@@ -29,6 +29,8 @@ import { AppText } from "@/components/AppText";
 import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
+import { useAuthenticatedMediaHeaders } from "@/hooks/useAuthenticatedMedia";
+import { authenticatedMediaSource } from "@/lib/mediaPolicy";
 import { sectionAccent } from "@/lib/sectionTheme";
 import { uploadMediaAsset } from "@/lib/upload";
 
@@ -67,6 +69,7 @@ export function OrderDocuments({
   const rowDir = isRTL ? "row-reverse" : "row";
   const textAlign: "left" | "right" = isRTL ? "right" : "left";
   const queryClient = useQueryClient();
+  const requestHeaders = useAuthenticatedMediaHeaders();
 
   // Which kind is mid-upload (drives the chip spinner); null when idle.
   const [uploadingKind, setUploadingKind] = useState<ImportDocumentKind | null>(null);
@@ -194,7 +197,7 @@ export function OrderDocuments({
                 testID={`import-order-doc-${doc.id}`}
               >
                 <Image
-                  source={{ uri: doc.url }}
+                  source={authenticatedMediaSource(doc.url, requestHeaders)}
                   style={[styles.thumb, { borderColor: colors.border }]}
                   contentFit="cover"
                 />
@@ -290,6 +293,7 @@ export function OrderDocuments({
           initialIndex={viewerIndex}
           visible
           onClose={() => setViewerIndex(null)}
+          requestHeaders={requestHeaders}
         />
       )}
     </View>

@@ -8,6 +8,7 @@
  * Optional:
  *   BANCO_LISTING_SMOKE_ID=uuid  — GET /listing/{id} must return 200 + Product JSON-LD
  *   BANCO_WEB_EXPECT_PLUG=on|off — require health.plug (default: on)
+ *   BANCO_WEB_EXPECT_AUTH=configured|unconfigured — protected-route contract
  *   BANCO_WEB_SMOKE_MAINTENANCE=1 — require /maintenance markers (else plug-on → home redirect is OK)
  *   BANCO_WEB_EXPECT_PLUG=off — require maintenance markers (plug detached)
  *
@@ -16,6 +17,9 @@
 
 const BASE = (process.env.BANCO_WEB_URL || process.env.WEB_URL || "").replace(/\/$/, "");
 const EXPECT_PLUG = (process.env.BANCO_WEB_EXPECT_PLUG || "on").trim().toLowerCase();
+const EXPECT_AUTH = (process.env.BANCO_WEB_EXPECT_AUTH || "configured")
+  .trim()
+  .toLowerCase();
 
 const PATHS = [
   { path: "/", label: "home", expectJsonLd: "WebSite" },
@@ -72,20 +76,21 @@ async function checkRoute(item) {
 
     if (item.kind === "protected") {
       const location = res.headers.get("location") ?? "";
-      if (res.status >= 500) {
-        fail(item.label, `HTTP ${res.status} (${url})`);
+      if (EXPECT_AUTH === "unconfigured") {
+        if (res.status !== 503) {
+          fail(item.label, `expected fail-closed 503, got HTTP ${res.status}`);
+          return;
+        }
+        pass(item.label, "503 (auth intentionally unconfigured; failed closed)");
         return;
       }
-      if (res.status >= 300 && res.status < 400) {
-        if (!location.includes("sign-in")) {
-          fail(item.label, `expected redirect to sign-in, got ${location || res.status}`);
-        }
-      } else if (res.status >= 200 && res.status < 300) {
-        // Clerk not configured on staging — page may render without auth gate.
-        pass(item.label, `${res.status} (no redirect)`);
+
+      if (res.status < 300 || res.status >= 400) {
+        fail(item.label, `expected sign-in redirect, got HTTP ${res.status}`);
         return;
-      } else if (res.status >= 400) {
-        fail(item.label, `HTTP ${res.status} (${url})`);
+      }
+      if (!location.includes("sign-in")) {
+        fail(item.label, `expected redirect to sign-in, got ${location || res.status}`);
         return;
       }
       if (failed === before) {
@@ -311,6 +316,10 @@ async function checkListingEn(id) {
 async function main() {
   if (!BASE) {
     console.error("Set BANCO_WEB_URL (or WEB_URL) to the deployed banco-web origin.");
+    process.exit(2);
+  }
+  if (!["configured", "unconfigured"].includes(EXPECT_AUTH)) {
+    console.error("BANCO_WEB_EXPECT_AUTH must be configured or unconfigured.");
     process.exit(2);
   }
 

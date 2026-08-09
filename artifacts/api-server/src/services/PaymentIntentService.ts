@@ -83,22 +83,8 @@ export function chargeErrorPaymentMetadataSql() {
 /** Bind hosted checkout URL without erasing `paymob_order_id`. */
 export function checkoutBoundPaymentMetadataSql(
   checkoutUrl: string,
-  providerOrderId?: string | null,
+  providerOrderId: string,
 ) {
-  if (providerOrderId) {
-    return sql`
-      (COALESCE(${paymentIntents.metadata}, '{}'::jsonb)
-        - 'provider_opening'
-        - 'provider_opening_at'
-        - 'charge_error'
-        - 'resumed')
-      || jsonb_build_object(
-        'provider', 'paymob',
-        'checkout_url', ${checkoutUrl}::text,
-        'paymob_order_id', ${providerOrderId}::text
-      )
-    `;
-  }
   return sql`
     (COALESCE(${paymentIntents.metadata}, '{}'::jsonb)
       - 'provider_opening'
@@ -107,7 +93,8 @@ export function checkoutBoundPaymentMetadataSql(
       - 'resumed')
     || jsonb_build_object(
       'provider', 'paymob',
-      'checkout_url', ${checkoutUrl}::text
+      'checkout_url', ${checkoutUrl}::text,
+      'paymob_order_id', ${providerOrderId}::text
     )
   `;
 }
@@ -125,7 +112,11 @@ export function pspReversedFromMeta(metadata: unknown): boolean {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     return false;
   }
-  return (metadata as Record<string, unknown>).psp_reversed === true;
+  const meta = metadata as Record<string, unknown>;
+  return (
+    meta.psp_reversed === true ||
+    meta.psp_refund_reconciliation_required === true
+  );
 }
 
 function asIntentMeta(metadata: unknown): Record<string, unknown> {
@@ -430,6 +421,40 @@ export async function getIntentMeta(
     .where(eq(paymentIntents.id, intentId))
     .limit(1);
   return intent ?? null;
+}
+
+/**
+ * Record a signed Paymob refund without guessing its economic delta.
+ *
+ * Paymob signs the original transaction amount (`amount_cents`) but exposes
+ * the cumulative partial-refund total in a separate field that is not part of
+ * the transaction HMAC. The webhook therefore proves that a refund happened,
+ * not how much should be clawed back. Persist the reconciliation marker and
+ * block any late success settlement until an authenticated provider inquiry
+ * supplies the authoritative refunded total.
+ */
+export async function markPaymobRefundForReconciliation(
+  intentId: string,
+  opts: { providerTxnId?: string | null } = {},
+): Promise<void> {
+  const marker = {
+    psp_refund_reconciliation_required: true,
+    psp_refund_transaction_id: opts.providerTxnId ?? null,
+    psp_refund_reported_at: new Date().toISOString(),
+  };
+
+  const [updated] = await db
+    .update(paymentIntents)
+    .set({
+      metadata: sql`
+        COALESCE(${paymentIntents.metadata}, '{}'::jsonb)
+        || ${JSON.stringify(marker)}::jsonb
+      `,
+    })
+    .where(eq(paymentIntents.id, intentId))
+    .returning({ id: paymentIntents.id });
+
+  if (!updated) throw notFound("Payment intent not found");
 }
 
 /**

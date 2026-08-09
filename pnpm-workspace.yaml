@@ -14,6 +14,29 @@ allowBuilds:
 
 autoInstallPeers: false
 
+# Expo SDK 54 is pinned by Expo to React 19.1.0. The Clerk versions currently
+# locked by this release support React 19.1 at runtime, but their post-security
+# peer ranges start at 19.1.4. Keep this exception version-scoped so any Clerk
+# upgrade reopens the compatibility gate instead of silently inheriting it.
+# Clerk's dormant wallet adapters also declare Solana/bs58 peers. The app does
+# not import those adapters; production-confidence-check rejects any future
+# direct import before these missing optional peers can become a runtime gap.
+peerDependencyRules:
+  ignoreMissing:
+    - '@solana/web3.js'
+    - bs58
+  allowedVersions:
+    '@clerk/react@6.10.0>react': 19.1.0
+    '@clerk/react@6.10.0>react-dom': 19.1.0
+    '@clerk/shared@3.47.7>react': 19.1.0
+    '@clerk/shared@3.47.7>react-dom': 19.1.0
+    '@clerk/shared@4.18.0>react': 19.1.0
+    '@clerk/shared@4.18.0>react-dom': 19.1.0
+    '@clerk/nextjs@6.39.5>react': 19.1.0
+    '@clerk/nextjs@6.39.5>react-dom': 19.1.0
+    '@clerk/clerk-react@5.61.8>react': 19.1.0
+    '@clerk/clerk-react@5.61.8>react-dom': 19.1.0
+
 catalog:
   '@replit/vite-plugin-cartographer': ^0.5.1
   '@replit/vite-plugin-dev-banner': ^0.1.1

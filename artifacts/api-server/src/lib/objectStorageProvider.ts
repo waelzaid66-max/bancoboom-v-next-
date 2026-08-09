@@ -1,4 +1,5 @@
 import { ObjectAclPolicy, ObjectPermission } from "./objectAcl";
+import type { ByteRangeSpec } from "./httpByteRange";
 import { ObjectStorageService as ReplitObjectStorageService } from "./objectStorage";
 import { S3ObjectStorageService } from "./objectStorage.s3";
 
@@ -23,13 +24,25 @@ import { S3ObjectStorageService } from "./objectStorage.s3";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type StoredObject = any;
 
+export type ObjectDownloadOptions = {
+  cacheTtlSec?: number;
+  range?: ByteRangeSpec;
+};
+
 export interface ObjectStorage {
   getPublicObjectSearchPaths(): string[];
   getPrivateObjectDir(): string;
   searchPublicObject(filePath: string): Promise<StoredObject | null>;
-  downloadObject(file: StoredObject, cacheTtlSec?: number): Promise<Response>;
+  downloadObject(file: StoredObject, options?: ObjectDownloadOptions): Promise<Response>;
   getObjectEntityUploadURL(): Promise<string>;
+  /**
+   * Snapshot a temporary /objects/uploads/<uuid> object into its deterministic
+   * write-once /objects/final/<uuid> identity. Implementations must bind the
+   * source version and refuse to overwrite an existing destination.
+   */
+  copyUploadToImmutableObject(temporaryObjectPath: string): Promise<string>;
   getObjectEntityFile(objectPath: string): Promise<StoredObject>;
+  getObjectEntityAclPolicy(objectFile: StoredObject): Promise<ObjectAclPolicy | null>;
   normalizeObjectEntityPath(rawPath: string): string;
   promoteServingUrlToPublic(servingUrl: string, ownerId: string): Promise<void>;
   getAclOwnerForServingUrl(servingUrl: string): Promise<string | null>;

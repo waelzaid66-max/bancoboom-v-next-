@@ -1,6 +1,6 @@
 # OPS GO-LIVE CHECKLIST — BANCO (post-merge)
 
-**Repo (ONLY):** `https://github.com/waelzaid66-max/banco-with-wael`  
+**Repo (ONLY):** `https://github.com/waelzaid66-max/bancoboomstor`
 **Branch:** `main`  
 **Compose:** `docker-compose.coolify.yml`  
 **Mobile package:** `com.bancooom.app`  
@@ -13,7 +13,7 @@ Do these steps **in order**. Do not invent secrets. Tick only what you actually 
 ## A. Coolify resource
 
 - [ ] New Resource → **Docker Compose** (not Dockerfile / Nixpacks / Static)
-- [ ] Git repo = **`waelzaid66-max/banco-with-wael`**
+- [ ] Git repo = **`waelzaid66-max/bancoboomstor`**
 - [ ] Branch = **`main`**
 - [ ] Compose path = **`docker-compose.coolify.yml`**
 - [ ] Apex domain mapped to service **`web`** port **`80`**

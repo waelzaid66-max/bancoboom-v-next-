@@ -62,7 +62,9 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y postgresql-client
           psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
-          pnpm --filter @workspace/db run push-force
+          pnpm --filter @workspace/db run check
+          pnpm --filter @workspace/db run migrate
+          pnpm --filter @workspace/db run migrate
           pnpm --filter @workspace/api-server run seed
       - run: pnpm --filter @workspace/api-server run test
 

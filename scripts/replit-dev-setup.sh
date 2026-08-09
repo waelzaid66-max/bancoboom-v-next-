@@ -10,12 +10,18 @@ set -euo pipefail
 
 echo "=== BANCO Replit dev setup ==="
 
-# 1. Ensure pnpm is available (Replit may not pre-install it)
-if ! command -v pnpm &>/dev/null; then
-  echo "[1/5] Installing pnpm..."
-  npm install -g pnpm@11
+# 1. Ensure the packageManager-pinned pnpm is available.
+PNPM_VERSION="11.9.0"
+if ! command -v pnpm &>/dev/null || [ "$(pnpm --version)" != "$PNPM_VERSION" ]; then
+  echo "[1/5] Installing pnpm@$PNPM_VERSION..."
+  npm install -g "pnpm@$PNPM_VERSION"
 else
   echo "[1/5] pnpm $(pnpm --version) already available"
+fi
+
+if [ "$(pnpm --version)" != "$PNPM_VERSION" ]; then
+  echo "pnpm version mismatch: expected $PNPM_VERSION, received $(pnpm --version)" >&2
+  exit 1
 fi
 
 # 2. Install workspace dependencies

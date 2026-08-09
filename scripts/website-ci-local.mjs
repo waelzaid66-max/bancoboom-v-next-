@@ -114,7 +114,7 @@ if (failed > 0) {
   process.exit(1);
 }
 
-console.log("\n--- website CI local: PASS (11/11) ---");
+console.log(`\n--- website CI local: PASS (${steps.length}/${steps.length}) ---`);
 console.log(
   "Optional after CDN deploy: BANCO_WEB_URL=https://staging.example.com node scripts/website-staging-smoke.mjs",
 );

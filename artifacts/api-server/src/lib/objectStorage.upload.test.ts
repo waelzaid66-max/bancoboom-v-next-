@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { ObjectStorageService } from "./objectStorage";
-import { assertImagesWithinSizeLimit } from "../services/ListingService";
+import { assertImagesWithinSizeLimit } from "../services/mediaSizeGuard";
 
 /**
  * REAL upload round-trip — the byte-upload step the create→publish journey test
@@ -11,9 +11,10 @@ import { assertImagesWithinSizeLimit } from "../services/ListingService";
  *       → read back the AUTHORITATIVE stored metadata (getServingObjectMetadata)
  *         → feed that real lookup into the create-listing image size-guard.
  *
- * No mocks: it talks to the same Replit object-storage sidecar the app uses. It
- * is skipped (not faked-green) when storage isn't configured, and every object
- * it writes is deleted in afterAll so the bucket isn't littered.
+ * No mocks: it talks to the same Replit object-storage sidecar the app uses.
+ * Because ordinary CI cannot authenticate to that sidecar, this suite is an
+ * explicit integration gate: set BANCO_RUN_OBJECT_STORAGE_INTEGRATION=1 in an
+ * official Replit workflow. Every object it writes is deleted in afterAll.
  */
 
 // A real 1x1 transparent PNG (67 bytes decoded).
@@ -22,8 +23,19 @@ const PNG_1x1 = Buffer.from(
   "base64",
 );
 
-const hasStorage =
+const integrationRequested =
+  process.env.BANCO_RUN_OBJECT_STORAGE_INTEGRATION === "1";
+const storageConfigured =
   !!process.env.PRIVATE_OBJECT_DIR && !!process.env.PUBLIC_OBJECT_SEARCH_PATHS;
+
+if (integrationRequested && !storageConfigured) {
+  throw new Error(
+    "Object-storage integration was requested, but PRIVATE_OBJECT_DIR and " +
+      "PUBLIC_OBJECT_SEARCH_PATHS are not both configured.",
+  );
+}
+
+const hasStorage = integrationRequested && storageConfigured;
 
 describe.skipIf(!hasStorage)("object upload round-trip (real first-party storage)", () => {
   const svc = new ObjectStorageService();

@@ -1,7 +1,7 @@
 # Banco — Coolify on Hostinger VPS Deployment Guide
 
 > **Start here for a no-guess deploy:** root file [`COOLIFY_DEPLOY_NOW.md`](../COOLIFY_DEPLOY_NOW.md)
-> **SoT repo only:** `waelzaid66-max/banco-with-wael` · compose `docker-compose.coolify.yml` · mobile `com.bancooom.app`
+> **SoT repo only:** `waelzaid66-max/bancoboomstor` · compose `docker-compose.coolify.yml` · mobile `com.bancooom.app`
 
 ## Overview
 
@@ -36,7 +36,7 @@ The Expo mobile app (`artifacts/banco-mobile`) runs on iOS/Android via EAS — i
 
 1. In Coolify dashboard → **New Resource** → **Docker Compose**
 2. Connect your GitHub/GitLab account
-3. Select the `waelzaid66-max/banco-with-wael` repository (SoT monorepo)
+3. Select the `waelzaid66-max/bancoboomstor` repository (SoT monorepo)
 4. Set the **Compose file path** to: `docker-compose.coolify.yml`
 5. Click **Save**
 

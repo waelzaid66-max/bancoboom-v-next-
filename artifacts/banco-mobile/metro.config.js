@@ -22,4 +22,20 @@ config.resolver.nodeModulesPaths = [
 ];
 config.resolver.disableHierarchicalLookup = false;
 
+// Replit rotates temporary skill backups under .local/skills/.old-*. Because
+// this repository root is watched, Metro can otherwise retain a watcher for a
+// directory that Replit removes and crash with ENOENT. Preserve Expo's default
+// block list and hide only those ephemeral backup paths from Metro's file map.
+const replitEphemeralSkillBackup =
+  /[\\/]\.local[\\/]skills[\\/]\.old-[^\\/]+(?:[\\/]|$)/;
+const defaultBlockList = config.resolver.blockList;
+config.resolver.blockList = [
+  ...(Array.isArray(defaultBlockList)
+    ? defaultBlockList
+    : defaultBlockList
+      ? [defaultBlockList]
+      : []),
+  replitEphemeralSkillBackup,
+];
+
 module.exports = config;

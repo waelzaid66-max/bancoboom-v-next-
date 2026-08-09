@@ -1144,8 +1144,9 @@ export const messages = pgTable(
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
     body: text("body").notNull(),
-    // Optional single image attachment (Task #71). Stores the public serving URL
-    // returned by /v1/uploads/request-url. Text-only messages leave this null.
+    // Optional single attachment (Task #71). First-party objects stay private;
+    // the serve route authorizes the two conversation participants. Text-only
+    // messages leave this null.
     mediaUrl: text("media_url"),
     // Kind of the mediaUrl attachment: "image" | "video" | "audio" (voice note).
     // Null for text-only or legacy image messages (treated as image).

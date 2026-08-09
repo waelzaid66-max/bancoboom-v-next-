@@ -1047,6 +1047,26 @@ export async function alerts(): Promise<AlertRow[]> {
     });
   }
 
+  const [refundReconciliations] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(paymentIntents)
+    .where(
+      sql`${paymentIntents.metadata}->>'psp_refund_reconciliation_required' = 'true'`,
+    );
+  if ((refundReconciliations?.c ?? 0) > 0) {
+    out.push({
+      id: "payment_refund_reconciliation",
+      type: "payment_failure",
+      severity: "critical",
+      title: "Refunds require Paymob reconciliation",
+      description:
+        `${refundReconciliations!.c} signed Paymob refund(s) require ` +
+        "authoritative transaction inquiry before wallet or subscription adjustment",
+      value: String(refundReconciliations!.c),
+      created_at: now,
+    });
+  }
+
   return out;
 }
 

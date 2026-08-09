@@ -72,6 +72,67 @@ type MfaStrategy = (typeof MFA_PRIORITY)[number];
 
 const CONSENT_VERSION = "2026-06-11";
 
+type AccountFamily = "individual" | "business" | "bank" | "funder";
+
+const ACCOUNT_FAMILY_OPTIONS = [
+  {
+    type: "individual",
+    icon: "account-outline",
+    label: "accountIndividual",
+    hint: "accountIndividualHint",
+  },
+  {
+    type: "business",
+    icon: "storefront-outline",
+    label: "accountBusiness",
+    hint: "accountBusinessHint",
+  },
+  {
+    type: "bank",
+    icon: "bank-outline",
+    label: "accountBank",
+    hint: "accountBankHint",
+  },
+  {
+    type: "funder",
+    icon: "account-cash-outline",
+    label: "accountFunder",
+    hint: "accountFunderHint",
+  },
+] as const satisfies readonly {
+  type: AccountFamily;
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+  label: string;
+  hint: string;
+}[];
+
+function apiAccountTypeForFamily(
+  family: AccountFamily,
+  currentRole = "",
+): "individual" | "dealer" | "company" | "financial_institution" {
+  if (family === "individual") return "individual";
+  if (family === "business") {
+    // "BANCO Business" is the product family for dealer + company. Preserve an
+    // existing company role instead of silently collapsing it to dealer.
+    return currentRole === "company" ? "company" : "dealer";
+  }
+  if (family === "bank" || family === "funder") {
+    return "financial_institution";
+  }
+  return "individual";
+}
+
+function onboardingHrefForFamily(family: AccountFamily): Href | null {
+  if (family === "business") return "/business/onboarding";
+  if (family === "bank") {
+    return "/business/onboarding?intent=fi&fiType=bank";
+  }
+  if (family === "funder") {
+    return "/business/onboarding?intent=fi&fiType=financing_company";
+  }
+  return null;
+}
+
 function socialIcon(
   platform: string
 ): React.ComponentProps<typeof Ionicons>["name"] {
@@ -162,15 +223,13 @@ export default function ProfileScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [phone, setPhone] = useState("");
-  const [accountType, setAccountType] = useState<"personal" | "business">(
-    "personal"
-  );
+  const [accountType, setAccountType] = useState<AccountFamily>("individual");
   const consentPendingRef = useRef(false);
   // Stays true for the whole email-signup post-finalize pipeline (consent +
   // updateMe), so the account-type heal effect does not race the signup path.
   const signupInFlightRef = useRef(false);
   const pendingPhoneRef = useRef("");
-  const pendingBusinessRef = useRef(false);
+  const pendingAccountFamilyRef = useRef<AccountFamily>("individual");
   const pendingFirstNameRef = useRef("");
   const pendingLastNameRef = useRef("");
 
@@ -182,9 +241,8 @@ export default function ProfileScreen() {
   const [needsAccountType, setNeedsAccountType] = useState(false);
   const [savingAccountType, setSavingAccountType] = useState(false);
   const savingAccountTypeRef = useRef(false);
-  const [pendingType, setPendingType] = useState<
-    "individual" | "dealer" | "company" | "financial_institution"
-  >("individual");
+  const [pendingType, setPendingType] =
+    useState<AccountFamily>("individual");
   // Set after any successful in-session auth (SSO / email / MFA / reset) so
   // brand-new accounts without accountTypeChosen see the picker. Also used to
   // distinguish intentional auth from cold launch; heal still covers stuck
@@ -259,11 +317,11 @@ export default function ProfileScreen() {
     signupInFlightRef.current = true;
     consentPendingRef.current = false;
     const phoneToSave = pendingPhoneRef.current;
-    const goBusiness = pendingBusinessRef.current;
+    const selectedFamily = pendingAccountFamilyRef.current;
     const firstNameToSave = pendingFirstNameRef.current;
     const lastNameToSave = pendingLastNameRef.current;
     pendingPhoneRef.current = "";
-    pendingBusinessRef.current = false;
+    pendingAccountFamilyRef.current = "individual";
     pendingFirstNameRef.current = "";
     pendingLastNameRef.current = "";
     (async () => {
@@ -289,7 +347,7 @@ export default function ProfileScreen() {
         let synced = false;
         try {
           await updateMe({
-            account_type: goBusiness ? "dealer" : "individual",
+            account_type: apiAccountTypeForFamily(selectedFamily),
             ...(phoneToSave ? { phone: phoneToSave } : {}),
           });
           synced = true;
@@ -316,10 +374,8 @@ export default function ProfileScreen() {
         } catch (e) {
           console.warn("[profile] accountTypeChosen flag save failed", e);
         }
-        // Business signups continue straight into fast onboarding.
-        if (goBusiness) {
-          router.push("/business/onboarding");
-        }
+        const onboardingHref = onboardingHrefForFamily(selectedFamily);
+        if (onboardingHref) router.push(onboardingHref);
       } finally {
         signupInFlightRef.current = false;
         // Refresh metadata so the heal effect can re-check accountTypeChosen
@@ -448,11 +504,15 @@ export default function ProfileScreen() {
       // Covers upload PRIVATE; promote to public ACL so the serve handler returns
       // them without auth (web + mobile <Image> send no bearer). Promote BEFORE
       // persisting the URL — a coverUrl that 403s is worse than no cover.
-      await promoteUpload({ url: uploaded.url });
+      const promotion = await promoteUpload({ url: uploaded.url });
+      const durableCoverUrl = promotion.data?.url;
+      if (!durableCoverUrl) {
+        throw new Error("Cover upload promotion returned no durable URL");
+      }
       await user?.update({
         unsafeMetadata: {
           ...(user.unsafeMetadata ?? {}),
-          coverUrl: uploaded.url,
+          coverUrl: durableCoverUrl,
         },
       });
       await user?.reload();
@@ -651,14 +711,14 @@ export default function ProfileScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     consentPendingRef.current = true;
     pendingPhoneRef.current = phone.trim();
-    pendingBusinessRef.current = accountType === "business";
+    pendingAccountFamilyRef.current = accountType;
     pendingFirstNameRef.current = firstName.trim();
     pendingLastNameRef.current = lastName.trim();
     const { error } = await signUp.password({ emailAddress: email, password });
     if (error) {
       consentPendingRef.current = false;
       pendingPhoneRef.current = "";
-      pendingBusinessRef.current = false;
+      pendingAccountFamilyRef.current = "individual";
       pendingFirstNameRef.current = "";
       pendingLastNameRef.current = "";
       return;
@@ -712,9 +772,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const chooseAccountType = async (
-    type: "individual" | "dealer" | "company" | "financial_institution"
-  ) => {
+  const chooseAccountType = async (family: AccountFamily) => {
     if (savingAccountTypeRef.current || savingAccountType) return;
     savingAccountTypeRef.current = true;
     // DB role is authoritative (same contract as verification.tsx). Clerk metadata
@@ -725,7 +783,7 @@ export default function ProfileScreen() {
     // REL-09: do not dismiss the gate or PATCH individual while /me is still
     // in flight with no role yet — avoids racing elevated accounts.
     if (
-      type === "individual" &&
+      family === "individual" &&
       !currentRole &&
       (meQuery.isPending || meQuery.isFetching)
     ) {
@@ -739,7 +797,7 @@ export default function ProfileScreen() {
     // Self-demote hole: menu "Manage account type" + Skip both called
     // account_type=individual and the server used to accept it. Elevated
     // accounts must not silently lose FI/company via this path (S4).
-    if (elevated && type === "individual") {
+    if (elevated && family === "individual") {
       savingAccountTypeRef.current = false;
       Alert.alert(
         t("profile.demoteBlockedTitle"),
@@ -753,7 +811,8 @@ export default function ProfileScreen() {
     // on this screen (df68258; wiped by 93b650b / bancoboom merges).
     setNeedsAccountType(false);
     try {
-      await updateMe({ account_type: type });
+      const nextApiAccountType = apiAccountTypeForFamily(family, currentRole);
+      await updateMe({ account_type: nextApiAccountType });
       try {
         await user?.update({
           unsafeMetadata: {
@@ -766,14 +825,8 @@ export default function ProfileScreen() {
         console.warn("[profile] accountTypeChosen flag save failed", e);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Dealer / company / financial-institution all continue to the business
-      // onboarding, where verification (KYC / bank approval) is collected.
-      // FI must pass intent=fi so activity + account_type stay bank — never dealer.
-      if (type === "financial_institution") {
-        router.push("/business/onboarding?intent=fi");
-      } else if (type === "dealer" || type === "company") {
-        router.push("/business/onboarding");
-      }
+      const onboardingHref = onboardingHrefForFamily(family);
+      if (onboardingHref) router.push(onboardingHref);
     } catch {
       // Gate already dismissed — sync is retryable from Manage account type.
       Alert.alert(t("profile.accountTypeError"));
@@ -832,13 +885,13 @@ export default function ProfileScreen() {
     setShowNewPassword(false);
     setAgreedToTerms(false);
     setPhone("");
-    setAccountType("personal");
+    setAccountType("individual");
     // Abandon any in-flight signup intent so a returning sign-in never
     // inherits a previous draft's consent, phone, name, or business routing.
     consentPendingRef.current = false;
     signupInFlightRef.current = false;
     pendingPhoneRef.current = "";
-    pendingBusinessRef.current = false;
+    pendingAccountFamilyRef.current = "individual";
     pendingFirstNameRef.current = "";
     pendingLastNameRef.current = "";
   };
@@ -935,34 +988,7 @@ export default function ProfileScreen() {
         >
           {t("profile.chooseAccountTypeHint")}
         </AppText>
-        {(
-          [
-            {
-              type: "individual",
-              icon: "account-outline",
-              label: "accountIndividual",
-              hint: "accountIndividualHint",
-            },
-            {
-              type: "dealer",
-              icon: "storefront-outline",
-              label: "accountDealer",
-              hint: "accountDealerHint",
-            },
-            {
-              type: "company",
-              icon: "office-building-outline",
-              label: "accountCompany",
-              hint: "accountCompanyHint",
-            },
-            {
-              type: "financial_institution",
-              icon: "bank-outline",
-              label: "accountFinancial",
-              hint: "accountFinancialHint",
-            },
-          ] as const
-        ).map((opt) => {
+        {ACCOUNT_FAMILY_OPTIONS.map((opt) => {
           const active = pendingType === opt.type;
           return (
             <Pressable
@@ -2723,7 +2749,7 @@ export default function ProfileScreen() {
             // pending intent so it can't fire on a later sign-in.
             consentPendingRef.current = false;
             pendingPhoneRef.current = "";
-            pendingBusinessRef.current = false;
+            pendingAccountFamilyRef.current = "individual";
             pendingFirstNameRef.current = "";
             pendingLastNameRef.current = "";
           }}
@@ -3239,14 +3265,14 @@ export default function ProfileScreen() {
               { flexDirection: isRTL ? "row-reverse" : "row" },
             ]}
           >
-            {(["personal", "business"] as const).map((type) => {
-              const active = accountType === type;
+            {ACCOUNT_FAMILY_OPTIONS.map((option) => {
+              const active = accountType === option.type;
               return (
                 <Pressable
-                  key={type}
+                  key={option.type}
                   onPress={() => {
                     Haptics.selectionAsync();
-                    setAccountType(type);
+                    setAccountType(option.type);
                   }}
                   style={[
                     styles.accountTypeOption,
@@ -3258,14 +3284,10 @@ export default function ProfileScreen() {
                       borderRadius: colors.radius,
                     },
                   ]}
-                  testID={`account-type-${type}`}
+                  testID={`account-type-${option.type}`}
                 >
                   <MaterialCommunityIcons
-                    name={
-                      type === "business"
-                        ? "storefront-outline"
-                        : "account-outline"
-                    }
+                    name={option.icon}
                     size={20}
                     color={active ? colors.primary : colors.mutedForeground}
                   />
@@ -3275,22 +3297,16 @@ export default function ProfileScreen() {
                       { color: active ? colors.primary : colors.foreground },
                     ]}
                   >
-                    {t(
-                      type === "business"
-                        ? "profile.business"
-                        : "profile.personal"
-                    )}
+                    {t(`profile.${option.label}`)}
                   </AppText>
-                  {type === "business" && (
-                    <AppText
-                      style={[
-                        styles.accountTypeHint,
-                        { color: colors.mutedForeground },
-                      ]}
-                    >
-                      {t("profile.businessHint")}
-                    </AppText>
-                  )}
+                  <AppText
+                    style={[
+                      styles.accountTypeHint,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    {t(`profile.${option.hint}`)}
+                  </AppText>
                 </Pressable>
               );
             })}
@@ -3759,9 +3775,11 @@ const styles = StyleSheet.create({
   },
   accountTypeRow: {
     gap: 10,
+    flexWrap: "wrap",
   },
   accountTypeOption: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: "46%",
     alignItems: "center",
     gap: 4,
     paddingVertical: 14,

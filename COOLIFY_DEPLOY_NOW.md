@@ -4,11 +4,11 @@
 
 | Field | Exact value |
 |-------|-------------|
-| **ONLY GitHub repo** | `https://github.com/waelzaid66-max/banco-with-wael` |
-| **Do NOT use** | `bancoo`, `bancoboom`, or any sister clone |
+| **ONLY GitHub repo** | `https://github.com/waelzaid66-max/bancoboomstor` |
+| **Do NOT use** | `banco-with-wael`, `bancoo`, `bancoboom`, or any pre-consolidation clone |
 | **Compose file path** | `docker-compose.coolify.yml` |
 | **Coolify resource type** | **Docker Compose** (not Dockerfile, not Nixpacks, not Static) |
-| **Branch to deploy** | **`main`** (certification PR #6 + OPS checklist PR #7 merged; tip ≥ `250d655`) |
+| **Branch to deploy** | **`main`**, only after CI is green on the exact approved release SHA |
 | **Live cutover proof** | `pnpm ops:live-cutover` (must exit 0 before Live Production Ready) |
 | **Mobile** | Expo EAS (`com.bancooom.app`) — **not** a Coolify container |
 
@@ -17,7 +17,7 @@
 ## 1. Create the Coolify resource (exact clicks)
 
 1. Coolify → **New Resource** → **Docker Compose**
-2. Connect Git → select **`waelzaid66-max/banco-with-wael`**
+2. Connect Git → select **`waelzaid66-max/bancoboomstor`**
 3. Compose path = **`docker-compose.coolify.yml`**
 4. Branch = **`main`**
 5. Save — **do not Deploy yet**
@@ -174,5 +174,5 @@ See `release/EAS_BUILD.md`.
 ## 8. Authority
 
 - SoT doc: `docs/DEPLOYMENT_SOURCE_OF_TRUTH.md`
-- Certification PR: https://github.com/waelzaid66-max/banco-with-wael/pull/6
-- Sister `bancoo` is **not** Coolify SoT.
+- Current RC evidence: `audit/reports/RC1-VALIDATION-2026-08-09.md`
+- Pre-consolidation repositories are **not** Coolify SoT.

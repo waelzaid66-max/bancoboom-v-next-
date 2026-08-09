@@ -1,6 +1,7 @@
 import type * as ImagePicker from "expo-image-picker";
 
 import { isVideoAsset } from "./upload";
+import { isSupportedPickedVideo } from "./mediaPolicy";
 
 /**
  * Pure create-listing MEDIA policy layer — no React/RN runtime, no I/O. The
@@ -79,6 +80,7 @@ export type PickPartition = {
   accepted: ImagePicker.ImagePickerAsset[];
   rejectedLong: boolean;
   rejectedBig: boolean;
+  rejectedUnsupported: boolean;
 };
 
 /**
@@ -94,8 +96,13 @@ export function partitionPickedAssets(
   const accepted: ImagePicker.ImagePickerAsset[] = [];
   let rejectedLong = false;
   let rejectedBig = false;
+  let rejectedUnsupported = false;
   for (const a of assets) {
     if (isVideoAsset(a)) {
+      if (!isSupportedPickedVideo(a)) {
+        rejectedUnsupported = true;
+        continue;
+      }
       if ((a.duration ?? 0) > MAX_VIDEO_SECONDS * 1000) {
         rejectedLong = true;
         continue;
@@ -107,5 +114,5 @@ export function partitionPickedAssets(
     }
     accepted.push(a);
   }
-  return { accepted, rejectedLong, rejectedBig };
+  return { accepted, rejectedLong, rejectedBig, rejectedUnsupported };
 }

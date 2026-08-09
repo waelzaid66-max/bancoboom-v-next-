@@ -16,10 +16,14 @@ import { getObjectStorageService } from "../lib/objectStorageProvider";
 import { getOrCreateUser } from "./UserService";
 import {
   assertCallerMayUseUpload,
-  consumeUploadClaim,
-  parseServingWildcard,
-  servingWildcardToObjectPath,
+  settleFinalizedUploadBestEffort,
 } from "../lib/uploadClaims";
+import { assertMediaWithinPolicy } from "./mediaSizeGuard";
+import {
+  finalizePrivateUpload,
+  getAttachMediaMetadata,
+  type FinalizedUploadReference,
+} from "../lib/uploadFinalization";
 
 const objectStorageService = getObjectStorageService();
 
@@ -450,7 +454,7 @@ export async function getMessages(
 }
 
 export interface SendMessageInput {
-  /** Public serving URL of an attachment (image/video/voice). */
+  /** Serving URL of an attachment (image/video/voice). */
   mediaUrl?: string | null;
   /** Attachment kind: "image" | "video" | "audio". Defaults to image when a URL is present. */
   mediaKind?: string | null;
@@ -515,23 +519,54 @@ export async function sendMessage(
 
   // Ownership MUST be proven before the message row is durable — otherwise a
   // stolen first-party URL lands in chat history even when assert later throws.
+  let finalizedMedia: FinalizedUploadReference | null = null;
+  let durableMediaUrl = mediaUrl;
   if (mediaUrl) {
     await assertCallerMayUseUpload(mediaUrl, clerkId);
+    if (mediaKind === "image" || mediaKind === "video" || mediaKind === "audio") {
+      await assertMediaWithinPolicy(
+        [{ url: mediaUrl, type: mediaKind }],
+        (url) => getAttachMediaMetadata(objectStorageService, url),
+      );
+    }
+    // First-party chat media is private before the message reference becomes
+    // durable. Recipients are authorized by conversation membership at serve
+    // time; the object itself is never made anonymous/public.
+    const finalized = await finalizePrivateUpload(
+      objectStorageService,
+      mediaUrl,
+      clerkId,
+      mediaKind === "image" || mediaKind === "video" || mediaKind === "audio"
+        ? {
+            validateFinal: (finalUrl) =>
+              assertMediaWithinPolicy(
+                [{ url: finalUrl, type: mediaKind }],
+                (url) => objectStorageService.getServingObjectMetadata(url),
+              ),
+          }
+        : undefined,
+    );
+    if (finalized) {
+      finalizedMedia = finalized;
+      durableMediaUrl = finalized.url;
+    }
   }
 
   const [msg] = await db
     .insert(messages)
-    .values({ conversationId, senderId: userId, body: text, mediaUrl, mediaKind, replyToId, listingRefId })
+    .values({
+      conversationId,
+      senderId: userId,
+      body: text,
+      mediaUrl: durableMediaUrl,
+      mediaKind,
+      replyToId,
+      listingRefId,
+    })
     .returning();
 
-  // Promote an attached image to public ACL so the recipient's client can load
-  // it from the ACL-gated serve handler (mobile <Image> sends no bearer token).
-  // Best-effort: promoteServingUrlToPublic swallows failures and no-ops URLs
-  // that aren't our own first-party uploads.
-  if (msg.mediaUrl) {
-    await objectStorageService.promoteServingUrlToPublic(msg.mediaUrl, clerkId);
-    const wildcard = parseServingWildcard(msg.mediaUrl);
-    if (wildcard) await consumeUploadClaim(servingWildcardToObjectPath(wildcard));
+  if (finalizedMedia) {
+    await settleFinalizedUploadBestEffort(finalizedMedia);
   }
 
   // Inbox preview: the text, else a glyph for the attachment / shared listing.

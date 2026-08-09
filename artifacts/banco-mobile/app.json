@@ -27,6 +27,15 @@
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "BANCO accesses your photos and videos only when you choose them to add to a listing, a chat message, your profile picture, or your business verification documents and identity photo.",
         "NSFaceIDUsageDescription": "BANCO uses Face ID only when you enable biometric unlock in Settings, or to confirm account deletion.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": true,
+          "NSExceptionDomains": {
+            "localhost": {
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            }
+          }
+        },
         "ITSAppUsesNonExemptEncryption": false
       },
       "privacyManifests": {
@@ -121,6 +130,8 @@
       [
         "expo-location",
         {
+          "locationAlwaysPermission": false,
+          "locationAlwaysAndWhenInUsePermission": false,
           "locationWhenInUsePermission": "BANCO uses your location only when you tap \"use my location\" to set a listing's place, or to find listings near you."
         }
       ],

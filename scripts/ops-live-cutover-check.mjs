@@ -321,7 +321,7 @@ async function main() {
       `\nSummary: ${summary.passed}/${summary.total} passed · verdict=${summary.verdict}`,
     );
     if (failed.length) {
-      console.error("Next: Coolify compose from waelzaid66-max/banco-with-wael main → apex→web:80 → secrets → migrate → DNS off Replit/Horizons → re-run this script.");
+      console.error("Next: Coolify compose from waelzaid66-max/bancoboomstor main → apex→web:80 → secrets → migrate → DNS off Replit/Horizons → re-run this script.");
     }
   }
 

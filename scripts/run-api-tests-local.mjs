@@ -51,8 +51,14 @@ function main() {
 
   const env = { ...process.env, DATABASE_URL: databaseUrl, TZ: "UTC" };
 
-  console.log("\nPushing schema…");
-  run("pnpm", ["--filter", "@workspace/db", "run", "push-force"], env);
+  console.log("\nValidating committed migrations…");
+  run("pnpm", ["--filter", "@workspace/db", "run", "check"], env);
+
+  console.log("\nApplying committed migrations…");
+  run("pnpm", ["--filter", "@workspace/db", "run", "migrate"], env);
+
+  console.log("\nReplaying migrations (must be idempotent)…");
+  run("pnpm", ["--filter", "@workspace/db", "run", "migrate"], env);
 
   console.log("\nSeeding reference data…");
   run("pnpm", ["--filter", "@workspace/api-server", "run", "seed"], env);
