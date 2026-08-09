@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-09
 **Canonical repository:** `waelzaid66-max/bancoboomstor`
-**Verified base:** `main@66771d6bec143f675217c44aa48753021c83aa3d`
+**Last fully verified remote base:** `main@66771d6bec143f675217c44aa48753021c83aa3d`
+**Implementation commit before this report:** `ae52fe3eef8cd2c690a20860b63549ff9578804e`
 **Package manager:** `pnpm@11.9.0`
 **Decision:** **RC1 NOT READY** — the repository candidate is healthy, but the
 live-service and physical-device gates in this document are still mandatory.
@@ -53,28 +54,40 @@ Local evidence for this wave so far:
 | Gate                                                          |                                                        Result |
 | ------------------------------------------------------------- | ------------------------------------------------------------: |
 | Reproduced pre-fix integrity gate                             |                        Failed exactly 4 new outbox guarantees |
-| Post-fix chain integrity                                      |                                                223/223 passed |
+| Post-fix chain integrity                                      |                                                224/224 passed |
+| Full mobile regression pack                                  |        Passed, including 3 render suites / 31 render tests |
+| Production-confidence check                                  |                 23/23 passed under exact `pnpm@11.9.0` |
 | Drizzle migration history check                               |                                                        Passed |
 | API + shared DB TypeScript check                              |                                                        Passed |
 | `git diff --check`                                            |                                                        Passed |
 | PostgreSQL behavioral tests for atomic commit/rollback/dedupe |                   Added; exact-candidate CI execution pending |
 | Final root `npm run build`                                    | Passed; exit 0; all workspace typechecks and builds completed |
 
-## 2. Copilot PR #8 — adjudicated, do not merge
+## 2. Copilot/Claude evidence — adjudicated, do not merge
 
-PR #8 (`copilot/full-audit-primary-agent-report`) was audited against its old
-base and against current `main`. It is open, non-mergeable, and superseded.
+The forensic review found two separate old artifacts, both based on `36766cf`:
 
-| Copilot finding                           | Current decision                                              |
-| ----------------------------------------- | ------------------------------------------------------------- |
-| Duplicate `sectionAccentAlpha`            | Valid on old base; fixed and guarded on current `main`        |
-| Four missing icon mappings                | Valid on old base; fixed and tested                           |
-| Metro deleted-path watch/block-list issue | Valid on old base; fixed without replacing Expo defaults      |
-| Missing lock/render-test repair           | Valid on old base; restored and green                         |
-| Stale deployment source of truth          | Valid lead; expanded to all live operator surfaces and closed |
-| Allegedly stranded well-known renderer    | Not actionable; renderer already exists in current ancestry   |
+| Artifact | Decision |
+| --- | --- |
+| Copilot handoff at `ff6638b0` | Documentation-only lead set; compare each claim with current source |
+| Claude PR #8 at `601fdb29` | Open, non-mergeable and superseded; do not merge |
 
-Merging PR #8 would reintroduce an old base and is not part of this plan.
+The detailed finding-by-finding record is
+`audit/reports/COPILOT-FORENSIC-ADJUDICATION-2026-08-09.md`. Its controlling
+conclusions are:
+
+| Finding | Current decision |
+| --- | --- |
+| Old CI/lock/icons/theme/Metro defects | Historically valid; closed on current source with stronger render-test coverage |
+| Deployment was “dead” without a tag | Overstated: manual dispatch exists; release tagging remains intentionally blocked |
+| Active source-of-truth docs used old repositories | Historically valid; live operator surfaces repaired, historical evidence retained |
+| `headers-dynamic-polish` should be merged | False/stale: renderer and guards already landed; merging would remove later work |
+| Consolidation lost nothing substantive | Only partially corroborated; named features and archived sync workflows exist, exhaustive parity is not independently proven |
+| Store package rename is safe | Unproved externally; Play/App Store ownership is a release gate |
+
+PR #8 temporarily excluded three render tests. Current source instead restores
+their dependencies and executes them, so merging PR #8 would reduce coverage and
+reintroduce an old base.
 
 ## 3. Reconciliation of every inherited finding
 
@@ -90,6 +103,7 @@ Merging PR #8 would reintroduce an old base and is not part of this plan.
 | GitHub database gap                | Superseded; exact base ran PostgreSQL 16 successfully                                          |
 | Metro deleted-path watch           | Closed and tested                                                                              |
 | Map “draw area”                    | Implemented in Leaflet bridge and covered by geo-area/map-chrome guards                        |
+| Map price labels/clustering        | Implemented; physical-device and large-dataset behavior remains an acceptance gate             |
 | Import red/rainbow identity drift  | Closed; canonical car theme tokens and honesty guards are present                              |
 | FI source account lifecycle        | Four account families and FI workspace lifecycle exist in source; live tenant remains unproved |
 
@@ -101,6 +115,8 @@ Merging PR #8 would reintroduce an old base and is not part of this plan.
 | Live Paymob settlement and refund reconciliation       |                      P0 | Signed success/decline/void/refund, replay, authenticated inquiry, exact ledger reconciliation                                  |
 | Live S3 and Replit/GCS immutable-finalization exercise |                      P0 | Upload A, finalize, replace temp with B, prove final remains A; retry and owner-mismatch proof                                  |
 | Exact-candidate PostgreSQL suite                       |                      P0 | Migration check, migrate twice, seed, all API tests, new outbox atomicity tests                                                 |
+| Store package/listing identity                         |          P0 release gate | Prove `com.bancooom.app` matches the owned Play/App Store listings before any signed store submission                          |
+| AWS deployment authority and checkout path             |          P0 release gate | Decide whether `aws-virgen` and `/opt/banco/aws-virgen` in the active deploy workflow are intentional or stale before tagging   |
 | Expo push delivery                                     |                      P1 | Signed Android/iOS, background/terminated tap, badge, deep link and dead-token proof                                            |
 | CDN/derivatives/origin shielding                       |                      P1 | Responsive images/posters, range-aware cache, hit ratio and egress profile                                                      |
 | Distributed abuse control                              |                      P1 | Edge/WAF or shared store; multi-replica proof                                                                                   |
@@ -110,7 +126,7 @@ Merging PR #8 would reintroduce an old base and is not part of this plan.
 | `ADMIN_EMAILS` owner allowlist                         |                      P1 | Explicit production list and proof that no unintended address self-promotes                                                     |
 | Banks & Funders standalone world                       |         P1 product epic | Preserve FI backend; add separate bank/funder registration journeys, public directory, lead reception and asset-financing forms |
 | BOOM STAY search dates/guests                          | P1 product completeness | Check-in, check-out and guests in search criteria/API/deep links; real conflict/filter tests                                    |
-| Messenger mute/block/voice                             |                   P1/P2 | Server model, authorization/privacy semantics, native recording/playback and device tests; no UI-only buttons                   |
+| Messenger offline queue/cancel/mute/block/voice        |                   P1/P2 | Durable pending sends; UI-wired upload cancellation; server privacy model; native recording/playback; race and device tests     |
 | SearchDiscover local gradients/bank blue               |                      P2 | Replace duplicate local tokens with canonical `sectionTheme`; visual widths 320/360/390/430                                     |
 | Car raised filter compartments                         |                      P2 | Owner-approved visual treatment, not blind styling; screenshot/device verification                                              |
 | Android notification glyph                             |    P2/P1 release polish | Approved monochrome transparent asset and physical Android proof                                                                |
@@ -149,7 +165,8 @@ Owner: repository/release engineer.
 
 1. Run the final root build.
 2. Review the complete diff and secret scan.
-3. Commit one bounded wave and push `main` only under the existing authorization.
+3. Commit one bounded wave and push `main` under the fresh explicit authorization
+   recorded on 2026-08-09; do not include any additional path.
 4. Require CI, PostgreSQL, website and Docker workflows on the exact commit.
 5. No release label while any required job is pending or skipped unexpectedly.
 
@@ -203,7 +220,9 @@ Owner: platform/release.
 Build and run the exact images, apply migration 0005 once and replay safely,
 verify liveness/readiness/deploy SHA, restart during queued work, take a backup,
 restore it into a disposable environment, and rehearse application rollback
-without destructive schema reversal.
+without destructive schema reversal. Before any tag, resolve whether the active
+AWS workflow's `aws-virgen` checkout is an authorized deployment mirror or stale
+source-of-truth drift.
 
 ### Wave 6 — signed native devices
 
@@ -212,7 +231,10 @@ Owner: mobile QA.
 Use low/mid/high Android and representative iOS devices. Cover account creation,
 picker/camera, large upload, image/video seek, private KYC/chat/import media,
 map location/draw, background/weak-network recovery, push/deep links, payment
-return, memory, crashes and RTL at 320/360/390/430 widths.
+return, memory, crashes and RTL at 320/360/390/430 widths. Run a real signed EAS
+build; the two Expo issues cited by the old report are now closed and are neither
+proof of success nor a valid reason to skip the build. Verify the existing store
+listing identities before submission.
 
 ### Wave 7 — product completion without architecture melt
 
@@ -220,7 +242,8 @@ Execute as separate mini-app waves in this order:
 
 1. Banks & Funders directory, registration and financing-lead journeys.
 2. BOOM STAY date/guest search contract.
-3. Messenger mute/block, then voice only after privacy/storage design.
+3. Messenger durable offline queue and upload cancellation, then mute/block, then
+   voice only after privacy/storage design.
 4. SearchDiscover canonical theme cleanup.
 5. Car compartment polish after an approved visual reference.
 
@@ -237,15 +260,18 @@ the root build.
 | Clerk                       | Unproved/live secrets require rotation | Four journeys and deletion pass                 |
 | Paymob                      | Source hardened                        | Signed live/test callbacks and inquiry pass     |
 | Storage                     | Source hardened                        | Both live provider exercises pass               |
+| Store identity              | Source package internally guarded      | Owned Play/App Store listings match exactly     |
+| Deployment authority       | AWS path remains owner-unverified       | Canonical checkout/deploy surface is approved   |
 | Docker/Coolify              | Base images green                      | Exact candidate runtime/restore/rollback pass   |
 | Native                      | Export evidence only                   | Signed physical-device matrix passes            |
 | Scale                       | No production load proof               | Agreed SLO/load/CDN/shared-limit profile passes |
 
 ## 6. Immediate command order
 
-1. Review diff, migration and generated snapshot; scan current tree for secrets.
+1. Finish the forensic report update and run the focused guards on the local tree.
 2. Re-run `npm run build` after the final report-only update.
-3. Commit/push the bounded wave, then wait for exact-SHA CI/PostgreSQL/website/Docker.
+3. Commit the two forensic-plan paths on top of `ae52fe3`, push the authorized
+   candidate to `main`, then require exact-SHA CI/PostgreSQL/website/Docker.
 
 Do not deploy, tag, rotate external secrets, or claim `RC1 READY` during this
 wave. Those actions require their explicit live gates above.
@@ -253,5 +279,8 @@ wave. Those actions require their explicit live gates above.
 ## References
 
 - Resend: <https://resend.com/docs/dashboard/emails/idempotency-keys>
+- Copilot forensic adjudication: `audit/reports/COPILOT-FORENSIC-ADJUDICATION-2026-08-09.md`
+- Expo incident references, now closed: <https://github.com/expo/expo/issues/47354>, <https://github.com/expo/expo/issues/42729>
+- Reanimated compatibility: <https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/>
 - Existing detailed validation: `audit/reports/RC1-VALIDATION-2026-08-09.md`
 - Existing A–J state: `audit/reports/MASTER-STABILIZATION-STATE-2026-08-09.md`
