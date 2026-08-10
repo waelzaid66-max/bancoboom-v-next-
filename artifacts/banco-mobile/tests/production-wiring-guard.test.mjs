@@ -37,6 +37,10 @@ const apiConv = fs.readFileSync(
   path.join(root, "../api-server/src/services/ConversationService.ts"),
   "utf8",
 );
+const apiMessageNotifications = fs.readFileSync(
+  path.join(root, "../api-server/src/services/MessageNotificationService.ts"),
+  "utf8",
+);
 const apiSearch = fs.readFileSync(
   path.join(root, "../api-server/src/services/SearchService.ts"),
   "utf8",
@@ -108,13 +112,19 @@ test("message notifications forward stamped role (mark-sold chrome)", () => {
   assert.match(routing, /role:\s*d\.role/);
 });
 
-test("ConversationService stamps recipient role on message notification", () => {
+test("message outbox preserves and delivers the stamped recipient role", () => {
   assert.match(
     apiConv,
-    /role:\s*isBuyer \? "seller" : "buyer"/,
-    "push/in-app message data must stamp recipient role",
+    /recipientRole:\s*isBuyer \? "seller" : "buyer"/,
+    "the message transaction must stamp the recipient's role on durable work",
   );
-  assert.match(apiConv, /listing_id:\s*conv\.listingId/);
+  assert.match(apiConv, /listingId:\s*conv\.listingId/);
+  assert.match(
+    apiMessageNotifications,
+    /role:\s*item\.recipientRole/,
+    "the outbox worker must forward the stamped role to push/in-app routing",
+  );
+  assert.match(apiMessageNotifications, /listing_id:\s*item\.listingId/);
 });
 
 test("web SearchResultsMap enables iframe geolocation for locate", () => {
