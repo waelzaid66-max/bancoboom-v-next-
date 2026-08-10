@@ -8,7 +8,8 @@
 | VNX-03 | `c402edc020de4768eff427aee3bfe1208cf5e50a` | COMPLETE; PostgreSQL journeys `RUNTIME_VERIFIED` (push/provider/device `UNPROVEN`) | Transactional Messenger notification outbox, retry worker, channel dedupe/checkpoints, cooldown preservation, and readiness gate | Product `38697ea`; protection `6af3413`; local focused/mobile/root gates PASS; CI `31396133572` all 7 jobs PASS, PostgreSQL 90 files/499 tests PASS | `c402edc020de4768eff427aee3bfe1208cf5e50a` |
 | VNX-04 | `4a895a3e597b5ce49b5501bab446e1c404b43556` | COMPLETE at static/render/build/CI layers; device runtime `UNPROVEN` | No product delta; real render protection for shared results state and stack-screen navigation | Product/test `7e1f17c`; render 5 suites/40 tests, full mobile/typecheck/root build PASS; CI `31398232413` all 7 jobs PASS | `4a895a3e597b5ce49b5501bab446e1c404b43556` |
 | VNX-05A | `429ab3135ffaa9fa937bd600b507f5cb95ac601e` | COMPLETE at Cars static/render/build/CI layers; combined section/device runtime `UNPROVEN` | No product delta; current Cars header adjudicated as strongest historical superset and protected by real mounting | Test `e3f92c2`; Cars 5/5, render 6 suites/45 tests, full mobile/typecheck/root build PASS; CI `31399958518` all 7 jobs PASS | `429ab3135ffaa9fa937bd600b507f5cb95ac601e` |
-| VNX-05B–E | `e3f92c2422a51a3092d2c7bf61f14d1f6284c9ee` | PENDING | Property, Stay, Facilities, and Materials independently | 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | `e3f92c2422a51a3092d2c7bf61f14d1f6284c9ee` |
+| VNX-OPS-01 | `e49299ca5f6097ebdffc40e7f73f2f82d01642f9` | COMPLETE for the reproduced parallel-export failure; final clean repeatability remains `UNPROVEN` | No product delta; serialize root workspace builds and guard the scheduling invariant | Repair `d6b42b5`; RED 241/242, GREEN 242/242; local full root build PASS; CI `31403501605` all 7 jobs PASS | `e49299ca5f6097ebdffc40e7f73f2f82d01642f9` |
+| VNX-05B–E | `d6b42b5542837ae502febc3a7425efc68241b4ac` | PENDING | Property, Stay, Facilities, and Materials independently | 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | `d6b42b5542837ae502febc3a7425efc68241b4ac` |
 | VNX-06 | VNX-05 commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05 commit |
 | VNX-07 | VNX-06 commit | PENDING | Messenger offline/read/block/mute/realtime/typing/voice in separate capabilities | Unit, PostgreSQL, storage, render, device/network/provider, root build | VNX-06 commit |
 | VNX-08 | VNX-07 commit | PENDING | Four account journeys, Auth, KYC, and Profile | Role-policy matrix, PostgreSQL, live Clerk/KYC, device, root build | VNX-07 commit |
@@ -170,3 +171,23 @@ command, package/workspace, test type, result, and untested external gates.
 - Combined `SectionSearchApp` scroll/overlay integration, physical width and
   language matrix, native animation timing, Android/iOS, accessibility, and
   live-data/device journeys remain `UNPROVEN`.
+
+## VNX-OPS-01 root-build scheduling evidence
+
+- Base: `e49299ca5f6097ebdffc40e7f73f2f82d01642f9`; repair:
+  `d6b42b5542837ae502febc3a7425efc68241b4ac`; tree:
+  `93b6427a126e1b751956d28f40a96a759b833e24`.
+- Two parallel literal root builds reproduced `ENOTEMPTY` under
+  `artifacts/banco-web/.next/export*`; the isolated Next build and the complete
+  recursive build with `--workspace-concurrency=1` passed.
+- The chain assertion failed first as expected at 241/242, then passed 242/242
+  after the one-line root scheduling change. The allowlisted Next prebuild
+  cleaner was not broadened.
+- One literal local root build passed completely. A later repeat stalled once
+  inside Next compilation and was interrupted; an immediate isolated
+  `banco-web` build passed 46/46. The stall is recorded as inconclusive rather
+  than hidden or counted as a pass.
+- GitHub Actions `31403501605` on exact SHA `d6b42b5` completed **SUCCESS**;
+  all seven jobs passed, including PostgreSQL 90 files/499 tests passed (1
+  file/3 tests skipped). Final clean repeated root builds remain a production
+  gate.

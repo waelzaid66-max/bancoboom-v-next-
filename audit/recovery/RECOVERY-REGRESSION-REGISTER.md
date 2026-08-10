@@ -23,6 +23,7 @@ with stronger evidence. A green compile cannot waive a product/runtime rail.
 | Payment replay/refund/order-binding regression | `66771d6`, `ae52fe3` | Paymob/provider/payment services | Existing idempotency and DB-independent tests; live Paymob remains blocking |
 | Schema authority bypass through push-force/manual edits | migration line through `0005`, target `0006`, then VNX-03 `0007` | `lib/db`, migration scripts, CI/deploy | Generated additive migrations, drift check, migrate×2 PostgreSQL gate; never force-push schema |
 | Build reports hid main API type errors by running mobile-only checks | historical testing blind spot | root scripts/workspaces | Every batch runs package tests/typecheck and final root `npm run build` |
+| Parallel recursive root builds failed inside Next export cleanup | inherited parallel root command; reproduced twice after `f61cb95` cleanup hardening | root `package.json`; both Next build surfaces | VNX-OPS-01 `d6b42b5` sets pnpm workspace concurrency to 1 and protects it with chain assertion 242/242; local full root build and exact-SHA CI `31403501605` PASS. One later local Next compile stall was interrupted and did not reproduce in the immediate isolated retry, so clean repeated final-RC builds remain blocking |
 | Deployment fixes could be lost while restoring old UX | `f61cb95`, `a3db5bd8` | CI, Docker, Coolify, AWS Next prebuild | Preserve exact files/guards; Docker/Coolify exact-SHA runtime required before release |
 
 For each newly discovered regression add: bug, historical fix, SHA, exact files,

@@ -2207,7 +2207,7 @@ const CHECKS = [
         "pnpm run typecheck && pnpm -r --workspace-concurrency=1 --if-present run build"
       );
     },
-    why: "The root build must serialize workspace builds so the two Next exporters cannot race inside shared output state",
+    why: "The root build must serialize workspaces because repeated parallel runs reproduce Next export ENOTEMPTY while isolated and sequential builds pass",
   },
   {
     id: "P-next-build-export-cleanup-aws-docker",

@@ -10,7 +10,8 @@ recorded here or in its linked capability ledger.
 | Field | Current value |
 |---|---|
 | Canonical assembly branch | `canonical/vnext-assembly` |
-| Last protected capability SHA | Cars contract `e3f92c2422a51a3092d2c7bf61f14d1f6284c9ee` |
+| Last protected product capability SHA | Cars contract `e3f92c2422a51a3092d2c7bf61f14d1f6284c9ee` |
+| Last build-control SHA | root serialization `d6b42b5542837ae502febc3a7425efc68241b4ac` |
 | Source ancestry | `bancoboomstor@a3db5bd8c3edd060d35078aefeec709297abbad9` |
 | Assembly status | `GO`, one reversible micro-batch at a time |
 | Production deploy | `NO-GO` |
@@ -44,7 +45,7 @@ cannot be combined into a production certificate.
 |---|---|---|
 | Reproducible checkout | Fresh clone, Corepack `pnpm 11.9.0`, `pnpm install --frozen-lockfile`, workspace identity | OPEN for final RC |
 | Code quality | Root lint, targeted workspace lint, all package typechecks, all unit/static/render/integration tests | Repeated per batch; must rerun on final RC |
-| Root production build | `npm run build` across API, Expo export, both Next apps, Admin, Dealer, Landing, sandbox | Repeated per batch; must rerun clean on final RC |
+| Root production build | `npm run build` across API, Expo export, both Next apps, Admin, Dealer, Landing, sandbox | VNX-OPS-01 serial scheduling protected at `d6b42b5`; one full local pass and exact-SHA CI green. One inconclusive local Next stall remains recorded; two clean bounded runs must pass on final RC |
 | Dependency/security | `npm run security:audit`, lockfile policy, secret scan, image/dependency vulnerability review | OPEN for final RC |
 | PostgreSQL | Drift check, fresh migration, idempotent replay, full suite, concurrency, snapshot upgrade | Partial CI proof; snapshot/concurrency matrix OPEN |
 | Docker images | Build every shipped Dockerfile from clean context; immutable digest/SBOM/provenance | OPEN |
