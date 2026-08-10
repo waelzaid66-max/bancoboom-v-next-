@@ -35,6 +35,13 @@ const RENDER_CRITICAL = [
     claim: "Stay keeps identity and browse controls pinned while reclaiming measured header height",
   },
   {
+    source: "components/search/facilities/FacilitiesHomeHeader.tsx",
+    symbol: "FacilitiesHomeHeader",
+    suite: "tests/render/FacilitiesHomeHeader.render.test.tsx",
+    staticGuard: "tests/section-miniapp-guard.test.mjs",
+    claim: "Facilities keeps the live type control pinned while the brand lockup collapses",
+  },
+  {
     source: "components/search/SearchResultsSurface.tsx",
     symbol: "SearchResultsSurface",
     suite: "tests/render/SearchResultsSurface.render.test.tsx",
