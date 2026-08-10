@@ -14,6 +14,13 @@ const read = (path) => readFileSync(join(root, path), "utf8");
 
 const RENDER_CRITICAL = [
   {
+    source: "components/search/car/CarsHomeHeader.tsx",
+    symbol: "CarsHomeHeader",
+    suite: "tests/render/CarsHomeHeader.render.test.tsx",
+    staticGuard: "tests/car-hero-honesty-guard.test.mjs",
+    claim: "the real Cars hero gives back its height while browse controls remain reachable",
+  },
+  {
     source: "components/search/SearchResultsSurface.tsx",
     symbol: "SearchResultsSurface",
     suite: "tests/render/SearchResultsSurface.render.test.tsx",
