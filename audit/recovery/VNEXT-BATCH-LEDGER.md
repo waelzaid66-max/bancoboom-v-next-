@@ -10,7 +10,8 @@
 | VNX-05A | `429ab3135ffaa9fa937bd600b507f5cb95ac601e` | COMPLETE at Cars static/render/build/CI layers; combined section/device runtime `UNPROVEN` | No product delta; current Cars header adjudicated as strongest historical superset and protected by real mounting | Test `e3f92c2`; Cars 5/5, render 6 suites/45 tests, full mobile/typecheck/root build PASS; CI `31399958518` all 7 jobs PASS | `429ab3135ffaa9fa937bd600b507f5cb95ac601e` |
 | VNX-OPS-01 | `e49299ca5f6097ebdffc40e7f73f2f82d01642f9` | COMPLETE for the reproduced parallel-export failure; final clean repeatability remains `UNPROVEN` | No product delta; serialize root workspace builds and guard the scheduling invariant | Repair `d6b42b5`; RED 241/242, GREEN 242/242; local full root build PASS; CI `31403501605` all 7 jobs PASS | `e49299ca5f6097ebdffc40e7f73f2f82d01642f9` |
 | VNX-05B | `57f46d4e29f0b29744855348bbfe212b22eb26dd` | COMPLETE at Property component static/render/build/CI layers; combined section/device runtime `UNPROVEN` | No product delta; corrected pinned-controls/collapsing-identity header adjudicated and protected by real mounting | Test `b51f791`; Property 8/8, render 7 suites/53 tests, full mobile/typecheck/root build PASS; CI `31404662388` all 7 jobs PASS | `57f46d4e29f0b29744855348bbfe212b22eb26dd` |
-| VNX-05C–E | `b51f791b373a709444ff6a51a3d96ad6d31d6ab9` | PENDING | Stay, Facilities, and Materials independently | 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | `b51f791b373a709444ff6a51a3d96ad6d31d6ab9` |
+| VNX-05C | `7e2b4ed4b17bca2d01f4c1ded8edd1d2965263eb` | COMPLETE at Stay component static/render/build/CI layers; full booking/device runtime `UNPROVEN` | No product delta; current pinned-all-bands/real-collapse Stay header adjudicated and protected by real mounting | Test `e85cd39`; Stay 7/7, render 8 suites/60 tests, full mobile/typecheck/root build PASS; CI `31406559372` all 7 jobs PASS | `7e2b4ed4b17bca2d01f4c1ded8edd1d2965263eb` |
+| VNX-05D–E | VNX-05C documentation commit | PENDING | Facilities and Materials independently | Renderer plus current 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | VNX-05C documentation commit |
 | VNX-06 | VNX-05 commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05 commit |
 | VNX-07 | VNX-06 commit | PENDING | Messenger offline/read/block/mute/realtime/typing/voice in separate capabilities | Unit, PostgreSQL, storage, render, device/network/provider, root build | VNX-06 commit |
 | VNX-08 | VNX-07 commit | PENDING | Four account journeys, Auth, KYC, and Profile | Role-policy matrix, PostgreSQL, live Clerk/KYC, device, root build | VNX-07 commit |
@@ -214,3 +215,25 @@ command, package/workspace, test type, result, and untested external gates.
 - The combined conflict-damaged `SectionSearchApp`, current 320–430 geometry,
   AR/EN/RTL/LTR, Android/iOS native animation, accessibility, and live-data
   journeys remain `UNPROVEN`.
+
+## VNX-05C Stay evidence
+
+- Base: `7e2b4ed4b17bca2d01f4c1ded8edd1d2965263eb`; test/protection
+  commit: `e85cd3994d15c376f04b3995770d1c8e373c49dd`; tree:
+  `778095404db029ae0fae27ccb04882ae9f2895d9`.
+- Remote freeze ref: `recovery/vnx-05-stay-header-contracts`.
+- No product source changed. The current header/app blobs `47e583d`/`42bdfb8`
+  originate from the `d098047` correction plus `8b26a08` neutral mutation,
+  survived `a61c1e1` and `11d8185`, and remain byte-identical in VNX-05C.
+- Initial render registry census: **EXPECTED FAIL**, 3/6 meta assertions,
+  because the declared Stay suite did not exist.
+- Final targeted ESLint: **PASS**, zero warnings; Stay renderer: **7/7
+  PASS**; render meta-guard: **6/6 PASS**; full render: **8 suites/60 tests
+  PASS**; mobile typecheck and full mobile chain: **PASS**; root
+  `npm run build`: **PASS**, including Next 46/46 and 48/48 pages.
+- GitHub Actions `31406559372` on exact SHA `e85cd39` completed **SUCCESS**;
+  all seven jobs passed. PostgreSQL 16.14 migrate/replay and API regression
+  remained green (90 files/499 tests passed; 1 file/3 tests skipped).
+- Complete `BookingStaysApp` loading/results/empty/error, API-backed taxonomy,
+  booking/map, current 320–430 geometry, AR/EN/RTL/LTR, Android/iOS native
+  animation, accessibility, and physical-device journeys remain `UNPROVEN`.
