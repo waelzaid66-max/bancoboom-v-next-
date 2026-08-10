@@ -590,6 +590,8 @@ export async function sendNewMessageEmail(args: {
   senderName: string;
   preview: string;
   conversationId: string;
+  /** Stable source key for durable outbox retries. */
+  idempotencyKey?: string;
 }): Promise<void> {
   const lang: EmailLang = await resolveRecipientLang(args.to, args.lang);
   const ar = lang === "ar";
@@ -629,6 +631,7 @@ export async function sendNewMessageEmail(args: {
       : `BANCO — New message from ${args.senderName}`,
     html,
     text,
+    idempotencyKey: args.idempotencyKey,
   });
 }
 

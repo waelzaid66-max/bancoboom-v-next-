@@ -1179,6 +1179,59 @@ export const messages = pgTable(
   ]
 );
 
+// Durable dispatch marker for message notifications. The row is committed in
+// the SAME transaction as the message and unread projection, so a process stop
+// may delay the recipient alert but cannot lose the work required to create it.
+// Payload fields are snapshotted because listings or display names may change
+// before a worker gets its turn; the message remains the authoritative source
+// event and dedupe key.
+export const messageNotificationOutbox = pgTable(
+  "message_notification_outbox",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    messageId: uuid("message_id")
+      .references(() => messages.id, { onDelete: "cascade" })
+      .notNull()
+      .unique(),
+    conversationId: uuid("conversation_id")
+      .references(() => conversations.id, { onDelete: "cascade" })
+      .notNull(),
+    recipientId: uuid("recipient_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    listingId: uuid("listing_id").references(() => listings.id, {
+      onDelete: "set null",
+    }),
+    recipientRole: text("recipient_role").notNull(),
+    senderName: text("sender_name").notNull(),
+    preview: text("preview").notNull(),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    availableAt: timestamp("available_at").notNull().defaultNow(),
+    inAppProcessedAt: timestamp("in_app_processed_at"),
+    emailProcessedAt: timestamp("email_processed_at"),
+    completedAt: timestamp("completed_at"),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_message_notification_outbox_due").on(
+      table.completedAt,
+      table.availableAt,
+      table.createdAt,
+    ),
+    index("idx_message_notification_outbox_thread").on(
+      table.recipientId,
+      table.conversationId,
+      table.createdAt,
+    ),
+    check(
+      "message_notification_outbox_recipient_role",
+      sql`${table.recipientRole} IN ('buyer', 'seller')`,
+    ),
+  ],
+);
+
 /* ── NOTIFICATIONS (in-app) ────────────────────────────── */
 
 export const notificationTypeEnum = pgEnum("notification_type", [

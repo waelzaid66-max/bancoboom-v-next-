@@ -8,6 +8,7 @@ import { remindSubscriptionsExpiringSoon } from "./subscriptionExpiringReminders
 import { sendWeeklyReports } from "./weeklyReports";
 import { backfillStaffRoles } from "./backfillStaffRoles";
 import { processBillingReceiptOutbox } from "../services/BillingNotificationService";
+import { processMessageNotificationOutbox } from "../services/MessageNotificationService";
 import {
   runPromoAdCreditCycle,
   PROMO_AD_CREDIT_LOCK_KEY,
@@ -22,6 +23,7 @@ const SUBSCRIPTION_REMINDER_LOCK_KEY = 48150007;
 const WEEKLY_REPORT_LOCK_KEY = 48150004;
 const STAFF_ROLE_BACKFILL_LOCK_KEY = 48150005;
 const BILLING_RECEIPT_OUTBOX_LOCK_KEY = 48150008;
+const MESSAGE_NOTIFICATION_OUTBOX_LOCK_KEY = 48150009;
 // PROMO_AD_CREDIT_LOCK_KEY (48150006) is owned by PromoAdCreditService so the
 // monthly grant cycle and admin renew share one lock and never interleave.
 
@@ -120,13 +122,30 @@ export function startScheduledJobs(): void {
     { timezone: TIMEZONE },
   );
 
+  // Every 5 seconds — drain message alerts committed atomically with new chat
+  // rows. This is intentionally independent from billing so a mail/push outage
+  // in either domain cannot block the other queue.
+  cron.schedule(
+    "*/5 * * * * *",
+    () => {
+      void runJob(
+        "message-notification-outbox",
+        MESSAGE_NOTIFICATION_OUTBOX_LOCK_KEY,
+        processMessageNotificationOutbox,
+        { quietWhenZero: true },
+      );
+    },
+    { timezone: TIMEZONE },
+  );
+
   logger.info({ timezone: TIMEZONE }, "Scheduled maintenance jobs registered");
 }
 
 /**
  * One-shot startup maintenance. Advisory-locked so that with multiple instances
  * only one performs each task. Backfills staff roles, then immediately drains
- * receipts left pending by a prior process stop; both operations are idempotent.
+ * billing receipts and message alerts left pending by a prior process stop;
+ * every operation is idempotent.
  */
 export async function runStartupBackfills(): Promise<void> {
   await runJob("backfill-staff-roles", STAFF_ROLE_BACKFILL_LOCK_KEY, backfillStaffRoles);
@@ -134,6 +153,12 @@ export async function runStartupBackfills(): Promise<void> {
     "billing-receipt-outbox-startup",
     BILLING_RECEIPT_OUTBOX_LOCK_KEY,
     processBillingReceiptOutbox,
+    { quietWhenZero: true },
+  );
+  await runJob(
+    "message-notification-outbox-startup",
+    MESSAGE_NOTIFICATION_OUTBOX_LOCK_KEY,
+    processMessageNotificationOutbox,
     { quietWhenZero: true },
   );
 }

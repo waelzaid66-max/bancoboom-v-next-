@@ -55,9 +55,10 @@ router.get("/livez", (_req, res) => {
 
 /**
  * Readiness: should this instance receive traffic? Returns 200 only when the
- * database is actually reachable AND money-path tables exist; otherwise 503 so
- * load balancers stop routing to it. A bare `SELECT 1` previously went green on
- * an empty/migrated-wrong Postgres that could not settle top-ups.
+ * database is actually reachable AND critical transactional tables exist;
+ * otherwise 503 so load balancers stop routing to it. A bare `SELECT 1`
+ * previously went green on an empty/migrated-wrong Postgres that could not
+ * settle top-ups or retain queued message notifications.
  * The DB probe is time-boxed so readiness never hangs.
  * Includes gitSha/buildId so ops can pin live traffic to a known commit (F1).
  */
@@ -99,6 +100,20 @@ router.get("/readyz", async (_req, res) => {
       checks.money_schema = "down";
       healthy = false;
       logger.error({ err }, "Readiness check failed: money schema incomplete");
+    }
+
+    try {
+      await Promise.race([
+        db.execute(sql`SELECT 1 FROM message_notification_outbox LIMIT 0`),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("messaging schema check timed out")), DB_CHECK_TIMEOUT_MS),
+        ),
+      ]);
+      checks.messaging_schema = "ok";
+    } catch (err) {
+      checks.messaging_schema = "down";
+      healthy = false;
+      logger.error({ err }, "Readiness check failed: messaging schema incomplete");
     }
 
     // REL-02: upload ownership claims are required for media promote/IDOR.

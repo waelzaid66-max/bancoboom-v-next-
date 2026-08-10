@@ -68,6 +68,7 @@ describe("health probes (P0 smoke)", () => {
     expect(body.status).toBe("ok");
     expect(body.checks?.database).toBe("ok");
     expect(body.checks?.money_schema).toBe("ok");
+    expect(body.checks?.messaging_schema).toBe("ok");
     // F1 pin: fields present (null locally when unset; real SHA in deployed images).
     expect("gitSha" in body).toBe(true);
     expect("buildId" in body).toBe(true);

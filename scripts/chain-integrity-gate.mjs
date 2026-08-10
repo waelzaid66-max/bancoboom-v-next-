@@ -331,6 +331,58 @@ const CHECKS = [
     why: "Both lead capture paths must enqueue receipts inside their charge transactions",
   },
   {
+    id: "P-message-notification-outbox-schema",
+    file: "lib/db/src/schema/index.ts",
+    test: (s) =>
+      /export const messageNotificationOutbox = pgTable/.test(s) &&
+      /message_notification_outbox/.test(s) &&
+      /idx_message_notification_outbox_due/.test(s) &&
+      /messageId: uuid\("message_id"\)[\s\S]{0,180}\.unique\(\)/.test(s),
+    why: "Every committed message needs one durable recipient-notification work item",
+  },
+  {
+    id: "P-message-notification-outbox-migration",
+    file: "lib/db/migrations/0007_early_tiger_shark.sql",
+    test: (s) =>
+      /CREATE TABLE "message_notification_outbox"/.test(s) &&
+      /message_notification_outbox_message_id_messages_id_fk/.test(s) &&
+      /message_notification_outbox_message_id_unique/.test(s),
+    why: "The Messenger outbox must ship as a committed additive migration",
+  },
+  {
+    id: "P-message-notification-atomic-enqueue",
+    file: "artifacts/api-server/src/services/ConversationService.ts",
+    test: (s) =>
+      /await enqueueMessageNotification\(tx,/.test(s) &&
+      /preview:\s*preview\.slice\(0, 100\)/.test(s) &&
+      !/createNotification\(/.test(s) &&
+      !/sendNewMessageEmail\(/.test(s),
+    why: "Message notification work must commit with the message and have no process-local bypass",
+  },
+  {
+    id: "P-message-notification-retry-worker",
+    file: "artifacts/api-server/src/jobs/index.ts",
+    test: (s) =>
+      /MESSAGE_NOTIFICATION_OUTBOX_LOCK_KEY/.test(s) &&
+      /processMessageNotificationOutbox/.test(s) &&
+      /message-notification-outbox-startup/.test(s),
+    why: "A cross-replica worker must drain Messenger notification work at startup and on schedule",
+  },
+  {
+    id: "P-message-notification-provider-dedupe",
+    file: "artifacts/api-server/src/services/MessageNotificationService.ts",
+    test: (s) => /idempotencyKey:\s*`message\/\$\{item\.messageId\}`/.test(s),
+    why: "Retried Messenger emails must reuse one provider idempotency key per message",
+  },
+  {
+    id: "P-message-notification-readyz",
+    file: "artifacts/api-server/src/routes/health.ts",
+    test: (s) =>
+      /messaging_schema/.test(s) &&
+      /SELECT 1 FROM message_notification_outbox LIMIT 0/.test(s),
+    why: "The API must fail readiness when the required Messenger outbox migration is absent",
+  },
+  {
     id: "P-push-service",
     file: "artifacts/api-server/src/services/PushService.ts",
     test: (s) => /EXPO_PUSH_ENDPOINT/.test(s) && /registerPushToken/.test(s),
@@ -780,11 +832,12 @@ const CHECKS = [
   },
   {
     id: "P-message-notif-cooldown",
-    file: "artifacts/api-server/src/services/ConversationService.ts",
+    file: "artifacts/api-server/src/services/MessageNotificationService.ts",
     test: (s) =>
-      /MESSAGE_NOTIF_COOLDOWN_MS/.test(s) &&
-      /conversation_id/.test(s) &&
-      /recentNotif/.test(s),
+      /MESSAGE_NOTIFICATION_COOLDOWN_MS/.test(s) &&
+      /hasRecentThreadNotification/.test(s) &&
+      /notifications\.data}->>'conversation_id'/.test(s) &&
+      /markSuppressed/.test(s),
     why: "Message push/email must cooldown per thread (no chat storms)",
   },
   {

@@ -9,7 +9,17 @@ import {
   deleteConversation,
 } from "./ConversationService";
 import { db, deleteUsers, uniq, randomUUID } from "../__tests__/helpers";
-import { users, listings, notifications, messages } from "@workspace/db/schema";
+import {
+  users,
+  listings,
+  notifications,
+  messages,
+  messageNotificationOutbox,
+} from "@workspace/db/schema";
+import {
+  enqueueMessageNotification,
+  processMessageNotificationOutbox,
+} from "./MessageNotificationService";
 
 /**
  * G3 — buyer↔seller messaging end-to-end against a real database:
@@ -136,6 +146,16 @@ describe("ConversationService — buyer↔seller messaging journey", () => {
     );
     expect(sellerThread?.unread).toBe(1);
 
+    const queued = await db
+      .select()
+      .from(messageNotificationOutbox)
+      .where(eq(messageNotificationOutbox.messageId, first.id));
+    expect(queued).toHaveLength(1);
+    expect(queued[0].completedAt).toBeNull();
+
+    expect(await processMessageNotificationOutbox()).toBeGreaterThanOrEqual(1);
+    expect(await processMessageNotificationOutbox()).toBe(0);
+
     const sellerNotifications = await db
       .select()
       .from(notifications)
@@ -147,6 +167,87 @@ describe("ConversationService — buyer↔seller messaging journey", () => {
           (notification.data as { conversation_id?: string } | null)?.conversation_id === conv.id,
       ),
     ).toHaveLength(1);
+    expect(
+      (sellerNotifications.find((notification) => notification.type === "message")?.data as {
+        message_id?: string;
+      } | null)?.message_id,
+    ).toBe(first.id);
+  });
+
+  it("rolls the notification work item back with an aborted message transaction", async () => {
+    const seller = await mkUser();
+    const buyer = await mkUser();
+    const listingId = await mkActiveListing(seller.id);
+    const conv = await createConversation(buyer.clerkId, listingId);
+    const messageId = randomUUID();
+
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.insert(messages).values({
+          id: messageId,
+          conversationId: conv.id,
+          senderId: buyer.id,
+          body: "must roll back",
+        });
+        await enqueueMessageNotification(tx, {
+          messageId,
+          conversationId: conv.id,
+          recipientId: seller.id,
+          listingId,
+          recipientRole: "seller",
+          senderName: "Test Buyer",
+          preview: "must roll back",
+        });
+        throw new Error("abort-after-message-outbox");
+      }),
+    ).rejects.toThrow("abort-after-message-outbox");
+
+    expect(await db.select().from(messages).where(eq(messages.id, messageId))).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(messageNotificationOutbox)
+        .where(eq(messageNotificationOutbox.messageId, messageId)),
+    ).toHaveLength(0);
+  });
+
+  it("completes rapid thread work without notification storms", async () => {
+    const seller = await mkUser();
+    const buyer = await mkUser();
+    const listingId = await mkActiveListing(seller.id);
+    const conv = await createConversation(buyer.clerkId, listingId);
+
+    await sendMessage(buyer.clerkId, conv.id, "first rapid message", {
+      clientMessageId: randomUUID(),
+    });
+    await sendMessage(buyer.clerkId, conv.id, "second rapid message", {
+      clientMessageId: randomUUID(),
+    });
+    expect(await processMessageNotificationOutbox()).toBeGreaterThanOrEqual(2);
+
+    const queued = await db
+      .select()
+      .from(messageNotificationOutbox)
+      .where(eq(messageNotificationOutbox.conversationId, conv.id));
+    expect(queued).toHaveLength(2);
+    expect(queued.every((item) => item.completedAt !== null)).toBe(true);
+
+    const sellerNotifications = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, seller.id));
+    expect(
+      sellerNotifications.filter(
+        (notification) =>
+          notification.type === "message" &&
+          (notification.data as { conversation_id?: string } | null)?.conversation_id === conv.id,
+      ),
+    ).toHaveLength(1);
+    expect(
+      (await listConversations(seller.clerkId)).find(
+        (conversation) => conversation.id === conv.id,
+      )?.unread,
+    ).toBe(2);
   });
 
   it("forbids messaging your own listing", async () => {
@@ -201,6 +302,7 @@ describe("ConversationService — buyer↔seller messaging journey", () => {
     const conv = await createConversation(buyer.clerkId, listingId);
 
     await sendMessage(buyer.clerkId, conv.id, "Is this still available?");
+    await processMessageNotificationOutbox();
 
     // The seller (recipient) gets a "message" notification carrying the thread id.
     const sellerNotifs = await db

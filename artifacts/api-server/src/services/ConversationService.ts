@@ -5,12 +5,9 @@ import {
   listings,
   listingMedia,
   users,
-  notifications,
 } from "@workspace/db/schema";
-import { and, eq, or, desc, asc, ne, isNull, inArray, sql, gte, lt } from "drizzle-orm";
-import { createNotification } from "./NotificationService";
+import { and, eq, or, desc, asc, ne, isNull, inArray, sql, lt } from "drizzle-orm";
 import { checkMessageRate, checkConversationRate } from "./AbuseService";
-import { isEmailChannelEnabled, sendNewMessageEmail } from "./EmailService";
 import { publicVisibilityConditions } from "../lib/feedVisibility";
 import { getObjectStorageService } from "../lib/objectStorageProvider";
 import { getOrCreateUser } from "./UserService";
@@ -24,11 +21,9 @@ import {
   getAttachMediaMetadata,
   type FinalizedUploadReference,
 } from "../lib/uploadFinalization";
+import { enqueueMessageNotification } from "./MessageNotificationService";
 
 const objectStorageService = getObjectStorageService();
-
-/** Anti-storm: at most one message push/email per recipient/thread in this window. */
-const MESSAGE_NOTIF_COOLDOWN_MS = 3 * 60_000;
 
 type CodedError = Error & { code?: string };
 import { presenceState, type PresenceState } from "../lib/presenceState";
@@ -651,6 +646,12 @@ export async function sendMessage(
           : listingRefId
             ? "📎 Listing"
             : "📷");
+  const [sender] = await db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const senderName = sender?.name ?? "مستخدم BANCO · BANCO User";
   const now = new Date();
   const committed = await db.transaction(async (tx) => {
     const [inserted] = await tx
@@ -705,6 +706,18 @@ export async function sendMessage(
       })
       .where(eq(conversations.id, conversationId));
 
+    await enqueueMessageNotification(tx, {
+      messageId: inserted.id,
+      conversationId,
+      recipientId,
+      listingId: conv.listingId,
+      recipientRole: isBuyer ? "seller" : "buyer",
+      senderName,
+      // The worker needs only notification copy, never the full 4,000-char
+      // private message body. Keep the durable recovery payload minimal.
+      preview: preview.slice(0, 100),
+    });
+
     return { message: inserted, inserted: true as const };
   });
 
@@ -714,63 +727,6 @@ export async function sendMessage(
 
   const msg = committed.message;
   if (!committed.inserted) return messageDtoForSender(msg, userId);
-
-  const [sender] = await db
-    .select({ name: users.name })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  // Cooldown: rapid chat must not storm push + email. Message + unread still land.
-  const cooldownCutoff = new Date(Date.now() - MESSAGE_NOTIF_COOLDOWN_MS);
-  const [recentNotif] = await db
-    .select({ id: notifications.id })
-    .from(notifications)
-    .where(
-      and(
-        eq(notifications.userId, recipientId),
-        eq(notifications.type, "message"),
-        gte(notifications.createdAt, cooldownCutoff),
-        sql`${notifications.data}->>'conversation_id' = ${conversationId}`,
-      ),
-    )
-    .limit(1);
-
-  if (!recentNotif) {
-    await createNotification({
-      userId: recipientId,
-      type: "message",
-      title: sender?.name ?? "رسالة جديدة · New message",
-      body: preview.length > 80 ? `${preview.slice(0, 79)}…` : preview,
-      data: {
-        conversation_id: conversationId,
-        listing_id: conv.listingId,
-        // Recipient's role when they open the thread (mark-sold / seller chrome).
-        role: isBuyer ? "seller" : "buyer",
-      },
-    });
-
-    // Best-effort email to the recipient — never blocks the send response.
-    void (async () => {
-      try {
-        if (!(await isEmailChannelEnabled(recipientId, "message"))) return;
-        const [recipient] = await db
-          .select({ email: users.email })
-          .from(users)
-          .where(eq(users.id, recipientId))
-          .limit(1);
-        if (!recipient?.email) return;
-        await sendNewMessageEmail({
-          to: recipient.email,
-          senderName: sender?.name ?? "مستخدم BANCO · BANCO User",
-          preview: preview.length > 80 ? `${preview.slice(0, 79)}…` : preview,
-          conversationId,
-        });
-      } catch (emailErr) {
-        console.error("[Conversation message email]", emailErr);
-      }
-    })();
-  }
 
   // Resolve the reply preview + shared-listing card for the returned message so
   // the sender's client can render them immediately (no thread refetch needed).
