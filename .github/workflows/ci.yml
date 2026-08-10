@@ -10,6 +10,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Canonical assembly uses explicit dispatch until it is promoted to main.
   workflow_dispatch:
 
 concurrency:
