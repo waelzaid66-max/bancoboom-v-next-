@@ -58,6 +58,7 @@ command, package/workspace, test type, result, and untested external gates.
 ## VNX-02 evidence
 
 - Base: `36689065b9ea01d153d7ecd7e18c9c9e19996914`.
+- Product commit: `e318cef0002dc87b33a8f1277b147ff6076c360f`.
 - Baseline command: `git grep -n client_message_id 36689065 -- lib/db
   lib/api-spec artifacts/api-server artifacts/banco-mobile`; expected no matches,
   confirming the base had no durable client-attempt identity.

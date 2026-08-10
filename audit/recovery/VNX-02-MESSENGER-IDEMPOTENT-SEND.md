@@ -10,6 +10,7 @@ a bounded reconstruction; it is not presented as a recovered historical patch.
 | Field | Evidence |
 |---|---|
 | Base | `36689065b9ea01d153d7ecd7e18c9c9e19996914` |
+| Product commit | `e318cef0002dc87b33a8f1277b147ff6076c360f` |
 | Base capability | No `client_message_id` in DB, OpenAPI, API service, or mobile thread |
 | Baseline command | `git grep -n client_message_id 36689065 -- lib/db lib/api-spec artifacts/api-server artifacts/banco-mobile` |
 | Classification at base | `DELETED/ABSENT` as product behavior; historical Codex source remains `UNPROVEN` |
