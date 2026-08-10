@@ -17,6 +17,7 @@
 | Shared-shell contract ref | `recovery/vnx-04-shared-shell-contracts` → `7e1f17c05326f2b3bf538ee6e365196aaec58b58` |
 | Cars header contract ref | `recovery/vnx-05-cars-header-contracts` → `e3f92c2422a51a3092d2c7bf61f14d1f6284c9ee` |
 | Root-build scheduling ref | `recovery/vnx-ops-01-root-build-scheduling` → `d6b42b5542837ae502febc3a7425efc68241b4ac` |
+| Property header contract ref | `recovery/vnx-05-property-header-contracts` → `b51f791b373a709444ff6a51a3d96ad6d31d6ab9` |
 
 The target is an assembly repository with the complete source ancestry, not a
 manual source dump. The `bancoboomstor` worktree remains read-only. No target
@@ -36,6 +37,7 @@ manual source dump. The `bancoboomstor` worktree remains read-only. No target
 | VNX-04 protection | `7e1f17c` | Real render coverage for shared results-state and mini-app navigation contracts; no product delta | Local render 40/40, full mobile/typecheck/root build PASS; CI `31398232413` all 7 jobs PASS; device runtime remains `UNPROVEN` |
 | VNX-05A Cars protection | `e3f92c2` | Mounted Cars identity, controls, press routing, optional-band behavior, RTL direction, and real hero-height collapse; no product delta | Local Cars 5/5 and render 45/45, full mobile/typecheck/root build PASS; CI `31399958518` all 7 jobs PASS; combined section/device runtime remains `UNPROVEN` |
 | VNX-OPS-01 build control | `d6b42b5` | Serial root workspace scheduling plus an exact chain assertion; no product delta and no broader output deletion | Reproduced parallel `ENOTEMPTY`; serial all-workspace and one literal root build PASS; CI `31403501605` all 7 jobs PASS; clean repeated final-RC build remains `UNPROVEN` |
+| VNX-05B Property protection | `b51f791` | Mounted pinned identity/browse controls, real lockup collapse, action routing, sentinel-to-API taxonomy, search, and RTL direction; no product delta | Local Property 8/8 and render 53/53, full mobile/typecheck/root build PASS; CI `31404662388` all 7 jobs PASS; combined section/device runtime remains `UNPROVEN` |
 
 VNX-03 is frozen with an independent remote recovery ref and PostgreSQL-scoped
 runtime evidence. It does not authorize later Messenger capabilities or a
@@ -102,9 +104,9 @@ offline/realtime/typing/read/block/mute/voice until Phases 1–3 are adjudicated
 - Target `main`, production deploy, or production-ready claim: **NO-GO**.
 - PostgreSQL 16 migration replay and API journeys are verified by CI run
   `31396133572` on `6af3413`; this is not live/staging database certification.
-- VNX-05A Cars is frozen only at source/static/render/build/CI layers. Property,
-  Stay, Facilities, Materials, combined section integration, and the complete
-  production program remain open.
+- VNX-05A Cars and VNX-05B Property are frozen only at
+  source/static/render/build/CI layers. Stay, Facilities, Materials, combined
+  section integration, and the complete production program remain open.
 - Live PostgreSQL, Clerk, storage providers, Paymob, Docker/Compose/Coolify,
   Android, iOS, EAS, push/email delivery, and restore/rollback remain
   **UNPROVEN** on this target.

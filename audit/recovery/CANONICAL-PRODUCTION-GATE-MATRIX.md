@@ -10,7 +10,7 @@ recorded here or in its linked capability ledger.
 | Field | Current value |
 |---|---|
 | Canonical assembly branch | `canonical/vnext-assembly` |
-| Last protected product capability SHA | Cars contract `e3f92c2422a51a3092d2c7bf61f14d1f6284c9ee` |
+| Last protected product capability SHA | Property contract `b51f791b373a709444ff6a51a3d96ad6d31d6ab9` |
 | Last build-control SHA | root serialization `d6b42b5542837ae502febc3a7425efc68241b4ac` |
 | Source ancestry | `bancoboomstor@a3db5bd8c3edd060d35078aefeec709297abbad9` |
 | Assembly status | `GO`, one reversible micro-batch at a time |
@@ -25,7 +25,7 @@ cannot be combined into a production certificate.
 | Program | Required capability closure | Minimum exact-SHA exit evidence | Current position |
 |---|---|---|---|
 | Shared mobile shell | Routes, five-tab escape paths, results/overlay ownership, state retention, safe-area authority | Static + RNTL + 320/360/390/430 + AR/EN + RTL/LTR + Android/iOS device journeys | Shared source/render `TESTED`; device `UNPROVEN` |
-| Five marketplace sections | Cars, Property, Stay, Facilities, Materials identities, filters, taxonomy, loading/results/empty/error, scroll/collapse | Independent lineage decision, renderer, screenshot geometry, interactions, API-backed device journey per section | Cars header `TESTED`; Cars combined section and four other sections open |
+| Five marketplace sections | Cars, Property, Stay, Facilities, Materials identities, filters, taxonomy, loading/results/empty/error, scroll/collapse | Independent lineage decision, renderer, screenshot geometry, interactions, API-backed device journey per section | Cars and Property standalone headers `TESTED`; both combined sections and Stay/Facilities/Materials open |
 | Maps | List/map sync, locate, clusters, draw polygon, honest count, pin picker, provider bridge, bottom clearance | Unit + generated-page parse + web browser + Android/iOS WebView + live provider + large-result journey | Source/static `TESTED`; provider/device `UNPROVEN` |
 | Messenger | Send/idempotency, outbox, unread/read cursor, retry/offline, block/mute, media, notifications, deep links, presence, optional realtime/typing/voice decisions | PostgreSQL concurrency + API + render + two-account Android/iOS + offline/reconnect + push/email/storage provider journeys | Send/outbox PostgreSQL-scoped `RUNTIME_VERIFIED`; remaining capabilities open |
 | Accounts/Auth/Profile | Personal, dealer, company, financial-institution journeys; MFA/social/reset/delete; tenant/role transitions | Policy matrix + PostgreSQL + live Clerk tenant + Android/iOS/web journeys | Source hardening preserved; live journeys `UNPROVEN` |
@@ -66,7 +66,7 @@ cannot be combined into a production certificate.
 |---|---|---|
 | 0 | Git preservation, canonical baseline, ledgers, guard-chain repair | Complete; immutable recovery refs retained |
 | 1 | Shared shell/navigation/results architecture | Complete at render/CI layer; device certification deferred to final device matrix |
-| 2 | Cars, Property, Stay, Facilities, Materials | One section at a time; VNX-05A Cars header complete, other work open |
+| 2 | Cars, Property, Stay, Facilities, Materials | One section at a time; VNX-05A Cars and VNX-05B Property standalone headers complete, combined screens and three headers open |
 | 3 | Shared Maps engine and five domain integrations | No provider rewrite without reproduced defect and ADR |
 | 4 | Remaining Messenger integrity and product capabilities | DB/security first; transport changes require ADR |
 | 5 | Accounts/Auth/KYC/Profile | Four journeys and negative permission matrix |

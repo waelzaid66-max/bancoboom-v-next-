@@ -9,7 +9,8 @@
 | VNX-04 | `4a895a3e597b5ce49b5501bab446e1c404b43556` | COMPLETE at static/render/build/CI layers; device runtime `UNPROVEN` | No product delta; real render protection for shared results state and stack-screen navigation | Product/test `7e1f17c`; render 5 suites/40 tests, full mobile/typecheck/root build PASS; CI `31398232413` all 7 jobs PASS | `4a895a3e597b5ce49b5501bab446e1c404b43556` |
 | VNX-05A | `429ab3135ffaa9fa937bd600b507f5cb95ac601e` | COMPLETE at Cars static/render/build/CI layers; combined section/device runtime `UNPROVEN` | No product delta; current Cars header adjudicated as strongest historical superset and protected by real mounting | Test `e3f92c2`; Cars 5/5, render 6 suites/45 tests, full mobile/typecheck/root build PASS; CI `31399958518` all 7 jobs PASS | `429ab3135ffaa9fa937bd600b507f5cb95ac601e` |
 | VNX-OPS-01 | `e49299ca5f6097ebdffc40e7f73f2f82d01642f9` | COMPLETE for the reproduced parallel-export failure; final clean repeatability remains `UNPROVEN` | No product delta; serialize root workspace builds and guard the scheduling invariant | Repair `d6b42b5`; RED 241/242, GREEN 242/242; local full root build PASS; CI `31403501605` all 7 jobs PASS | `e49299ca5f6097ebdffc40e7f73f2f82d01642f9` |
-| VNX-05B–E | `d6b42b5542837ae502febc3a7425efc68241b4ac` | PENDING | Property, Stay, Facilities, and Materials independently | 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | `d6b42b5542837ae502febc3a7425efc68241b4ac` |
+| VNX-05B | `57f46d4e29f0b29744855348bbfe212b22eb26dd` | COMPLETE at Property component static/render/build/CI layers; combined section/device runtime `UNPROVEN` | No product delta; corrected pinned-controls/collapsing-identity header adjudicated and protected by real mounting | Test `b51f791`; Property 8/8, render 7 suites/53 tests, full mobile/typecheck/root build PASS; CI `31404662388` all 7 jobs PASS | `57f46d4e29f0b29744855348bbfe212b22eb26dd` |
+| VNX-05C–E | `b51f791b373a709444ff6a51a3d96ad6d31d6ab9` | PENDING | Stay, Facilities, and Materials independently | 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | `b51f791b373a709444ff6a51a3d96ad6d31d6ab9` |
 | VNX-06 | VNX-05 commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05 commit |
 | VNX-07 | VNX-06 commit | PENDING | Messenger offline/read/block/mute/realtime/typing/voice in separate capabilities | Unit, PostgreSQL, storage, render, device/network/provider, root build | VNX-06 commit |
 | VNX-08 | VNX-07 commit | PENDING | Four account journeys, Auth, KYC, and Profile | Role-policy matrix, PostgreSQL, live Clerk/KYC, device, root build | VNX-07 commit |
@@ -191,3 +192,25 @@ command, package/workspace, test type, result, and untested external gates.
   all seven jobs passed, including PostgreSQL 90 files/499 tests passed (1
   file/3 tests skipped). Final clean repeated root builds remain a production
   gate.
+
+## VNX-05B Property evidence
+
+- Base: `57f46d4e29f0b29744855348bbfe212b22eb26dd`; test/protection
+  commit: `b51f791b373a709444ff6a51a3d96ad6d31d6ab9`; tree:
+  `7f04e444093ae519cd468d1278449d68cfac2a14`.
+- Remote freeze ref: `recovery/vnx-05-property-header-contracts`.
+- No product source changed. The current header blob `f47ddfa` is identical at
+  `e495e02`, the selected second parent/result of `a61c1e1`, both parents/result
+  of `11d8185`, the source baseline, and VNX-05B.
+- Initial render registry census: **EXPECTED FAIL**, 3/6 meta assertions,
+  because the declared Property suite did not exist.
+- Final targeted ESLint: **PASS**, zero warnings; Property renderer: **8/8
+  PASS**; render meta-guard: **6/6 PASS**; full render: **7 suites/53 tests
+  PASS**; mobile typecheck and full mobile chain: **PASS**; root
+  `npm run build`: **PASS**, including Next 46/46 and 48/48 pages.
+- GitHub Actions `31404662388` on exact SHA `b51f791` completed **SUCCESS**;
+  all seven jobs passed. PostgreSQL migrate/replay and API regression remained
+  green (90 files/499 tests passed; 1 file/3 tests skipped).
+- The combined conflict-damaged `SectionSearchApp`, current 320–430 geometry,
+  AR/EN/RTL/LTR, Android/iOS native animation, accessibility, and live-data
+  journeys remain `UNPROVEN`.
