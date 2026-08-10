@@ -2198,6 +2198,18 @@ const CHECKS = [
     why: "Both Next surfaces must run the bounded stale-export cleanup before every build",
   })),
   {
+    id: "P-root-build-serial-workspaces",
+    file: "package.json",
+    test: (s) => {
+      const packageJson = JSON.parse(s);
+      return (
+        packageJson.scripts?.build ===
+        "pnpm run typecheck && pnpm -r --workspace-concurrency=1 --if-present run build"
+      );
+    },
+    why: "The root build must serialize workspace builds so the two Next exporters cannot race inside shared output state",
+  },
+  {
     id: "P-next-build-export-cleanup-aws-docker",
     file: "deploy/aws/Dockerfile.banco-web",
     test: (s) => {

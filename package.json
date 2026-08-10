@@ -6,7 +6,7 @@
   "scripts": {
     "preinstall": "node scripts/preinstall-enforce-pnpm.mjs",
     "prebuild": "pnpm run workspace:verify",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "build": "pnpm run typecheck && pnpm -r --workspace-concurrency=1 --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "typecheck:website": "pnpm --filter @workspace/design-tokens run typecheck && pnpm --filter @workspace/search-contract run typecheck && pnpm --filter @workspace/landing run typecheck && pnpm --filter @workspace/banco-web run typecheck && pnpm --filter @workspace/banco-website run typecheck",
