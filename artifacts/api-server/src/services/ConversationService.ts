@@ -76,6 +76,7 @@ export interface MessageDTO {
   id: string;
   conversation_id: string;
   sender_id: string;
+  client_message_id: string | null;
   body: string;
   is_mine: boolean;
   created_at: string;
@@ -439,6 +440,7 @@ export async function getMessages(
       id: m.id,
       conversation_id: m.conversationId,
       sender_id: m.senderId,
+      client_message_id: m.clientMessageId ?? null,
       body: m.body,
       is_mine: m.senderId === userId,
       created_at: m.createdAt ? m.createdAt.toISOString() : new Date().toISOString(),
@@ -454,6 +456,8 @@ export async function getMessages(
 }
 
 export interface SendMessageInput {
+  /** Stable UUID for one logical client send; reuse it on retry. */
+  clientMessageId?: string | null;
   /** Serving URL of an attachment (image/video/voice). */
   mediaUrl?: string | null;
   /** Attachment kind: "image" | "video" | "audio". Defaults to image when a URL is present. */
@@ -462,6 +466,78 @@ export interface SendMessageInput {
   replyToId?: string | null;
   /** A listing shared as a card inside the chat. */
   listingRefId?: string | null;
+}
+
+type MessageRow = typeof messages.$inferSelect;
+
+async function findClientAttempt(
+  conversationId: string,
+  senderId: string,
+  clientMessageId: string,
+): Promise<MessageRow | undefined> {
+  const [existing] = await db
+    .select()
+    .from(messages)
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.senderId, senderId),
+        eq(messages.clientMessageId, clientMessageId),
+      ),
+    )
+    .limit(1);
+  return existing;
+}
+
+/** Resolve one durable row for an idempotent replay response. */
+async function messageDtoForSender(msg: MessageRow, senderId: string): Promise<MessageDTO> {
+  let reply_to: MessageReplyPreview | null = null;
+  if (msg.replyToId) {
+    const [reply] = await db
+      .select({ id: messages.id, body: messages.body, senderId: messages.senderId })
+      .from(messages)
+      .where(eq(messages.id, msg.replyToId))
+      .limit(1);
+    if (reply) {
+      reply_to = { id: reply.id, body: reply.body, sender_id: reply.senderId };
+    }
+  }
+
+  let listing_ref: MessageListingRef | null = null;
+  if (msg.listingRefId) {
+    const [listing] = await db
+      .select({ id: listings.id, title: listings.title, price: listings.basePriceCash })
+      .from(listings)
+      .where(eq(listings.id, msg.listingRefId))
+      .limit(1);
+    if (listing) {
+      const thumbs = await getThumbs([listing.id]);
+      listing_ref = {
+        id: listing.id,
+        title: listing.title ?? null,
+        thumb: thumbs.get(listing.id) ?? null,
+        price: listing.price ?? null,
+      };
+    }
+  }
+
+  const reactionSummary = summarizeReactions(msg.reactions, senderId);
+  return {
+    id: msg.id,
+    conversation_id: msg.conversationId,
+    sender_id: msg.senderId,
+    client_message_id: msg.clientMessageId ?? null,
+    body: msg.body,
+    is_mine: msg.senderId === senderId,
+    created_at: msg.createdAt ? msg.createdAt.toISOString() : new Date().toISOString(),
+    read_at: msg.readAt ? msg.readAt.toISOString() : null,
+    media_url: msg.mediaUrl ?? null,
+    media_kind: msg.mediaKind ?? null,
+    reactions: reactionSummary.reactions,
+    my_reactions: reactionSummary.my_reactions,
+    reply_to,
+    listing_ref,
+  };
 }
 
 export async function sendMessage(
@@ -477,7 +553,18 @@ export async function sendMessage(
   const mediaUrl = opts.mediaUrl ?? null;
   const replyToId = opts.replyToId ?? null;
   const listingRefId = opts.listingRefId ?? null;
+  const clientMessageId = opts.clientMessageId ?? null;
   const mediaKind = opts.mediaKind ?? (mediaUrl ? "image" : null);
+
+  // Retry before any mutable validation, rate limiting, or storage work. The
+  // unique key is scoped to this participant and conversation, so it cannot
+  // expose another sender's message. This must also survive a listing becoming
+  // inactive after the original send committed.
+  if (clientMessageId) {
+    const existing = await findClientAttempt(conversationId, userId, clientMessageId);
+    if (existing) return messageDtoForSender(existing, userId);
+  }
+
   // A message must carry something: text, an attachment, or a shared listing.
   if (!text && !mediaUrl && !listingRefId) {
     throw codedError("INVALID_DATA", "Message must contain text, media, or a shared listing");
@@ -552,23 +639,6 @@ export async function sendMessage(
     }
   }
 
-  const [msg] = await db
-    .insert(messages)
-    .values({
-      conversationId,
-      senderId: userId,
-      body: text,
-      mediaUrl: durableMediaUrl,
-      mediaKind,
-      replyToId,
-      listingRefId,
-    })
-    .returning();
-
-  if (finalizedMedia) {
-    await settleFinalizedUploadBestEffort(finalizedMedia);
-  }
-
   // Inbox preview: the text, else a glyph for the attachment / shared listing.
   const preview =
     text ||
@@ -582,19 +652,68 @@ export async function sendMessage(
             ? "📎 Listing"
             : "📷");
   const now = new Date();
-  await db
-    .update(conversations)
-    .set({
-      lastMessageText: preview,
-      lastMessageAt: now,
-      // A new message un-hides the thread for whoever had deleted it.
-      buyerDeletedAt: null,
-      sellerDeletedAt: null,
-      ...(isBuyer
-        ? { sellerUnread: sql`${conversations.sellerUnread} + 1` }
-        : { buyerUnread: sql`${conversations.buyerUnread} + 1` }),
-    })
-    .where(eq(conversations.id, conversationId));
+  const committed = await db.transaction(async (tx) => {
+    const [inserted] = await tx
+      .insert(messages)
+      .values({
+        conversationId,
+        senderId: userId,
+        clientMessageId,
+        body: text,
+        mediaUrl: durableMediaUrl,
+        mediaKind,
+        replyToId,
+        listingRefId,
+      })
+      .onConflictDoNothing()
+      .returning();
+
+    // Two devices or retry workers may race after the fast-path lookup. The DB
+    // unique index elects one durable message; every loser returns that same
+    // row and must not touch unread counters or notifications.
+    if (!inserted) {
+      if (clientMessageId) {
+        const [existing] = await tx
+          .select()
+          .from(messages)
+          .where(
+            and(
+              eq(messages.conversationId, conversationId),
+              eq(messages.senderId, userId),
+              eq(messages.clientMessageId, clientMessageId),
+            ),
+          )
+          .limit(1);
+        if (existing) return { message: existing, inserted: false as const };
+      }
+      throw codedError("INTERNAL_ERROR", "Message could not be committed");
+    }
+
+    // Message durability and inbox/unread projection are one transaction. A
+    // process crash cannot leave a message that every retry treats as complete
+    // while the recipient counter was never advanced.
+    await tx
+      .update(conversations)
+      .set({
+        lastMessageText: preview,
+        lastMessageAt: now,
+        buyerDeletedAt: null,
+        sellerDeletedAt: null,
+        ...(isBuyer
+          ? { sellerUnread: sql`${conversations.sellerUnread} + 1` }
+          : { buyerUnread: sql`${conversations.buyerUnread} + 1` }),
+      })
+      .where(eq(conversations.id, conversationId));
+
+    return { message: inserted, inserted: true as const };
+  });
+
+  if (finalizedMedia) {
+    await settleFinalizedUploadBestEffort(finalizedMedia);
+  }
+
+  const msg = committed.message;
+  if (!committed.inserted) return messageDtoForSender(msg, userId);
 
   const [sender] = await db
     .select({ name: users.name })
@@ -681,6 +800,7 @@ export async function sendMessage(
     id: msg.id,
     conversation_id: conversationId,
     sender_id: userId,
+    client_message_id: msg.clientMessageId ?? null,
     body: msg.body,
     is_mine: true,
     created_at: msg.createdAt ? msg.createdAt.toISOString() : now.toISOString(),

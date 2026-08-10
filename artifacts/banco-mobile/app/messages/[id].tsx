@@ -18,6 +18,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
+import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -78,6 +79,7 @@ const isOfferBody = (b: string | null | undefined): boolean =>
 // offer a tap-to-retry, then it is dropped once the server echo arrives.
 type PendingStatus = "sending" | "failed";
 type PendingMessage = {
+  /** UUID shared with the API as client_message_id and reused on every retry. */
   tempId: string;
   body: string;
   localUri?: string;
@@ -206,6 +208,9 @@ export default function ThreadScreen() {
   const [actionFor, setActionFor] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const listRef = useRef<FlatList<Row>>(null);
+  // A failed direct listing-share retries the same logical operation instead
+  // of minting a second server message after an ambiguous network response.
+  const shareListingAttemptRef = useRef<string | null>(null);
   // MSG-07b: older pages live outside the poll cache so refetch never wipes them.
   const [older, setOlder] = useState<Message[]>([]);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -239,6 +244,22 @@ export default function ThreadScreen() {
   );
 
   const messages: Message[] = query.data?.data ?? [];
+
+  // If the POST response was lost but the message committed, polling returns
+  // the stable client id. Reconcile the optimistic row without asking the user
+  // to retry and without showing a duplicate beside the durable echo.
+  useEffect(() => {
+    const committed = new Set(
+      (query.data?.data ?? [])
+        .map((message) => message.client_message_id)
+        .filter((id): id is string => typeof id === "string"),
+    );
+    if (committed.size === 0) return;
+    setPending((current) => {
+      const next = current.filter((message) => !committed.has(message.tempId));
+      return next.length === current.length ? current : next;
+    });
+  }, [query.data?.data]);
 
   // Reset older page when switching threads (never absorb across conversations).
   useEffect(() => {
@@ -408,6 +429,7 @@ export default function ThreadScreen() {
       try {
         const sent = await sendMessage(conversationId, {
           body: payload.body ?? "",
+          client_message_id: tempId,
           ...(payload.media_url ? { media_url: payload.media_url } : {}),
           ...(payload.media_kind ? { media_kind: payload.media_kind } : {}),
           ...(payload.reply_to_id ? { reply_to_id: payload.reply_to_id } : {}),
@@ -449,7 +471,7 @@ export default function ThreadScreen() {
     setDraft("");
     const replyId = replyTo?.id;
     setReplyTo(null);
-    const tempId = `t-${Date.now()}`;
+    const tempId = Crypto.randomUUID();
     setPending((p) => [
       ...p,
       { tempId, body, status: "sending", ...(replyId ? { reply_to_id: replyId } : {}) },
@@ -465,7 +487,7 @@ export default function ThreadScreen() {
     setOfferOpen(false);
     setOfferAmount("");
     const body = offerBody(n.toLocaleString("en-EG"));
-    const tempId = `t-${Date.now()}`;
+    const tempId = Crypto.randomUUID();
     setPending((p) => [...p, { tempId, body, status: "sending" }]);
     scrollToEnd(true);
     void deliver(tempId, { body });
@@ -478,7 +500,7 @@ export default function ThreadScreen() {
     const body = accept
       ? t("messages.offer.acceptBody")
       : t("messages.offer.declineBody");
-    const tempId = `t-${Date.now()}`;
+    const tempId = Crypto.randomUUID();
     setPending((p) => [
       ...p,
       { tempId, body, status: "sending", reply_to_id: offerMsgId },
@@ -585,9 +607,16 @@ export default function ThreadScreen() {
   // (no optimistic bubble) — the card needs server-resolved title/thumb/price.
   const shareListing = useCallback(async () => {
     if (!conversationId || !params.listingId) return;
+    const clientMessageId = shareListingAttemptRef.current ?? Crypto.randomUUID();
+    shareListingAttemptRef.current = clientMessageId;
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      await sendMessage(conversationId, { body: "", listing_ref_id: params.listingId });
+      await sendMessage(conversationId, {
+        body: "",
+        listing_ref_id: params.listingId,
+        client_message_id: clientMessageId,
+      });
+      shareListingAttemptRef.current = null;
       await query.refetch();
       qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
       scrollToEnd(true);
@@ -683,7 +712,7 @@ export default function ThreadScreen() {
     if (!asset || !conversationId || uploading) return;
     setPreviewAsset(null);
     const kind = isVideoAsset(asset) ? "video" : "image";
-    const tempId = `t-${Date.now()}`;
+    const tempId = Crypto.randomUUID();
     setPending((p) => [
       ...p,
       {

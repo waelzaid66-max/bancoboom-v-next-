@@ -488,6 +488,7 @@ export const ConversationSummarySchema = z
     listing_thumb: z.string().nullable(),
     counterparty_id: z.string(),
     counterparty_name: z.string(),
+    counterparty_presence: z.enum(["online", "recently", "away", "unknown"]),
     last_message_text: z.string().nullable(),
     last_message_at: z.string().nullable(),
     unread: z.number(),
@@ -517,6 +518,7 @@ export const MessageItemSchema = z
     id: z.string(),
     conversation_id: z.string(),
     sender_id: z.string(),
+    client_message_id: z.string().uuid().nullable(),
     body: z.string(),
     is_mine: z.boolean(),
     created_at: z.string(),
@@ -673,6 +675,9 @@ export const CreateConversationSchema = z
 export const SendMessageSchema = z
   .object({
     body: z.string().trim().max(4000).optional().default(""),
+    // Stable per-attempt UUID. Optional for backwards compatibility; current
+    // clients always send it and reuse it when retrying an ambiguous request.
+    client_message_id: z.string().uuid().nullable().optional(),
     // Optional single attachment (Task #71). When present, body may be empty.
     media_url: z.string().url().max(2000).nullable().optional(),
     // Attachment kind for the renderer: image | video | audio (voice note).
@@ -3044,4 +3049,3 @@ export const MarketTrendsQuerySchema = z.object({
   category: z.enum(["car", "real_estate", "industrial"]).optional(),
   metric: z.enum(["avg_price", "listing_volume", "demand", "lead_volume"]).optional(),
 });
-

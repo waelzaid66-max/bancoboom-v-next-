@@ -9,7 +9,7 @@ import {
   deleteConversation,
 } from "./ConversationService";
 import { db, deleteUsers, uniq, randomUUID } from "../__tests__/helpers";
-import { users, listings, notifications } from "@workspace/db/schema";
+import { users, listings, notifications, messages } from "@workspace/db/schema";
 
 /**
  * G3 — buyer↔seller messaging end-to-end against a real database:
@@ -106,6 +106,47 @@ describe("ConversationService — buyer↔seller messaging journey", () => {
     const a = await createConversation(buyer.clerkId, listingId);
     const b = await createConversation(buyer.clerkId, listingId);
     expect(b.id).toBe(a.id);
+  });
+
+  it("deduplicates one client send without duplicating unread or notifications", async () => {
+    const seller = await mkUser();
+    const buyer = await mkUser();
+    const listingId = await mkActiveListing(seller.id);
+    const conv = await createConversation(buyer.clerkId, listingId);
+    const clientMessageId = randomUUID();
+
+    const first = await sendMessage(buyer.clerkId, conv.id, "one logical send", {
+      clientMessageId,
+    });
+    const replay = await sendMessage(buyer.clerkId, conv.id, "one logical send", {
+      clientMessageId,
+    });
+
+    expect(replay.id).toBe(first.id);
+    expect(replay.client_message_id).toBe(clientMessageId);
+
+    const durable = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.conversationId, conv.id));
+    expect(durable).toHaveLength(1);
+
+    const sellerThread = (await listConversations(seller.clerkId)).find(
+      (conversation) => conversation.id === conv.id,
+    );
+    expect(sellerThread?.unread).toBe(1);
+
+    const sellerNotifications = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, seller.id));
+    expect(
+      sellerNotifications.filter(
+        (notification) =>
+          notification.type === "message" &&
+          (notification.data as { conversation_id?: string } | null)?.conversation_id === conv.id,
+      ),
+    ).toHaveLength(1);
   });
 
   it("forbids messaging your own listing", async () => {

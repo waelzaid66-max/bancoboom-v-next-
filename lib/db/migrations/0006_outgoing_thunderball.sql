@@ -1,0 +1,2 @@
+ALTER TABLE "messages" ADD COLUMN "client_message_id" uuid;--> statement-breakpoint
+CREATE UNIQUE INDEX "uniq_message_client_attempt" ON "messages" USING btree ("conversation_id","sender_id","client_message_id");

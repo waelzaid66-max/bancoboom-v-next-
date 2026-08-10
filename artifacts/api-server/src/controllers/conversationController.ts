@@ -102,6 +102,7 @@ export async function sendMessageHandler(req: Request, res: Response) {
       mediaKind: input.media_kind ?? null,
       replyToId: input.reply_to_id ?? null,
       listingRefId: input.listing_ref_id ?? null,
+      clientMessageId: input.client_message_id ?? null,
     });
     const validated = validateResponse(MessageItemSchema, result);
     return res.json(successResponse(validated));

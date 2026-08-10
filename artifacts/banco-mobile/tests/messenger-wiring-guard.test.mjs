@@ -134,6 +134,16 @@ test("MSG-06/10 deliver seeds cache and preserves reply on retry", () => {
   assert.match(thread, /maxLength=\{4000\}/);
 });
 
+test("one logical send keeps one UUID across POST, retry, and poll reconciliation", () => {
+  assert.match(thread, /import \* as Crypto from "expo-crypto"/);
+  assert.match(thread, /const tempId = Crypto\.randomUUID\(\)/);
+  assert.doesNotMatch(thread, /const tempId = `t-\$\{Date\.now\(\)\}`/);
+  assert.match(thread, /client_message_id:\s*tempId/);
+  assert.match(thread, /message\.client_message_id/);
+  assert.match(thread, /committed\.has\(message\.tempId\)/);
+  assert.match(thread, /deliver\(m\.tempId/);
+});
+
 test("listing contact never silently no-ops when phone missing", () => {
   assert.match(
     listing,

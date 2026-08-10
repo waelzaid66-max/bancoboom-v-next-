@@ -43,6 +43,13 @@
       "when": 1786278182288,
       "tag": "0005_early_talisman",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786367088617,
+      "tag": "0006_outgoing_thunderball",
+      "breakpoints": true
     }
   ]
 }
