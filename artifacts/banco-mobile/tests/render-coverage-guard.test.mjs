@@ -42,6 +42,13 @@ const RENDER_CRITICAL = [
     claim: "Facilities keeps the live type control pinned while the brand lockup collapses",
   },
   {
+    source: "components/search/materials/MaterialsHomeHeader.tsx",
+    symbol: "MaterialsHomeHeader",
+    suite: "tests/render/MaterialsHomeHeader.render.test.tsx",
+    staticGuard: "tests/materials-core-guard.test.mjs",
+    claim: "Materials keeps identity and search pinned while only the prose tagline scrolls",
+  },
+  {
     source: "components/search/SearchResultsSurface.tsx",
     symbol: "SearchResultsSurface",
     suite: "tests/render/SearchResultsSurface.render.test.tsx",
