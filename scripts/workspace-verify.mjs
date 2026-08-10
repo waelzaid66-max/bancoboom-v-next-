@@ -3,7 +3,10 @@ import { realpathSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_REMOTE_PATH = "waelzaid66-max/bancoboomstor.git";
+const ALLOWED_REMOTE_PATHS = [
+  "waelzaid66-max/bancoboomstor.git",
+  "waelzaid66-max/bancoboom-v-next-.git",
+];
 const EXPECTED_PACKAGE_MANAGER = "pnpm@11.9.0";
 const EXPECTED_PNPM_VERSION = EXPECTED_PACKAGE_MANAGER.split("@")[1];
 const REQUIRED_PATHS = [
@@ -71,8 +74,8 @@ for (const requiredPath of REQUIRED_PATHS) {
 const origin = git("remote", "get-url", "origin")
   .replace(/\\/g, "/")
   .replace(/\/$/, "");
-if (!origin.endsWith(EXPECTED_REMOTE_PATH)) {
-  fail(`origin must end with ${EXPECTED_REMOTE_PATH}`);
+if (!ALLOWED_REMOTE_PATHS.some((remotePath) => origin.endsWith(remotePath))) {
+  fail(`origin must end with one of: ${ALLOWED_REMOTE_PATHS.join(", ")}`);
 }
 
 const worktreeCount = git("worktree", "list", "--porcelain")

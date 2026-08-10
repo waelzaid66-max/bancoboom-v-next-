@@ -1,6 +1,9 @@
 # BANCO Monorepo Operating Contract
 
-This repository is the sole authoritative BANCO MARKET production worktree.
+This repository is the canonical BANCO MARKET vNext assembly worktree. It starts
+from the verified `bancoboomstor` production baseline and accepts only bounded,
+provenance-recorded recovery batches. The source `bancoboomstor` worktree remains
+read-only during assembly.
 
 ## Session opening protocol
 
@@ -16,9 +19,10 @@ package-level command:
 4. Treat the current worktree and `git diff` as source of truth. Chat history,
    handoffs, and older SHAs are leads only.
 
-Do not create a replacement clone, switch branches, reset, stash, delete, move,
-or broadly merge files to recover context. Do not repeat a completed fix until
-the current implementation, its history, and its focused test have been checked.
+Do not create another replacement clone, reset, stash, delete, move, or broadly
+merge files to recover context. Work only on `canonical/vnext-assembly` until its
+acceptance decision. Do not repeat a completed fix until the current
+implementation, its history, and its focused test have been checked.
 
 ## Architecture and release constraints
 
@@ -34,8 +38,9 @@ the current implementation, its history, and its focused test have been checked.
 - Do not mark PostgreSQL, Clerk, object storage, Docker/Coolify, EAS, Android, or
   iOS as passing unless that exact integration was exercised on the reported
   tree/commit.
-- Do not commit, push, deploy, rotate secrets, or change external services unless
-  the user explicitly authorizes that action.
+- Commits and pushes are authorized only for the vNext assembly repository and
+  its bounded recovery branches. Deployment, secret rotation, and external
+  service changes still require explicit user authorization.
 - Never place credentials or secret values in source, reports, logs, or chat.
 
 ## Required closeout evidence
