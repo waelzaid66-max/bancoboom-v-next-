@@ -37,6 +37,9 @@ const IMPORT_SCREENS = [
   "app/import/request.tsx",
   "app/import/order/[id].tsx",
   "components/import/OrderDocuments.tsx",
+  // Feature membership is not directory membership. This registered route is
+  // linked from the hub and renders the same import lifecycle rail.
+  "app/import-tracking.tsx",
 ];
 
 test("the hub advertises no count that was typed in by hand", () => {
@@ -122,9 +125,10 @@ test("no import screen writes its own red", () => {
       // matches the colour, not one way of spelling it.
       .filter(([, line]) => /#[0-9A-Fa-f]{6}\b|\brgba?\(\s*\d/.test(line))
       // White, black and pure-transparent overlays are neutrals, not identity.
-      // White, black and the delivered-green are neutrals or a universal
-      // status, not identity. Pure-black/white rgba overlays are scrims.
-      .filter(([, line]) => !/#(FFFFFF|000000|22C55E)\b/i.test(line))
+      // White, black, delivered green, and cancelled grey are neutrals or
+      // universal statuses, not identity. Pure-black/white rgba overlays are
+      // scrims. The named grey is intentionally used only for cancellation.
+      .filter(([, line]) => !/#(FFFFFF|000000|22C55E|9CA3AF)\b/i.test(line))
       .filter(
         ([, line]) =>
           !/\brgba?\(\s*(0\s*,\s*0\s*,\s*0|255\s*,\s*255\s*,\s*255)\b/.test(line),
@@ -139,22 +143,26 @@ test("no import screen writes its own red", () => {
 });
 
 test("the shipment rail tells progress by fill, not by a rainbow", () => {
-  const order = read("app/import/order/[id].tsx");
+  // Both screens draw the same lifecycle rail. Checking one member of a
+  // mirrored pair allowed the other to keep the retired rainbow unnoticed.
+  for (const file of ["app/import/order/[id].tsx", "app/import-tracking.tsx"]) {
+    const src = read(file);
 
-  // Six stages once carried six hues, five of them outside the red family.
-  for (const hex of ["#F97316", "#F59E0B", "#0EA5E9", "#8B5CF6"]) {
-    assert.ok(
-      !order.includes(hex),
-      `${hex} is back on the stage rail — progress is told by fill, not by hue`
+    // Six stages once carried six hues, five of them outside the red family.
+    for (const hex of ["#F97316", "#F59E0B", "#0EA5E9", "#8B5CF6"]) {
+      assert.ok(
+        !src.includes(hex),
+        `${file}: ${hex} is back on the stage rail — progress is told by fill, not by hue`
+      );
+    }
+
+    // And neither stage list may grow a colour field again.
+    const stages = src.match(/const STAGES:[\s\S]*?\n\];/);
+    assert.ok(stages, `${file}: the STAGES array moved — update this guard to match`);
+    assert.doesNotMatch(
+      stages[0],
+      /\bcolor\b/,
+      `${file}: a stage carries no colour of its own; stageTone() derives it from position`
     );
   }
-
-  // And the stage list must not grow a colour field again.
-  const stages = order.match(/const STAGES:[\s\S]*?\n\];/);
-  assert.ok(stages, "the STAGES array moved — update this guard to match");
-  assert.doesNotMatch(
-    stages[0],
-    /\bcolor\b/,
-    "a stage carries no colour of its own; stageTone() derives it from position"
-  );
 });
