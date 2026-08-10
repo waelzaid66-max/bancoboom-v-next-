@@ -14,6 +14,20 @@ const read = (path) => readFileSync(join(root, path), "utf8");
 
 const RENDER_CRITICAL = [
   {
+    source: "components/search/SearchResultsSurface.tsx",
+    symbol: "SearchResultsSurface",
+    suite: "tests/render/SearchResultsSurface.render.test.tsx",
+    staticGuard: "tests/section-miniapp-guard.test.mjs",
+    claim: "blocking overlays preserve the mounted results surface and its scroll contract",
+  },
+  {
+    source: "components/MiniAppBottomNav.tsx",
+    symbol: "MiniAppBottomNav",
+    suite: "tests/render/MiniAppBottomNav.render.test.tsx",
+    staticGuard: "tests/section-miniapp-guard.test.mjs",
+    claim: "all five stack-screen escape routes stay pressable above the safe area",
+  },
+  {
     source: "components/PresenceDot.tsx",
     symbol: "PresenceDot",
     suite: "tests/render/PresenceDot.render.test.tsx",
