@@ -5,11 +5,17 @@
 | VNX-00 | `a3db5bd8c3edd060d35078aefeec709297abbad9` | COMPLETE | Evidence, vNext operating contract, and an allowlist-only workspace identity guard; no application code | vNext accepted, unrelated remote rejected, root build PASS | `recovery/source-bancoboomstor-a3db5bd8` |
 | VNX-01 | `f4ddee9aa66e411b3e7c6c4d194dc497f6f36bf7` | COMPLETE | Test-chain wiring only; no application code | Focused guards, full mobile chain, mobile typecheck, root build PASS | `f4ddee9aa66e411b3e7c6c4d194dc497f6f36bf7` |
 | VNX-02 | `36689065b9ea01d153d7ecd7e18c9c9e19996914` | COMPLETE (PostgreSQL runtime UNPROVEN) | Messenger idempotent-send foundation across DB, API contract, generated clients, and mobile retry/reconciliation | Schema drift check, API contract test, API/mobile typecheck, full mobile chain, root build PASS; PostgreSQL integration test added but not executed locally | `36689065b9ea01d153d7ecd7e18c9c9e19996914` |
-| VNX-03 | VNX-02 commit | PENDING | Messenger durable delivery/read integrity beyond idempotency | Unit, PostgreSQL integration, render, device/network, root build | VNX-02 commit |
-| VNX-04 | VNX-03 commit | PENDING | Discover capability recovery | Unit, render, navigation/runtime, root build | VNX-03 commit |
-| VNX-05 | VNX-04 commit | PENDING | Five-section hidden-state repair | 320/360/390/430 render and device checks, root build | VNX-04 commit |
-| VNX-06 | VNX-05 commit | PENDING | Maps runtime fixes only if reproduced | Web/native route journeys, provider checks, root build | VNX-05 commit |
-| VNX-07 | VNX-06 commit | PENDING | Remaining verified deltas | Integration/live/staging matrix, root build | VNX-06 commit |
+| VNX-03 | `c402edc020de4768eff427aee3bfe1208cf5e50a` | COMPLETE at source/build layers (PostgreSQL/push runtime `UNPROVEN`) | Transactional Messenger notification outbox, retry worker, channel dedupe/checkpoints, cooldown preservation, and readiness gate | DB drift, contract, 241/241 chain, lint, API/root typecheck and full root build PASS; DB integration source added but CI registry blocked | `c402edc020de4768eff427aee3bfe1208cf5e50a` |
+| VNX-04 | VNX-03 closeout | PENDING | Shared mobile shell, navigation, and section architecture | Route/reachability, safe-area, overlay/state render and device matrix, root build | VNX-03 product commit |
+| VNX-05 | VNX-04 commit | PENDING | Dynamic identities and Cars, Property, Stay, Facilities, Materials independently | 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | VNX-04 commit |
+| VNX-06 | VNX-05 commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05 commit |
+| VNX-07 | VNX-06 commit | PENDING | Messenger offline/read/block/mute/realtime/typing/voice in separate capabilities | Unit, PostgreSQL, storage, render, device/network/provider, root build | VNX-06 commit |
+| VNX-08 | VNX-07 commit | PENDING | Four account journeys, Auth, KYC, and Profile | Role-policy matrix, PostgreSQL, live Clerk/KYC, device, root build | VNX-07 commit |
+| VNX-09 | VNX-08 commit | PENDING | Search and Discover capability recovery | Domain isolation, saved/recent/trending, render/navigation/runtime, root build | VNX-08 commit |
+| VNX-10 | VNX-09 commit | PENDING | Publishing, listings, uploads, and private media | Create/edit/publish, ACL/signed media, storage/provider/device, root build | VNX-09 commit |
+| VNX-11 | VNX-10 commit | PENDING | Payments and financing | PostgreSQL concurrency, Paymob/FI lifecycle, audit/refund, root build | VNX-10 commit |
+| VNX-12 | VNX-11 commit | PENDING | Admin, Dealer, and Website completion | Route/permission/end-to-end matrices, root build | VNX-11 commit |
+| VNX-13 | VNX-12 commit | PENDING | CI, Docker, Coolify, release, restore/rollback, and full production certification | Clean install through exact-SHA staging, provider/device/live and rollback proof | VNX-12 commit |
 
 No batch may change from PENDING to COMPLETE without recording the exact commit,
 command, package/workspace, test type, result, and untested external gates.
@@ -87,3 +93,25 @@ command, package/workspace, test type, result, and untested external gates.
 - External gates not exercised: PostgreSQL, Clerk, live object storage, push and
   email providers, Docker/Compose/Coolify, Android, iOS, and physical-device
   offline/reconnect journeys.
+
+## VNX-03 evidence
+
+- Base: `c402edc020de4768eff427aee3bfe1208cf5e50a`; functional predecessor:
+  VNX-02 `e318cef0002dc87b33a8f1277b147ff6076c360f`.
+- Product commit: `38697ea8566139415b58d6dc28d7392a73c4cfc4`;
+  product tree: `979213a3f0cb9c282f0c4b120abec4f7231e08fd`.
+- Remote freeze ref: `recovery/vnx-03-messenger-notification-outbox`.
+- `pnpm --filter @workspace/db run check`: **PASS**.
+- `node scripts/chain-integrity-gate.mjs`: **241/241 PASS**.
+- API contract suite: **1/1 file, 3/3 tests PASS**.
+- Targeted ESLint and root `npm run lint`: **PASS**.
+- `npm run build` from the root with Corepack pnpm 11.9.0: **PASS**, including
+  all root/artifact typechecks, API bundle, Expo Web export, both Next apps,
+  Admin OS, Dealer OS, Landing, and Mockup Sandbox.
+- PostgreSQL assertions were added for atomic rollback, idempotent replay,
+  recipient routing, and rapid-thread cooldown, but are **UNPROVEN at runtime**.
+  GitHub Actions is enabled and files are present on the default branch, while
+  its workflow registry currently returns zero workflows and dispatch returns
+  HTTP 404.
+- Push receipts, live email, Android/iOS, physical-device journeys, queue
+  monitoring/dead-letter operations, and completed-row retention remain open.

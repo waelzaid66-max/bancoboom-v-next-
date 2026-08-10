@@ -20,7 +20,7 @@ without repository/branch/SHA/blob/path/test evidence remains `UNPROVEN`.
 
 | Priority | Capability | Historical/recovery evidence | Decision | Dependency / acceptance |
 |---|---|---|---|---|
-| P0 in-flight | Messenger notification outbox | Advanced wave owner-attributed; no commit/blob; billing outbox `ae52fe3` is current precedent | `RECOVER` by bounded reconstruction | Migration, atomic enqueue, retry worker, cooldown, exact tests, PostgreSQL runtime |
+| P0 frozen candidate | Messenger notification outbox | Advanced wave owner-attributed; no commit/blob; billing outbox `ae52fe3` precedent; target `38697ea` | `RECOVER` reconstructed and frozen as `TESTED` | PostgreSQL CI registration/runtime, push receipts, live email, device routing, retention/queue operations |
 | P0 frozen candidate | Messenger client send idempotency | No historical object; base lacked the field; target `e318cef` | `RECOVER` reconstructed; candidate `TESTED` | PostgreSQL race/retry and device reconnect proof |
 | P0 | Shared mobile shell/navigation/section architecture | `SectionSearchApp.tsx` merge lineage `a61c1e1`, `11d8185`; overlay evidence | `RECOVER` only proven routing/visibility defects | Route inventory and renderer/device state matrix before changes |
 | P0 | Cars identity/header usability | `eaa835a`…`96e7363`, especially real collapse `310028d` | `RECOVER` best behavior, then reconcile | Historical blob matrix; 320–430 geometry/interaction |

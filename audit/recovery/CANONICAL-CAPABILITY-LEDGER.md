@@ -10,6 +10,7 @@ not shorthand for runtime, device, live-provider, or production readiness.
 | Canonical ancestry and rollback | `RECOVERED` | `bancoboomstor@a3db5bd8`, tree `07c4393d` | `f4ddee9` | workspace identity + root build PASS | N/A | Target `main` intentionally absent |
 | Protection-chain reachability | `TESTED` | guards across `63f89e8`, `fa023715`, `a8e2ba5`, `2934e3d` | `3668906` | focused 14/14; render 31/31; full mobile chain; typecheck/build PASS | N/A | Static/render coverage does not certify product runtime |
 | Messenger client-send idempotency | `TESTED` | claimed advanced wave unrecovered; reconstructed from current architecture | `e318cef` | DB drift PASS; API contract 3/3; mobile chain; API/mobile typecheck; root build PASS | PostgreSQL race and Android/iOS reconnect `UNPROVEN` | Commit candidate must pass real DB/device before `RUNTIME_VERIFIED` |
+| Messenger notification outbox | `TESTED` | claimed advanced wave unrecovered; bounded reconstruction using billing outbox `ae52fe3` as precedent | `38697ea` | DB drift; 241/241 chain; API contract 3/3; targeted/root lint; root typecheck/build PASS | PostgreSQL, push receipts, live email, Android/iOS `UNPROVEN` | CI registry currently exposes zero workflows; retention, queue alerting/replay, provider/device gates remain |
 | Maps source superset | `TESTED` | `127e3d7`, `a4c1eb0`, `34709b4`, `12ce4f4`; current source preserved | source baseline `a3db5bd8` | map chrome 16/16; geo area 11/11; production wiring guards | WebView/provider/Android/iOS `UNPROVEN` | No code recovery until a runtime defect is reproduced |
 | Modern security/storage/payment/deploy rail | `TESTED` at source/unit/build layers only | `66771d6` → `ae52fe3` → `f61cb95` → `a3db5bd8` | inherited at `f4ddee9` | existing targeted packs and root build | PostgreSQL/providers/Docker/Coolify `UNPROVEN` | Must never be weakened by UI recovery |
 
@@ -24,7 +25,6 @@ not shorthand for runtime, device, live-provider, or production readiness.
 | Facilities identity/header | `HIDDEN/UNPROVEN` candidate | Reproduce states and section isolation |
 | Materials identity/header | `UNPROVEN` | Lineage and current geometry/state audit |
 | Maps runtime and per-domain personality | `UNPROVEN` runtime | Shared engine journey then five independent integrations |
-| Messenger notification outbox | `UNPROVEN`, in flight | Migration, atomicity/retry tests, root build, PostgreSQL/runtime status, final SHA |
 | Messenger offline/read/block/mute/realtime/typing/voice | `UNPROVEN` | Product/security/transport ADRs and staged independent batches |
 | Four account journeys/Auth/KYC/Profile | `UNPROVEN` runtime | Evidence-derived role policy matrix and live tenant journeys |
 | Search/Discover | `DELETED/ORPHANED/REVERTED_BY_GUARD/UNPROVEN` by capability | Separate lineage and guard adjudication for each feature |

@@ -13,6 +13,7 @@
 | Remote rollback ref | `recovery/source-bancoboomstor-a3db5bd8` |
 | Protection-chain ref | `recovery/vnx-01-protection-chain` → `36689065b9ea01d153d7ecd7e18c9c9e19996914` |
 | Messenger idempotency ref | `recovery/vnx-02-messenger-idempotency` → `e318cef0002dc87b33a8f1277b147ff6076c360f` |
+| Messenger notification-outbox ref | `recovery/vnx-03-messenger-notification-outbox` → `38697ea8566139415b58d6dc28d7392a73c4cfc4` |
 
 The target is an assembly repository with the complete source ancestry, not a
 manual source dump. The `bancoboomstor` worktree remains read-only. No target
@@ -26,10 +27,11 @@ manual source dump. The `bancoboomstor` worktree remains read-only. No target
 | VNX-01 | `3668906` | Reconnect retired-red, Import, and render-coverage protection chains | Accepted and build-tested |
 | VNX-02 | `e318cef` | Messenger `client_message_id`, race-safe message/unread transaction, mobile retry reconciliation | Candidate accepted at source/compile/build level; PostgreSQL/device runtime remains `UNPROVEN` |
 | VNX-02 closeout | `8ed12e9` | Exact provenance record | Accepted; documentation only |
+| Production program | `c402edc` | Canonical ledgers, full production phases, and batch protocol | Accepted; documentation only |
+| VNX-03 | `38697ea` | Atomic Messenger notification outbox, retry/dedupe/checkpoints, cooldown, readiness | Candidate accepted at source/compile/build level; PostgreSQL/push/provider/device runtime remains `UNPROVEN` |
 
-The currently edited Message notification outbox is **in-flight VNX-03** and is
-not part of this baseline until its migration, tests, build, evidence, commit,
-rollback ref, and remote push all succeed.
+VNX-03 is frozen as a tested candidate with an independent remote recovery ref.
+It does not authorize later Messenger capabilities or a production claim.
 
 ## Preserved production safety rail from `a3db5bd8`
 
@@ -78,8 +80,8 @@ Every capability must close these stages in order:
 | 9 | Admin, Dealer, Website | Role-aware end-to-end journeys certified |
 | 10 | Cross-product regression and deployment | Clean install through rollback/restore and exact-SHA staging certification |
 
-VNX-03 Message outbox is the one bounded in-flight exception because it began
-before this sequence was adopted. Close and freeze it; do not continue into
+VNX-03 Message outbox was the one bounded in-flight exception because it began
+before this sequence was adopted. It is now frozen; do not continue into
 offline/realtime/typing/read/block/mute/voice until Phases 1–3 are adjudicated.
 
 ## Current release decision
