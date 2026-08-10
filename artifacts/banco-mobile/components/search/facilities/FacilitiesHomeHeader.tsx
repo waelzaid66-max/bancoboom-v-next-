@@ -21,8 +21,8 @@
  * also the "POWERED BY eats its own line" defect the owner reported. This file
  * is the reference implementation of that shape; the other three follow it.
  *
- *   slot="pinned"  A top bar · B brand lockup · C search      → stays put
- *   slot="scroll"  D hero · E type strip · F counts           → scrolls away
+ *   slot="pinned"  A top bar · B brand · C search · E types   → stays put
+ *   slot="scroll"  D hero · F counts                           → scrolls away
  *   slot="all"     everything, i.e. the pre-split behaviour    (default)
  *
  * HONESTY
@@ -55,7 +55,7 @@ import { PHONE_COUNTRIES } from "@/constants/countryCodes";
 import { CURRENCY_BY_MARKET } from "@/constants/listingCreateTaxonomy";
 import { useI18n } from "@/context/LanguageContext";
 import { marketCountryLabel } from "@/lib/searchTaxonomy";
-import { sectionAccent } from "@/lib/sectionTheme";
+import { SECTION_NEUTRAL, sectionAccent } from "@/lib/sectionTheme";
 
 const BANCO_LOGO = require("../../../assets/images/banco-logo.png");
 const B_MARK = require("../../../assets/images/b-mark.png");
@@ -67,10 +67,10 @@ const ACCENT = sectionAccent("facilities");
 const COLLAPSE_SCROLL = 96;
 /** Brand lockup height, animated to zero on collapse. */
 const BRAND_H = 34;
-const VOID = "#000000";
-const SNOW = "#FFFFFF";
-const ASH = "#8E8E93";
-const HAIRLINE = "rgba(255,255,255,0.16)";
+const VOID = SECTION_NEUTRAL.void;
+const SNOW = SECTION_NEUTRAL.snow;
+const ASH = SECTION_NEUTRAL.ash;
+const HAIRLINE = SECTION_NEUTRAL.hairline;
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 

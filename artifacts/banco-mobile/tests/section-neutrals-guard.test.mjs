@@ -16,13 +16,15 @@ const read = (p) => readFileSync(join(root, p), "utf8");
 
 const tokens = read("lib/sectionTheme.ts");
 
-/** Agent B's headers under the V2 split. Facilities and Stays belong to agent
- *  A and are deliberately not asserted here — the tokens are exported and
- *  waiting, and claiming their files would be taking work that is not ours. */
+/** The vNext canonical guard covers all five headers. Historical agent
+ * ownership no longer permits one section to drift outside the accepted
+ * neutral palette. */
 const HEADERS = [
   "components/search/car/CarsHomeHeader.tsx",
   "components/search/property/PropertyHomeHeader.tsx",
   "components/search/materials/MaterialsHomeHeader.tsx",
+  "components/search/facilities/FacilitiesHomeHeader.tsx",
+  "components/search/stays/StaysHomeHeader.tsx",
 ];
 
 test("the neutrals have exactly one home", () => {
@@ -77,7 +79,7 @@ test("a header may still keep its own ACCENT — that is the point", () => {
   for (const file of HEADERS) {
     assert.match(
       read(file),
-      /const ACCENT = sectionAccent\(/,
+      file.includes("/stays/") ? /STAYS_ACCENT/ : /const ACCENT = sectionAccent\(/,
       `${file} must still bind its own section accent`,
     );
   }
