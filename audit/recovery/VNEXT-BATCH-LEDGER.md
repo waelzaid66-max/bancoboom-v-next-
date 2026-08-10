@@ -4,8 +4,8 @@
 |---|---|---|---|---|---|
 | VNX-00 | `a3db5bd8c3edd060d35078aefeec709297abbad9` | COMPLETE | Evidence, vNext operating contract, and an allowlist-only workspace identity guard; no application code | vNext accepted, unrelated remote rejected, root build PASS | `recovery/source-bancoboomstor-a3db5bd8` |
 | VNX-01 | `f4ddee9aa66e411b3e7c6c4d194dc497f6f36bf7` | COMPLETE | Test-chain wiring only; no application code | Focused guards, full mobile chain, mobile typecheck, root build PASS | `f4ddee9aa66e411b3e7c6c4d194dc497f6f36bf7` |
-| VNX-02 | `36689065b9ea01d153d7ecd7e18c9c9e19996914` | COMPLETE (PostgreSQL runtime UNPROVEN) | Messenger idempotent-send foundation across DB, API contract, generated clients, and mobile retry/reconciliation | Schema drift check, API contract test, API/mobile typecheck, full mobile chain, root build PASS; PostgreSQL integration test added but not executed locally | `36689065b9ea01d153d7ecd7e18c9c9e19996914` |
-| VNX-03 | `c402edc020de4768eff427aee3bfe1208cf5e50a` | COMPLETE at source/build layers (PostgreSQL/push runtime `UNPROVEN`) | Transactional Messenger notification outbox, retry worker, channel dedupe/checkpoints, cooldown preservation, and readiness gate | DB drift, contract, 241/241 chain, lint, API/root typecheck and full root build PASS; DB integration source added but CI registry blocked | `c402edc020de4768eff427aee3bfe1208cf5e50a` |
+| VNX-02 | `36689065b9ea01d153d7ecd7e18c9c9e19996914` | COMPLETE; PostgreSQL send/idempotency journey `RUNTIME_VERIFIED` on descendant `6af3413` (device reconnect `UNPROVEN`) | Messenger idempotent-send foundation across DB, API contract, generated clients, and mobile retry/reconciliation | Original source/contract/mobile/root gates PASS; later CI `31396133572` ran the unchanged DB/API implementation in PostgreSQL and passed `ConversationService` 10/10 | `36689065b9ea01d153d7ecd7e18c9c9e19996914` |
+| VNX-03 | `c402edc020de4768eff427aee3bfe1208cf5e50a` | COMPLETE; PostgreSQL journeys `RUNTIME_VERIFIED` (push/provider/device `UNPROVEN`) | Transactional Messenger notification outbox, retry worker, channel dedupe/checkpoints, cooldown preservation, and readiness gate | Product `38697ea`; protection `6af3413`; local focused/mobile/root gates PASS; CI `31396133572` all 7 jobs PASS, PostgreSQL 90 files/499 tests PASS | `c402edc020de4768eff427aee3bfe1208cf5e50a` |
 | VNX-04 | VNX-03 closeout | PENDING | Shared mobile shell, navigation, and section architecture | Route/reachability, safe-area, overlay/state render and device matrix, root build | VNX-03 product commit |
 | VNX-05 | VNX-04 commit | PENDING | Dynamic identities and Cars, Property, Stay, Facilities, Materials independently | 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | VNX-04 commit |
 | VNX-06 | VNX-05 commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05 commit |
@@ -85,11 +85,12 @@ command, package/workspace, test type, result, and untested external gates.
   **PASS**. Workspace verification, all library/artifact typechecks, API bundle,
   Expo Web export, Next applications, Admin OS, Dealer OS, Landing, and Mockup
   Sandbox completed.
-- A real-database integration test now proves the intended assertion in source:
-  two sends with one UUID must create one message, one unread increment, and one
-  notification. It was **NOT RUN locally** because `DATABASE_URL`, `psql`, and a
-  PostgreSQL/Docker service are unavailable in this workspace. PostgreSQL
-  behavior therefore remains **UNPROVEN**, not PASS.
+- At VNX-02 closeout the real-database integration test had not run locally
+  because `DATABASE_URL`, `psql`, and a PostgreSQL/Docker service were absent.
+  Later descendant CI run `31396133572` exercised the unchanged implementation
+  on PostgreSQL 16: `ConversationService` 10/10 and the complete API suite
+  passed. The send/idempotency transaction is now runtime-verified for those
+  PostgreSQL journeys; native offline/reconnect remains unproven.
 - External gates not exercised: PostgreSQL, Clerk, live object storage, push and
   email providers, Docker/Compose/Coolify, Android, iOS, and physical-device
   offline/reconnect journeys.
@@ -108,10 +109,16 @@ command, package/workspace, test type, result, and untested external gates.
 - `npm run build` from the root with Corepack pnpm 11.9.0: **PASS**, including
   all root/artifact typechecks, API bundle, Expo Web export, both Next apps,
   Admin OS, Dealer OS, Landing, and Mockup Sandbox.
-- PostgreSQL assertions were added for atomic rollback, idempotent replay,
-  recipient routing, and rapid-thread cooldown, but are **UNPROVEN at runtime**.
-  GitHub Actions is enabled and files are present on the default branch, while
-  its workflow registry currently returns zero workflows and dispatch returns
-  HTTP 404.
+- Comment-only workflow registration commit `052ed460180a` caused the new
+  repository's Actions service to index the existing CI file; no trigger or job
+  behavior changed.
+- First run `31395428022` on exact product SHA `38697ea` passed PostgreSQL but
+  exposed one stale mobile guard. Protection follow-up
+  `6af3413a394bf8596566de3167d9f360d22d7769` follows the new enqueue→worker
+  chain. The full mobile pack and root build passed locally.
+- GitHub Actions run `31396133572` on `6af3413` completed **SUCCESS** across all
+  seven jobs. PostgreSQL 16 DB drift, migrate, idempotent migrate replay, seed,
+  `ConversationService` 10/10, and the full API suite (90 files/499 tests PASS;
+  1 file/3 tests explicitly skipped) passed.
 - Push receipts, live email, Android/iOS, physical-device journeys, queue
   monitoring/dead-letter operations, and completed-row retention remain open.

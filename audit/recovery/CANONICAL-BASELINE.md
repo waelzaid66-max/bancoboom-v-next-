@@ -25,13 +25,15 @@ manual source dump. The `bancoboomstor` worktree remains read-only. No target
 |---|---|---|---|
 | VNX-00 | `f4ddee9` | Forensic evidence, assembly decision, workspace identity | Accepted; no product behavior |
 | VNX-01 | `3668906` | Reconnect retired-red, Import, and render-coverage protection chains | Accepted and build-tested |
-| VNX-02 | `e318cef` | Messenger `client_message_id`, race-safe message/unread transaction, mobile retry reconciliation | Candidate accepted at source/compile/build level; PostgreSQL/device runtime remains `UNPROVEN` |
+| VNX-02 | `e318cef` | Messenger `client_message_id`, race-safe message/unread transaction, mobile retry reconciliation | PostgreSQL journey later verified by CI `31396133572` on descendant `6af3413`; native reconnect remains `UNPROVEN` |
 | VNX-02 closeout | `8ed12e9` | Exact provenance record | Accepted; documentation only |
 | Production program | `c402edc` | Canonical ledgers, full production phases, and batch protocol | Accepted; documentation only |
-| VNX-03 | `38697ea` | Atomic Messenger notification outbox, retry/dedupe/checkpoints, cooldown, readiness | Candidate accepted at source/compile/build level; PostgreSQL/push/provider/device runtime remains `UNPROVEN` |
+| VNX-03 product | `38697ea` | Atomic Messenger notification outbox, retry/dedupe/checkpoints, cooldown, readiness | Accepted and independently referenced |
+| VNX-03 verification | `6af3413` | Protection chain follows enqueue→worker architecture | Local mobile/root gates and all seven CI jobs PASS; PostgreSQL tested journeys runtime-verified; push/provider/device remain `UNPROVEN` |
 
-VNX-03 is frozen as a tested candidate with an independent remote recovery ref.
-It does not authorize later Messenger capabilities or a production claim.
+VNX-03 is frozen with an independent remote recovery ref and PostgreSQL-scoped
+runtime evidence. It does not authorize later Messenger capabilities or a
+production claim.
 
 ## Preserved production safety rail from `a3db5bd8`
 
@@ -88,5 +90,8 @@ offline/realtime/typing/read/block/mute/voice until Phases 1–3 are adjudicated
 
 - Assembly work: **GO**, one micro-batch at a time.
 - Target `main`, production deploy, or production-ready claim: **NO-GO**.
-- PostgreSQL, Clerk, storage providers, Paymob, Docker/Compose/Coolify, Android,
-  iOS, EAS, push/email delivery, restore/rollback: **UNPROVEN** on this target.
+- PostgreSQL 16 migration replay and API journeys are verified by CI run
+  `31396133572` on `6af3413`; this is not live/staging database certification.
+- Live PostgreSQL, Clerk, storage providers, Paymob, Docker/Compose/Coolify,
+  Android, iOS, EAS, push/email delivery, and restore/rollback remain
+  **UNPROVEN** on this target.

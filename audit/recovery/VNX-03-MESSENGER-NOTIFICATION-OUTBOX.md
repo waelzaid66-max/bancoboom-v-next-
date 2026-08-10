@@ -15,6 +15,8 @@ cherry-pick.
 | Functional predecessor | VNX-02 `e318cef0002dc87b33a8f1277b147ff6076c360f` |
 | Product commit | `38697ea8566139415b58d6dc28d7392a73c4cfc4` |
 | Product tree | `979213a3f0cb9c282f0c4b120abec4f7231e08fd` |
+| CI registration commit | `052ed460180a` (comment-only workflow re-index; no trigger/job behavior change) |
+| Protection follow-up | `6af3413a394bf8596566de3167d9f360d22d7769` |
 | Classification at base | Notification work after commit was `UNPROVEN` for crash recovery; claimed historical implementation remained `UNPROVEN` |
 | Recovery method | Independent additive DB/API/worker micro-batch using the accepted billing-outbox pattern as an architectural precedent |
 | Freeze ref | `recovery/vnx-03-messenger-notification-outbox` |
@@ -76,6 +78,10 @@ The commands below ran on the exact working tree committed as product tree
 | `38697ea` / product tree | Targeted `pnpm exec eslint ... --max-warnings=0` / root | Lint | PASS |
 | `38697ea` / product tree | `npm run lint` / root | Root script lint | PASS |
 | `38697ea` / product tree | `npm run build` with Corepack pnpm 11.9.0 / root | Root typecheck + production builds | PASS |
+| `6af3413` | `pnpm --dir artifacts/banco-mobile test` | Full mobile static + render pack | PASS; production wiring 47/47 and render 31/31 |
+| `6af3413` | `npm run build` with Corepack pnpm 11.9.0 / root | Root typecheck + production builds | PASS |
+| `6af3413` | GitHub Actions run `31396133572` | CI: 7 jobs, Linux/Node 24 | PASS |
+| `6af3413` | CI PostgreSQL 16: DB check, migrate, migrate again, seed, API suite | PostgreSQL integration | 90 files and 499 tests PASS; 1 file and 3 tests explicitly skipped |
 
 The root build covered library and artifact TypeScript, the API bundle, Expo Web
 export, Admin OS, Dealer OS, Landing, Mockup Sandbox, Banco Web, and Banco
@@ -84,12 +90,18 @@ reclassified as capability proof.
 
 ## Runtime status and open production risks
 
-- PostgreSQL integration tests are **UNPROVEN locally** because this workspace
-  has no `DATABASE_URL`, `psql`, Docker, or PostgreSQL service.
-- GitHub Actions is enabled and the workflow files are reachable on the default
-  branch, but the Actions workflow registry returned `total_count: 0`; dispatch
-  of `.github/workflows/ci.yml` consequently returned HTTP 404. This is an
-  external CI-registration blocker, not a PostgreSQL PASS or test failure.
+- This workspace still has no local PostgreSQL service. Runtime evidence comes
+  from [GitHub Actions run 31396133572](https://github.com/waelzaid66-max/bancoboom-v-next-/actions/runs/31396133572)
+  on exact SHA `6af3413a394bf8596566de3167d9f360d22d7769`.
+- PostgreSQL 16 migration replay and the API integration suite are
+  **RUNTIME_VERIFIED for the tested journeys**. Migration `0007` applied on a
+  fresh database, the second migrate was idempotent, `ConversationService` was
+  10/10 PASS, and the full suite was 499 PASS with 3 explicit skips.
+- The first exact-product run `31395428022` already passed the PostgreSQL job on
+  `38697ea`. Its overall status failed because a historical source guard still
+  searched for recipient role inside `ConversationService`. Follow-up
+  `6af3413` made the guard follow both atomic enqueue and outbox delivery; the
+  full mobile pack, root build, and all seven CI jobs then passed.
 - Expo push remains the pre-existing best-effort fan-out after the idempotent
   in-app row. Push acceptance/receipt retry and exactly-once device delivery are
   not provided by this batch.
@@ -98,5 +110,6 @@ reclassified as capability proof.
 - Completed outbox retention/purge, dead-letter alerting, queue-age metrics, and
   operator replay controls still require later production-operations batches.
 
-VNX-03 is frozen as `TESTED` at source/compile/build layers only. It is not
-`RUNTIME_VERIFIED`, `DEVICE_VERIFIED`, `LIVE_VERIFIED`, or production-ready.
+VNX-03 is frozen as `RUNTIME_VERIFIED` only for its PostgreSQL migration,
+transaction, outbox, cooldown, and API journeys. It is not `DEVICE_VERIFIED`,
+`LIVE_VERIFIED`, or production-ready.

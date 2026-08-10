@@ -78,3 +78,15 @@ outbox is intentionally deferred to a separate reviewed batch.
 
 Native offline/reconnect behavior, push delivery, email delivery, live private
 media, Android, iOS, and physical-device journeys are also unproven.
+
+## Later PostgreSQL verification
+
+The VNX-02 product files remained unchanged through descendant verification SHA
+`6af3413a394bf8596566de3167d9f360d22d7769`. GitHub Actions run
+[`31396133572`](https://github.com/waelzaid66-max/bancoboom-v-next-/actions/runs/31396133572)
+applied the committed migrations to fresh PostgreSQL 16, replayed them
+idempotently, seeded reference data, and passed `ConversationService` 10/10 plus
+the full API suite (90 files and 499 tests passed; 1 file and 3 tests explicitly
+skipped). Client-send idempotency and the message/unread transaction are now
+`RUNTIME_VERIFIED` for these PostgreSQL journeys. Android/iOS offline and
+reconnect behavior remains `UNPROVEN`.
