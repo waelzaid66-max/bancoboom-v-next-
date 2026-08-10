@@ -6,7 +6,7 @@
 | VNX-01 | `f4ddee9aa66e411b3e7c6c4d194dc497f6f36bf7` | COMPLETE | Test-chain wiring only; no application code | Focused guards, full mobile chain, mobile typecheck, root build PASS | `f4ddee9aa66e411b3e7c6c4d194dc497f6f36bf7` |
 | VNX-02 | `36689065b9ea01d153d7ecd7e18c9c9e19996914` | COMPLETE; PostgreSQL send/idempotency journey `RUNTIME_VERIFIED` on descendant `6af3413` (device reconnect `UNPROVEN`) | Messenger idempotent-send foundation across DB, API contract, generated clients, and mobile retry/reconciliation | Original source/contract/mobile/root gates PASS; later CI `31396133572` ran the unchanged DB/API implementation in PostgreSQL and passed `ConversationService` 10/10 | `36689065b9ea01d153d7ecd7e18c9c9e19996914` |
 | VNX-03 | `c402edc020de4768eff427aee3bfe1208cf5e50a` | COMPLETE; PostgreSQL journeys `RUNTIME_VERIFIED` (push/provider/device `UNPROVEN`) | Transactional Messenger notification outbox, retry worker, channel dedupe/checkpoints, cooldown preservation, and readiness gate | Product `38697ea`; protection `6af3413`; local focused/mobile/root gates PASS; CI `31396133572` all 7 jobs PASS, PostgreSQL 90 files/499 tests PASS | `c402edc020de4768eff427aee3bfe1208cf5e50a` |
-| VNX-04 | VNX-03 closeout | PENDING | Shared mobile shell, navigation, and section architecture | Route/reachability, safe-area, overlay/state render and device matrix, root build | VNX-03 product commit |
+| VNX-04 | `4a895a3e597b5ce49b5501bab446e1c404b43556` | COMPLETE at static/render/build/CI layers; device runtime `UNPROVEN` | No product delta; real render protection for shared results state and stack-screen navigation | Product/test `7e1f17c`; render 5 suites/40 tests, full mobile/typecheck/root build PASS; CI `31398232413` all 7 jobs PASS | `4a895a3e597b5ce49b5501bab446e1c404b43556` |
 | VNX-05 | VNX-04 commit | PENDING | Dynamic identities and Cars, Property, Stay, Facilities, Materials independently | 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | VNX-04 commit |
 | VNX-06 | VNX-05 commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05 commit |
 | VNX-07 | VNX-06 commit | PENDING | Messenger offline/read/block/mute/realtime/typing/voice in separate capabilities | Unit, PostgreSQL, storage, render, device/network/provider, root build | VNX-06 commit |
@@ -122,3 +122,25 @@ command, package/workspace, test type, result, and untested external gates.
   1 file/3 tests explicitly skipped) passed.
 - Push receipts, live email, Android/iOS, physical-device journeys, queue
   monitoring/dead-letter operations, and completed-row retention remain open.
+
+## VNX-04 evidence
+
+- Base: `4a895a3e597b5ce49b5501bab446e1c404b43556`; test/protection commit:
+  `7e1f17c05326f2b3bf538ee6e365196aaec58b58`; tree:
+  `f79f81b10249fd48b0ccf067e93cfabd1d627e4d`.
+- Remote freeze ref: `recovery/vnx-04-shared-shell-contracts`.
+- No product source changed. Two RNTL suites now mount the existing
+  `SearchResultsSurface` and `MiniAppBottomNav` contracts.
+- Initial render registry census: **EXPECTED FAIL**, 3/6 meta assertions,
+  because the declared suites did not exist.
+- Final targeted ESLint: **PASS**, zero warnings; render meta-guard: **6/6
+  PASS**; render: **5 suites/40 tests PASS**; mobile typecheck: **PASS**; full
+  mobile chain: **PASS**; root `npm run build`: **PASS**.
+- GitHub Actions `31398232413` on exact SHA `7e1f17c` completed **SUCCESS**;
+  all seven jobs passed, including PostgreSQL API tests, full mobile regression,
+  Typecheck/build, Expo Web bundle, production gates, ESLint, and GCP config.
+- `SectionSearchApp.tsx` was not modified. Its current blob equals the
+  `11d8185` second parent and merge result, so it remains
+  `CONFLICT_DAMAGED/UNPROVEN` by capability despite the shared-shell gates.
+- Android/iOS physical-device, real safe-area, keyboard/rotation, killed-app
+  deep-link, accessibility, and section geometry remain unproven.

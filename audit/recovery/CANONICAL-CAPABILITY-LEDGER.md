@@ -11,6 +11,7 @@ not shorthand for runtime, device, live-provider, or production readiness.
 | Protection-chain reachability | `TESTED` | guards across `63f89e8`, `fa023715`, `a8e2ba5`, `2934e3d` | `3668906` | focused 14/14; render 31/31; full mobile chain; typecheck/build PASS | N/A | Static/render coverage does not certify product runtime |
 | Messenger client-send idempotency | `RUNTIME_VERIFIED` (PostgreSQL scope) | claimed advanced wave unrecovered; reconstructed from current architecture | product `e318cef`; verified on descendant `6af3413` | Original DB drift/contract/mobile/typecheck/root gates PASS; CI `31396133572` `ConversationService` 10/10 and full API 499 tests PASS | PostgreSQL send/idempotency journey verified; Android/iOS offline reconnect `UNPROVEN` | Device/network ambiguity and live multi-replica stress remain |
 | Messenger notification outbox | `RUNTIME_VERIFIED` (PostgreSQL scope) | claimed advanced wave unrecovered; bounded reconstruction using billing outbox `ae52fe3` as precedent | product `38697ea`; verification `6af3413` | Local DB drift/241 chain/contract/mobile/root gates PASS; CI `31396133572` all 7 jobs PASS; PostgreSQL 90 files/499 tests PASS | Fresh migration, replay, transaction/outbox/cooldown/API journeys verified; push receipts, live email, Android/iOS `UNPROVEN` | Retention, queue alerting/replay, provider/device and staging/live DB gates remain |
+| Shared mobile results/navigation shell | `TESTED` | `ea71942`, `127e3d7`, merge blobs at `a61c1e1` and `11d8185` | `7e1f17c` | Render meta 6/6; RNTL/Jest 5 suites/40 tests; full mobile/typecheck/root build PASS; CI `31398232413` all 7 jobs PASS | Android/iOS physical-device runtime `UNPROVEN` | Section-specific integration remains separate; real safe-area/deep-link/accessibility/device gates open |
 | Maps source superset | `TESTED` | `127e3d7`, `a4c1eb0`, `34709b4`, `12ce4f4`; current source preserved | source baseline `a3db5bd8` | map chrome 16/16; geo area 11/11; production wiring guards | WebView/provider/Android/iOS `UNPROVEN` | No code recovery until a runtime defect is reproduced |
 | Modern security/storage/payment/deploy rail | `TESTED` at source/unit/build layers only | `66771d6` → `ae52fe3` → `f61cb95` → `a3db5bd8` | inherited at `f4ddee9` | existing targeted packs and root build | PostgreSQL/providers/Docker/Coolify `UNPROVEN` | Must never be weakened by UI recovery |
 
@@ -18,7 +19,7 @@ not shorthand for runtime, device, live-provider, or production readiness.
 
 | Program capability | Current classification | Required before first modifying batch |
 |---|---|---|
-| Shared mobile shell/navigation/section architecture | `UNPROVEN` completeness | Route/screen inventory, overlay/state model, navigation and safe-area render/runtime evidence |
+| Section-specific `SectionSearchApp` integration | `CONFLICT_DAMAGED/UNPROVEN` | Current blob equals the second parent/result of conflicted merge `11d8185`; adjudicate each domain without rewriting the file |
 | Cars identity/header/filters | `MUTATED/UNPROVEN` | Full lineage and 320/360/390/430 interaction/scroll matrix |
 | Property identity/header | `HIDDEN/UNPROVEN` candidate | Reproduce pinned/list-header/empty-overlay states |
 | Stay identity/header/booking | `HIDDEN/UNPROVEN` candidate | Reproduce states and preserve rental/booking taxonomy |
