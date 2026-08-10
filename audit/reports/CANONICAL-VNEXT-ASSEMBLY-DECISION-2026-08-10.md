@@ -1,5 +1,12 @@
 # BANCO Canonical vNext Assembly Decision
 
+> **Program sequencing update:** the evidence and repository decision in this
+> document remain authoritative. Its original VNX-03–VNX-07 ordering is now a
+> historical first plan. Current execution order, capability freezes, and open
+> production gates are governed by the four controls under `audit/recovery/`,
+> beginning with `CANONICAL-BASELINE.md`. Completed VNX-00 through VNX-02 work
+> is retained and is not restarted.
+
 ## Decision
 
 `waelzaid66-max/bancoboom-v-next-` will be assembled from the exact verified

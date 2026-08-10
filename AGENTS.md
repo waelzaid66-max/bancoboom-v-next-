@@ -19,6 +19,12 @@ package-level command:
 4. Treat the current worktree and `git diff` as source of truth. Chat history,
    handoffs, and older SHAs are leads only.
 
+The four current program controls are mandatory reading before opening a new
+capability: `audit/recovery/CANONICAL-BASELINE.md`,
+`CODEX-RECOVERY-BACKLOG.md`, `RECOVERY-REGRESSION-REGISTER.md`, and
+`CANONICAL-CAPABILITY-LEDGER.md`. Historical plans may supply evidence but may
+not silently override these controls.
+
 Do not create another replacement clone, reset, stash, delete, move, or broadly
 merge files to recover context. Work only on `canonical/vnext-assembly` until its
 acceptance decision. Do not repeat a completed fix until the current
@@ -35,6 +41,13 @@ implementation, its history, and its focused test have been checked.
   global filter store, broad architecture rewrite, or cross-domain contract.
 - Work in one bounded wave at a time. Establish a reproducible failing check,
   apply the smallest evidence-backed fix, and rerun focused plus root gates.
+- Use the golden sequence for every capability: understand, archaeology,
+  provenance, recover, reconcile, modernize, verify, freeze. Do not open a
+  second capability while the current one has an unexplained failure.
+- Treat BANCO as one production system: Mobile, Web, API, DB, Auth, Accounts,
+  Search, Maps, Messenger, Media, Storage, Notifications, Payments, Financing,
+  Publishing, Admin, Dealer, CI, and Deployment all require an explicit final
+  decision before canonical release.
 - Do not mark PostgreSQL, Clerk, object storage, Docker/Coolify, EAS, Android, or
   iOS as passing unless that exact integration was exercised on the reported
   tree/commit.
