@@ -7,7 +7,8 @@
 | VNX-02 | `36689065b9ea01d153d7ecd7e18c9c9e19996914` | COMPLETE; PostgreSQL send/idempotency journey `RUNTIME_VERIFIED` on descendant `6af3413` (device reconnect `UNPROVEN`) | Messenger idempotent-send foundation across DB, API contract, generated clients, and mobile retry/reconciliation | Original source/contract/mobile/root gates PASS; later CI `31396133572` ran the unchanged DB/API implementation in PostgreSQL and passed `ConversationService` 10/10 | `36689065b9ea01d153d7ecd7e18c9c9e19996914` |
 | VNX-03 | `c402edc020de4768eff427aee3bfe1208cf5e50a` | COMPLETE; PostgreSQL journeys `RUNTIME_VERIFIED` (push/provider/device `UNPROVEN`) | Transactional Messenger notification outbox, retry worker, channel dedupe/checkpoints, cooldown preservation, and readiness gate | Product `38697ea`; protection `6af3413`; local focused/mobile/root gates PASS; CI `31396133572` all 7 jobs PASS, PostgreSQL 90 files/499 tests PASS | `c402edc020de4768eff427aee3bfe1208cf5e50a` |
 | VNX-04 | `4a895a3e597b5ce49b5501bab446e1c404b43556` | COMPLETE at static/render/build/CI layers; device runtime `UNPROVEN` | No product delta; real render protection for shared results state and stack-screen navigation | Product/test `7e1f17c`; render 5 suites/40 tests, full mobile/typecheck/root build PASS; CI `31398232413` all 7 jobs PASS | `4a895a3e597b5ce49b5501bab446e1c404b43556` |
-| VNX-05 | VNX-04 commit | PENDING | Dynamic identities and Cars, Property, Stay, Facilities, Materials independently | 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | VNX-04 commit |
+| VNX-05A | `429ab3135ffaa9fa937bd600b507f5cb95ac601e` | COMPLETE at Cars static/render/build/CI layers; combined section/device runtime `UNPROVEN` | No product delta; current Cars header adjudicated as strongest historical superset and protected by real mounting | Test `e3f92c2`; Cars 5/5, render 6 suites/45 tests, full mobile/typecheck/root build PASS; CI `31399958518` all 7 jobs PASS | `429ab3135ffaa9fa937bd600b507f5cb95ac601e` |
+| VNX-05B–E | `e3f92c2422a51a3092d2c7bf61f14d1f6284c9ee` | PENDING | Property, Stay, Facilities, and Materials independently | 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | `e3f92c2422a51a3092d2c7bf61f14d1f6284c9ee` |
 | VNX-06 | VNX-05 commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05 commit |
 | VNX-07 | VNX-06 commit | PENDING | Messenger offline/read/block/mute/realtime/typing/voice in separate capabilities | Unit, PostgreSQL, storage, render, device/network/provider, root build | VNX-06 commit |
 | VNX-08 | VNX-07 commit | PENDING | Four account journeys, Auth, KYC, and Profile | Role-policy matrix, PostgreSQL, live Clerk/KYC, device, root build | VNX-07 commit |
@@ -144,3 +145,28 @@ command, package/workspace, test type, result, and untested external gates.
   `CONFLICT_DAMAGED/UNPROVEN` by capability despite the shared-shell gates.
 - Android/iOS physical-device, real safe-area, keyboard/rotation, killed-app
   deep-link, accessibility, and section geometry remain unproven.
+
+## VNX-05A Cars evidence
+
+- Base: `429ab3135ffaa9fa937bd600b507f5cb95ac601e`; test/protection
+  commit: `e3f92c2422a51a3092d2c7bf61f14d1f6284c9ee`; tree:
+  `4e31ed5f15ed7c131cd7066403abadf16e8b8c09`.
+- Remote freeze ref: `recovery/vnx-05-cars-header-contracts`.
+- No product source changed. The current `CarsHomeHeader` blob `bfbe1e1` is
+  identical at `857ae26`, `96e7363`, the selected second parent/result of
+  `11d8185`, the source baseline, and VNX-05A. It preserves the real-collapse
+  repair rooted in `310028d` while retaining later header/strip evolution.
+- Initial renderer-registry census: **EXPECTED FAIL**, 3/6 meta assertions,
+  because the declared Cars suite did not exist. The first render passed 4/5;
+  a brittle composite matcher and then an unsafe test mock type were corrected
+  without changing application source.
+- Final targeted ESLint: **PASS**, zero warnings; render meta-guard: **6/6
+  PASS**; Cars renderer: **5/5 PASS**; full render: **6 suites/45 tests PASS**;
+  mobile typecheck: **PASS**; full mobile chain: **PASS**; root
+  `npm run build`: **PASS**.
+- GitHub Actions `31399958518` on exact SHA `e3f92c2` completed **SUCCESS**;
+  all seven jobs passed. PostgreSQL replay/API regression remained green (90
+  files/499 tests passed; 1 file/3 tests skipped).
+- Combined `SectionSearchApp` scroll/overlay integration, physical width and
+  language matrix, native animation timing, Android/iOS, accessibility, and
+  live-data/device journeys remain `UNPROVEN`.
