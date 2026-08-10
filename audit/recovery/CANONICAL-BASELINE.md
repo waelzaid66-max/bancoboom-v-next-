@@ -20,6 +20,7 @@
 | Property header contract ref | `recovery/vnx-05-property-header-contracts` → `b51f791b373a709444ff6a51a3d96ad6d31d6ab9` |
 | Stay header contract ref | `recovery/vnx-05-stay-header-contracts` → `e85cd3994d15c376f04b3995770d1c8e373c49dd` |
 | Facilities header contract ref | `recovery/vnx-05-facilities-header-contracts` → `2d39bc3417069cecbcbc0c8468fd3582062603e4` |
+| Materials header contract ref | `recovery/vnx-05-materials-header-contracts` → `cc01e2e80c6f573b98c273f7ce91ced5eb686f36` |
 
 The target is an assembly repository with the complete source ancestry, not a
 manual source dump. The `bancoboomstor` worktree remains read-only. No target
@@ -42,6 +43,7 @@ manual source dump. The `bancoboomstor` worktree remains read-only. No target
 | VNX-05B Property protection | `b51f791` | Mounted pinned identity/browse controls, real lockup collapse, action routing, sentinel-to-API taxonomy, search, and RTL direction; no product delta | Local Property 8/8 and render 53/53, full mobile/typecheck/root build PASS; CI `31404662388` all 7 jobs PASS; combined section/device runtime remains `UNPROVEN` |
 | VNX-05C Stay protection | `e85cd39` | Mounted pinned identity/browse controls, real measured header/tagline collapse, action/search/type state, and RTL direction; no product delta | Local Stay 7/7 and render 60/60, full mobile/typecheck/root build PASS; CI `31406559372` all 7 jobs PASS; complete booking/device runtime remains `UNPROVEN` |
 | VNX-05D Facilities protection/reconciliation | `2d39bc3` | Mounted pinned identity/type controls and real brand collapse at `4d28940`; reconciled Facilities with the shared five-header neutral palette; no section-routing delta | Local Facilities 8/8, neutral 4/4, render 68/68, full mobile/typecheck/root build and chain 242/242 PASS; CI `31409307571` all 7 jobs PASS; combined section/device runtime remains `UNPROVEN` |
+| VNX-05E Materials protection | `cc01e2e` | Mounted pinned B-CORE identity/search, tagline-only scrolling slice, real lockup/elevation collapse, action/search state, axis non-duplication, and RTL direction; no product delta | Local Materials 8/8, static contracts 18/18, render 76/76, full mobile/typecheck/root build and chain 242/242 PASS; CI `31410714566` all 7 jobs PASS; combined section/device runtime remains `UNPROVEN` |
 
 VNX-03 is frozen with an independent remote recovery ref and PostgreSQL-scoped
 runtime evidence. It does not authorize later Messenger capabilities or a
@@ -108,10 +110,10 @@ offline/realtime/typing/read/block/mute/voice until Phases 1–3 are adjudicated
 - Target `main`, production deploy, or production-ready claim: **NO-GO**.
 - PostgreSQL 16 migration replay and API journeys are verified by CI run
   `31396133572` on `6af3413`; this is not live/staging database certification.
-- VNX-05A Cars, VNX-05B Property, VNX-05C Stay, and VNX-05D Facilities are
-  frozen only at source/static/render/build/CI layers. Materials, combined
-  section and booking integration, and the complete production program remain
-  open.
+- VNX-05A–E Cars, Property, Stay, Facilities, and Materials standalone headers
+  are frozen only at source/static/render/build/CI layers. Combined section and
+  booking integration, current responsive/device certification, and the
+  complete production program remain open.
 - Live PostgreSQL, Clerk, storage providers, Paymob, Docker/Compose/Coolify,
   Android, iOS, EAS, push/email delivery, and restore/rollback remain
   **UNPROVEN** on this target.

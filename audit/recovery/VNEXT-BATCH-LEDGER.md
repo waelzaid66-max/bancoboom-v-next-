@@ -12,8 +12,9 @@
 | VNX-05B | `57f46d4e29f0b29744855348bbfe212b22eb26dd` | COMPLETE at Property component static/render/build/CI layers; combined section/device runtime `UNPROVEN` | No product delta; corrected pinned-controls/collapsing-identity header adjudicated and protected by real mounting | Test `b51f791`; Property 8/8, render 7 suites/53 tests, full mobile/typecheck/root build PASS; CI `31404662388` all 7 jobs PASS | `57f46d4e29f0b29744855348bbfe212b22eb26dd` |
 | VNX-05C | `7e2b4ed4b17bca2d01f4c1ded8edd1d2965263eb` | COMPLETE at Stay component static/render/build/CI layers; full booking/device runtime `UNPROVEN` | No product delta; current pinned-all-bands/real-collapse Stay header adjudicated and protected by real mounting | Test `e85cd39`; Stay 7/7, render 8 suites/60 tests, full mobile/typecheck/root build PASS; CI `31406559372` all 7 jobs PASS | `7e2b4ed4b17bca2d01f4c1ded8edd1d2965263eb` |
 | VNX-05D | `a8036e67853ca00f097cbf2fc122d74e203fd4fc` | COMPLETE at Facilities component static/render/build/CI layers; combined section/device runtime `UNPROVEN` | Mounted protection at `4d28940`; final `2d39bc3` reconciles Facilities with canonical shared neutrals and corrects the pinned/scrolling contract comment; no routing delta | Facilities 8/8, neutral 4/4, render 9 suites/68 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31409307571` all 7 jobs PASS | `recovery/vnx-05-facilities-header-contracts` |
-| VNX-05E | VNX-05D documentation commit | PENDING | Materials identity/header independently; no combined-section rewrite | Renderer plus current 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | VNX-05D documentation commit |
-| VNX-06 | VNX-05 commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05 commit |
+| VNX-05E | `91eed368cf141396aa3f7d30b9a67691314c51b8` | COMPLETE at Materials component static/render/build/CI layers; combined section/device runtime `UNPROVEN` | No product delta; current split/collapse/tokenized Materials header adjudicated as strongest historical source and protected by real mounting | Materials 8/8, static contracts 18/18, render 10 suites/76 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31410714566` all 7 jobs PASS | `recovery/vnx-05-materials-header-contracts` |
+| VNX-05F | VNX-05E documentation commit | PENDING | Five-section combined integration certification; bounded repairs only after a reproduced failure, never a wholesale `SectionSearchApp` rewrite | Mounted loading/results/empty/error/facets/scroll/map-latch/section-isolation journeys; current 320–430 AR/EN RTL/LTR; root build | VNX-05E documentation commit |
+| VNX-06 | VNX-05F commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05F commit |
 | VNX-07 | VNX-06 commit | PENDING | Messenger offline/read/block/mute/realtime/typing/voice in separate capabilities | Unit, PostgreSQL, storage, render, device/network/provider, root build | VNX-06 commit |
 | VNX-08 | VNX-07 commit | PENDING | Four account journeys, Auth, KYC, and Profile | Role-policy matrix, PostgreSQL, live Clerk/KYC, device, root build | VNX-07 commit |
 | VNX-09 | VNX-08 commit | PENDING | Search and Discover capability recovery | Domain isolation, saved/recent/trending, render/navigation/runtime, root build | VNX-08 commit |
@@ -268,5 +269,33 @@ command, package/workspace, test type, result, and untested external gates.
   `require()` findings. They were not introduced or blindly rewritten; the
   lint debt is explicit in the capability report.
 - Combined `SectionSearchApp` loading/results/empty/error and taxonomy/Maps,
+  current 320–430 geometry, AR/EN/RTL/LTR, accessibility, Android/iOS native
+  animation, and physical-device journeys remain `UNPROVEN`.
+
+## VNX-05E Materials evidence
+
+- Base: `91eed368cf141396aa3f7d30b9a67691314c51b8`; test/protection
+  commit: `cc01e2e80c6f573b98c273f7ce91ced5eb686f36`; tree:
+  `fc3c9cea17476cde48e68e4f4d3c2ee2f7b1eef7`.
+- Remote freeze ref: `recovery/vnx-05-materials-header-contracts`.
+- No product source changed. `1bfa485` split the B-CORE header, moved only its
+  prose tagline into the scrolling slice, and wired real lockup collapse;
+  `e495e02` tokenized it. Current header blob `b088456` survived `a61c1e1`,
+  `11d8185`, the source baseline, and VNX-05E byte-identically.
+- Initial render registry census: **EXPECTED FAIL**, 3/6 because the Materials
+  suite did not exist.
+- Targeted test/registry ESLint: **PASS**, zero warnings; Materials renderer:
+  **8/8 PASS**; combined Materials/render/neutral static contracts: **18/18
+  PASS**; full render: **10 suites/76 tests PASS**; mobile typecheck/full chain
+  and root `npm run build`: **PASS**, including Expo 3,563 modules and Next
+  46/46 and 48/48 pages. Chain integrity: **242/242 PASS**.
+- GitHub Actions `31410714566` on exact SHA `cc01e2e` completed **SUCCESS**;
+  all seven jobs passed. PostgreSQL 16.14 migrate/replay completed in 437ms/7ms,
+  API 90 files/499 tests passed (1 file/3 tests skipped), and CI reran the 10/76
+  mobile renderer set.
+- Direct product-file ESLint still reports three inherited React Native image
+  `require()` findings. The product file was untouched; the lint debt is
+  explicit in the capability report.
+- Combined type/origin/commodity facets, loading/results/empty/error, Maps,
   current 320–430 geometry, AR/EN/RTL/LTR, accessibility, Android/iOS native
   animation, and physical-device journeys remain `UNPROVEN`.
