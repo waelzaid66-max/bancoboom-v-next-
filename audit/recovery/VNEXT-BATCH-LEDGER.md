@@ -11,7 +11,8 @@
 | VNX-OPS-01 | `e49299ca5f6097ebdffc40e7f73f2f82d01642f9` | COMPLETE for the reproduced parallel-export failure; final clean repeatability remains `UNPROVEN` | No product delta; serialize root workspace builds and guard the scheduling invariant | Repair `d6b42b5`; RED 241/242, GREEN 242/242; local full root build PASS; CI `31403501605` all 7 jobs PASS | `e49299ca5f6097ebdffc40e7f73f2f82d01642f9` |
 | VNX-05B | `57f46d4e29f0b29744855348bbfe212b22eb26dd` | COMPLETE at Property component static/render/build/CI layers; combined section/device runtime `UNPROVEN` | No product delta; corrected pinned-controls/collapsing-identity header adjudicated and protected by real mounting | Test `b51f791`; Property 8/8, render 7 suites/53 tests, full mobile/typecheck/root build PASS; CI `31404662388` all 7 jobs PASS | `57f46d4e29f0b29744855348bbfe212b22eb26dd` |
 | VNX-05C | `7e2b4ed4b17bca2d01f4c1ded8edd1d2965263eb` | COMPLETE at Stay component static/render/build/CI layers; full booking/device runtime `UNPROVEN` | No product delta; current pinned-all-bands/real-collapse Stay header adjudicated and protected by real mounting | Test `e85cd39`; Stay 7/7, render 8 suites/60 tests, full mobile/typecheck/root build PASS; CI `31406559372` all 7 jobs PASS | `7e2b4ed4b17bca2d01f4c1ded8edd1d2965263eb` |
-| VNX-05D–E | VNX-05C documentation commit | PENDING | Facilities and Materials independently | Renderer plus current 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | VNX-05C documentation commit |
+| VNX-05D | `a8036e67853ca00f097cbf2fc122d74e203fd4fc` | COMPLETE at Facilities component static/render/build/CI layers; combined section/device runtime `UNPROVEN` | Mounted protection at `4d28940`; final `2d39bc3` reconciles Facilities with canonical shared neutrals and corrects the pinned/scrolling contract comment; no routing delta | Facilities 8/8, neutral 4/4, render 9 suites/68 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31409307571` all 7 jobs PASS | `recovery/vnx-05-facilities-header-contracts` |
+| VNX-05E | VNX-05D documentation commit | PENDING | Materials identity/header independently; no combined-section rewrite | Renderer plus current 320/360/390/430, AR/EN, RTL/LTR, loading/results/empty/error, interaction/device, root build | VNX-05D documentation commit |
 | VNX-06 | VNX-05 commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05 commit |
 | VNX-07 | VNX-06 commit | PENDING | Messenger offline/read/block/mute/realtime/typing/voice in separate capabilities | Unit, PostgreSQL, storage, render, device/network/provider, root build | VNX-06 commit |
 | VNX-08 | VNX-07 commit | PENDING | Four account journeys, Auth, KYC, and Profile | Role-policy matrix, PostgreSQL, live Clerk/KYC, device, root build | VNX-07 commit |
@@ -237,3 +238,35 @@ command, package/workspace, test type, result, and untested external gates.
 - Complete `BookingStaysApp` loading/results/empty/error, API-backed taxonomy,
   booking/map, current 320–430 geometry, AR/EN/RTL/LTR, Android/iOS native
   animation, accessibility, and physical-device journeys remain `UNPROVEN`.
+
+## VNX-05D Facilities evidence
+
+- Base: `a8036e67853ca00f097cbf2fc122d74e203fd4fc`; test/protection
+  commit: `4d2894024119cd099ae5454ff1d9d1bef37384b3`; final product/reconciliation
+  commit: `2d39bc3417069cecbcbc0c8468fd3582062603e4`; final tree:
+  `d09ac7d3e0e2426dbddde342935095c854ea9b34`.
+- Remote freeze ref: `recovery/vnx-05-facilities-header-contracts`.
+- `ca190187` is the strongest historical behavior: it pins the live Facilities
+  type strip and reclaims the brand height `34 → 0`. Header blob `8193fdf`
+  survived `a61c1e1`, `11d8185`, and the source baseline byte-identically.
+- Initial render registry census: **EXPECTED FAIL**, 3/6 because the Facilities
+  suite did not exist. The first renderer passed 7/8; a test-only wrong accent
+  expectation was corrected without changing the product.
+- Expanding the historical neutral guard to all five headers produced an
+  **EXPECTED FAIL**, 3/4, on Facilities' handwritten `VOID`. Final `2d39bc3`
+  consumes `SECTION_NEUTRAL` and the five-header guard passes 4/4.
+- Targeted test/guard ESLint: **PASS**, zero warnings; Facilities renderer:
+  **8/8 PASS**; render meta-guard: **6/6 PASS**; full render: **9 suites/68
+  tests PASS**; mobile typecheck/full chain and root `npm run build`: **PASS**,
+  including Expo 3,563 modules and Next 46/46 and 48/48 pages. Chain integrity:
+  **242/242 PASS**.
+- GitHub Actions `31409307571` on exact SHA `2d39bc3` completed **SUCCESS**;
+  all seven jobs passed. PostgreSQL 16.14 migrate/replay completed in 449ms/6ms,
+  API 90 files/499 tests passed (1 file/3 tests skipped), and CI reran the 9/68
+  mobile renderer set.
+- Direct product-file ESLint still reports three inherited React Native image
+  `require()` findings. They were not introduced or blindly rewritten; the
+  lint debt is explicit in the capability report.
+- Combined `SectionSearchApp` loading/results/empty/error and taxonomy/Maps,
+  current 320–430 geometry, AR/EN/RTL/LTR, accessibility, Android/iOS native
+  animation, and physical-device journeys remain `UNPROVEN`.
