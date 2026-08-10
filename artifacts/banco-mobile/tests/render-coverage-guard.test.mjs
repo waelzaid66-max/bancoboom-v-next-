@@ -28,6 +28,13 @@ const RENDER_CRITICAL = [
     claim: "Property keeps browse controls pinned while only its identity lockup collapses",
   },
   {
+    source: "components/search/stays/StaysHomeHeader.tsx",
+    symbol: "StaysHomeHeader",
+    suite: "tests/render/StaysHomeHeader.render.test.tsx",
+    staticGuard: "tests/stay-honesty-guard.test.mjs",
+    claim: "Stay keeps identity and browse controls pinned while reclaiming measured header height",
+  },
+  {
     source: "components/search/SearchResultsSurface.tsx",
     symbol: "SearchResultsSurface",
     suite: "tests/render/SearchResultsSurface.render.test.tsx",
