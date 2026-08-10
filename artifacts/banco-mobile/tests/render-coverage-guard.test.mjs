@@ -21,6 +21,13 @@ const RENDER_CRITICAL = [
     claim: "the real Cars hero gives back its height while browse controls remain reachable",
   },
   {
+    source: "components/search/property/PropertyHomeHeader.tsx",
+    symbol: "PropertyHomeHeader",
+    suite: "tests/render/PropertyHomeHeader.render.test.tsx",
+    staticGuard: "tests/section-miniapp-guard.test.mjs",
+    claim: "Property keeps browse controls pinned while only its identity lockup collapses",
+  },
+  {
     source: "components/search/SearchResultsSurface.tsx",
     symbol: "SearchResultsSurface",
     suite: "tests/render/SearchResultsSurface.render.test.tsx",
