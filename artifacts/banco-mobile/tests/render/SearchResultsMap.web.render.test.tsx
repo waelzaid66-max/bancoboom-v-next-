@@ -137,15 +137,21 @@ const CRITERIA = {
   listingMode: "all",
 } as SearchCriteria;
 
-function mountMap() {
-  return render(
+function mapElement(criteria: SearchCriteria = CRITERIA) {
+  return (
     <SearchResultsMap
       items={[MAPPED_ITEM]}
-      criteria={CRITERIA}
+      criteria={criteria}
       onOpenListing={jest.fn()}
       onOpenListingId={jest.fn()}
       isSaved={() => false}
-    />,
+    />
+  );
+}
+
+function mountMap(criteria: SearchCriteria = CRITERIA) {
+  return render(
+    mapElement(criteria),
     {
       createNodeMock: (element) =>
         element.type === "iframe"
@@ -174,6 +180,10 @@ describe("SearchResultsMap web host", () => {
         removeEventListener: jest.fn(),
       },
     });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it("mounts the iframe host with shared map chrome and translated draw controls", () => {
@@ -376,5 +386,83 @@ describe("SearchResultsMap web host", () => {
     });
 
     expect(mockSetClusters).not.toHaveBeenCalled();
+  });
+
+  it("rejects an old-category response during the new category debounce", async () => {
+    jest.useFakeTimers();
+
+    type ClusterResponse = {
+      data: Array<{
+        lat: number;
+        lng: number;
+        count: number;
+        listing_id: string | null;
+      }>;
+    };
+    let resolveOld!: (value: ClusterResponse) => void;
+    let resolveCurrent!: (value: ClusterResponse) => void;
+    const oldResponse = new Promise<ClusterResponse>((resolve) => {
+      resolveOld = resolve;
+    });
+    const currentResponse = new Promise<ClusterResponse>((resolve) => {
+      resolveCurrent = resolve;
+    });
+    mockGetMapClusters
+      .mockImplementationOnce(() => oldResponse)
+      .mockImplementationOnce(() => currentResponse);
+
+    const view = mountMap();
+    await act(async () => {
+      mockMessageHandler?.({
+        data: JSON.stringify({
+          type: "viewport",
+          bounds: {
+            min_lat: 10,
+            max_lat: 20,
+            min_lng: 30,
+            max_lng: 40,
+          },
+          zoom: 7,
+        }),
+        source: mockIframeWindow,
+      } as unknown as MessageEvent);
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+    expect(mockGetMapClusters).toHaveBeenCalledTimes(1);
+
+    view.rerender(mapElement({ ...CRITERIA, category: "car" }));
+    mockSetClusters.mockClear();
+
+    await act(async () => {
+      resolveOld({
+        data: [{ lat: 15, lng: 35, count: 7, listing_id: "old-all" }],
+      });
+      await oldResponse;
+      await Promise.resolve();
+    });
+
+    expect(mockSetClusters).not.toHaveBeenCalled();
+    expect(mockOverlayProps.count).toBe(1);
+
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+    expect(mockGetMapClusters).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveCurrent({
+        data: [{ lat: 15, lng: 35, count: 2, listing_id: "current-cars" }],
+      });
+      await currentResponse;
+      await Promise.resolve();
+    });
+
+    expect(mockSetClusters).toHaveBeenCalledTimes(1);
+    expect(mockSetClusters).toHaveBeenCalledWith([
+      expect.objectContaining({ listing_id: "current-cars" }),
+    ]);
+    expect(mockOverlayProps.count).toBe(2);
   });
 });

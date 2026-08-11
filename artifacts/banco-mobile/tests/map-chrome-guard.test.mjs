@@ -202,6 +202,27 @@ test("a cache hit still invalidates every older viewport response", () => {
   }
 });
 
+test("a criteria transition invalidates the prior request before debouncing", () => {
+  for (const [name, src] of [
+    ["SearchResultsMap.tsx", nativeHost],
+    ["SearchResultsMap.web.tsx", webHost],
+  ]) {
+    const effectStart = src.indexOf("const sigChanged = prevSigRef.current !== sig");
+    const effectEnd = src.indexOf(
+      "// eslint-disable-next-line react-hooks/exhaustive-deps",
+      effectStart,
+    );
+    assert.ok(effectStart >= 0 && effectEnd > effectStart, `${name} criteria effect moved`);
+    const criteriaEffect = src.slice(effectStart, effectEnd);
+    const invalidate = criteriaEffect.indexOf("vpSeqRef.current++");
+    const schedule = criteriaEffect.indexOf("scheduleFetchClusters");
+    assert.ok(
+      invalidate >= 0 && schedule >= 0 && invalidate < schedule,
+      `${name} allows the previous criteria response to publish during debounce`,
+    );
+  }
+});
+
 test("both hosts consume the area bridge and expose the honest area count", () => {
   for (const [name, src] of [
     ["SearchResultsMap.tsx", nativeHost],

@@ -297,6 +297,9 @@ export function SearchResultsMap({
     const sigChanged = prevSigRef.current !== sig;
     prevSigRef.current = sig;
     if (sigChanged) return;
+    // The new request is intentionally debounced, but the old criteria's
+    // already-running request must stop being publishable immediately.
+    vpSeqRef.current++;
     if (lastViewportRef.current) {
       setServerTotal(null);
       clusterCacheRef.current.clear();
