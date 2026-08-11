@@ -14,8 +14,8 @@
 | VNX-05D | `a8036e67853ca00f097cbf2fc122d74e203fd4fc` | COMPLETE at Facilities component static/render/build/CI layers; combined section/device runtime `UNPROVEN` | Mounted protection at `4d28940`; final `2d39bc3` reconciles Facilities with canonical shared neutrals and corrects the pinned/scrolling contract comment; no routing delta | Facilities 8/8, neutral 4/4, render 9 suites/68 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31409307571` all 7 jobs PASS | `recovery/vnx-05-facilities-header-contracts` |
 | VNX-05E | `91eed368cf141396aa3f7d30b9a67691314c51b8` | COMPLETE at Materials component static/render/build/CI layers; combined section/device runtime `UNPROVEN` | No product delta; current split/collapse/tokenized Materials header adjudicated as strongest historical source and protected by real mounting | Materials 8/8, static contracts 18/18, render 10 suites/76 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31410714566` all 7 jobs PASS | `recovery/vnx-05-materials-header-contracts` |
 | VNX-05F | `43372e40892eaf3539e3798cc55bd69fbae7693f` | COMPLETE at bounded static/render/build/CI layers; live facets, responsive and device runtime `UNPROVEN` | No product delta; mounted unchanged `SectionSearchApp` and froze four-catalogue header/list-slice composition, representative loading/error/empty states, category/engine locks, and map latch | Test `be172d1`; host 6/6, static 98/98, render 11 suites/82 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31451674276` all 7 jobs PASS | `recovery/vnx-05-section-host-contracts` |
-| VNX-05G | VNX-05F documentation commit | PENDING | No presumed product delta; mount and adjudicate the separate `BookingStaysApp` host without replacing it wholesale | Booking loading/results/empty/error, locked real-estate/rent state, list/map, navigation, full local gates, exact-SHA CI | VNX-05F documentation commit |
-| VNX-06 | VNX-05G commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05G commit |
+| VNX-05G | `12cc8a4c8ee02f2392842d209606b02f8e30bfa6` | COMPLETE at bounded static/render/build/CI layers; live booking/geometry/provider/device runtime `UNPROVEN` | No product delta; mounted and adjudicated the unchanged independent `BookingStaysApp` parent without replacing it wholesale | Test `a7aa3a6`; host 7/7, static 102/102, render 12 suites/89 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31452618345` all 7 jobs PASS | `recovery/vnx-05-booking-stays-contracts` |
+| VNX-06 | VNX-05G documentation commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05G documentation commit |
 | VNX-07 | VNX-06 commit | PENDING | Messenger offline/read/block/mute/realtime/typing/voice in separate capabilities | Unit, PostgreSQL, storage, render, device/network/provider, root build | VNX-06 commit |
 | VNX-08 | VNX-07 commit | PENDING | Four account journeys, Auth, KYC, and Profile | Role-policy matrix, PostgreSQL, live Clerk/KYC, device, root build | VNX-07 commit |
 | VNX-09 | VNX-08 commit | PENDING | Search and Discover capability recovery | Domain isolation, saved/recent/trending, render/navigation/runtime, root build | VNX-08 commit |
@@ -325,6 +325,41 @@ command, package/workspace, test type, result, and untested external gates.
   Facilities empty/recovery, category/engine hard locks, and map-query latch.
   It does not simulate live API/provider/device behavior.
 - Stay is not silently counted as a fifth `SectionSearchApp` branch. Its separate
-  `BookingStaysApp` parent is VNX-05G. Live facets/pagination/cancellation, every
-  domain/state, current 320–430 geometry, AR/EN/RTL/LTR, accessibility,
-  Android/iOS, Maps provider, and physical-device journeys remain `UNPROVEN`.
+  `BookingStaysApp` parent is protected independently by VNX-05G at `a7aa3a6`.
+  Live facets/pagination/cancellation, every domain/state, current 320–430
+  geometry, AR/EN/RTL/LTR, accessibility, Android/iOS, Maps provider, and
+  physical-device journeys remain `UNPROVEN`.
+
+## VNX-05G Booking Stays host evidence
+
+- Base: `12cc8a4c8ee02f2392842d209606b02f8e30bfa6`; test/protection
+  commit: `a7aa3a6824f1d16a570dcd1c823701caafe386df`; tree:
+  `d3170b99e3a1516b0e302dca675e3102328db394`.
+- Remote freeze ref: `recovery/vnx-05-booking-stays-contracts`.
+- No product source changed. `BookingStaysApp.tsx` remains blob `42bdfb8`.
+  The unsafe `80b1a17` split produced blob `6cb4e267`; `fdbb4ff` restored
+  `259c929d`; `d098047` produced the current pinned-overlay/shared-scroll
+  correction. Current source is `PRESERVED`; the historical split was `HIDDEN`
+  and reverted.
+- Initial render-registry census: **EXPECTED FAIL**, 3/6 because the declared
+  Stay-parent suite did not exist. A first mobile typecheck then failed only on
+  two test-mock `unknown` props; narrowing those mock values to strings made the
+  focused and full gates pass without touching product source.
+- Targeted test/registry ESLint: **PASS**, zero warnings; host renderer:
+  **7/7 PASS**; combined host/render static contracts: **102/102 PASS**; full
+  render: **12 suites/89 tests PASS**; mobile typecheck/full chain and root
+  `npm run build`: **PASS**, including Expo 3,563 modules and Next 46/46 and
+  48/48 pages. Chain integrity: **242/242 PASS**.
+- GitHub Actions `31452618345` on exact SHA `a7aa3a6` completed **SUCCESS**;
+  all seven jobs passed. PostgreSQL 16.14 migrate/replay completed in 508ms/7ms,
+  API 90 files/499 tests passed (1 file/3 tests skipped), CI reran the 12/89
+  mobile renderer set, and dependency-security/production static gates passed.
+- The renderer proves pinned identity/results/mini-nav through loading, shared
+  scroll ownership, identity/retry on error, honest empty recovery, hard rental
+  locks, Stay-card detail routing/cache, map-query latch/unmappable filtering,
+  and dirty-back reset. It does not simulate live API, booking persistence,
+  Maps provider, responsive geometry, accessibility, or device behavior.
+- Live facets/pagination/cancellation/autocomplete/market/near-me/offline,
+  booking DB/API/host lifecycle, current 320–430 geometry, AR/EN/RTL/LTR,
+  accessibility, Android/iOS, Maps provider, and physical-device journeys remain
+  `UNPROVEN`.

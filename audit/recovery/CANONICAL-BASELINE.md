@@ -22,6 +22,7 @@
 | Facilities header contract ref | `recovery/vnx-05-facilities-header-contracts` → `2d39bc3417069cecbcbc0c8468fd3582062603e4` |
 | Materials header contract ref | `recovery/vnx-05-materials-header-contracts` → `cc01e2e80c6f573b98c273f7ce91ced5eb686f36` |
 | Section host contract ref | `recovery/vnx-05-section-host-contracts` → `be172d12ad614432bae67745dce12e45e0c75f36` |
+| Booking Stays host contract ref | `recovery/vnx-05-booking-stays-contracts` → `a7aa3a6824f1d16a570dcd1c823701caafe386df` |
 
 The target is an assembly repository with the complete source ancestry, not a
 manual source dump. The `bancoboomstor` worktree remains read-only. No target
@@ -46,6 +47,7 @@ manual source dump. The `bancoboomstor` worktree remains read-only. No target
 | VNX-05D Facilities protection/reconciliation | `2d39bc3` | Mounted pinned identity/type controls and real brand collapse at `4d28940`; reconciled Facilities with the shared five-header neutral palette; no section-routing delta | Local Facilities 8/8, neutral 4/4, render 68/68, full mobile/typecheck/root build and chain 242/242 PASS; CI `31409307571` all 7 jobs PASS; combined section/device runtime remains `UNPROVEN` |
 | VNX-05E Materials protection | `cc01e2e` | Mounted pinned B-CORE identity/search, tagline-only scrolling slice, real lockup/elevation collapse, action/search state, axis non-duplication, and RTL direction; no product delta | Local Materials 8/8, static contracts 18/18, render 76/76, full mobile/typecheck/root build and chain 242/242 PASS; CI `31410714566` all 7 jobs PASS; combined section/device runtime remains `UNPROVEN` |
 | VNX-05F section-host protection | `be172d1` | Mounted the unchanged conflict-crossed parent and froze four-catalogue header/list-slice composition, representative loading/error/empty states, category/engine locks, and map latch; no product delta | Local host 6/6, static contracts 98/98, render 82/82, full mobile/typecheck/root build and chain 242/242 PASS; CI `31451674276` all 7 jobs PASS; Stay parent, live facets, responsive/device/runtime remain `UNPROVEN` |
+| VNX-05G Booking Stays host protection | `a7aa3a6` | Mounted the unchanged independent Stay parent and froze pinned identity/results composition, loading/error/empty recovery, rental locks, Stay-card routing, dirty-back reset, and map latch; no product delta | Local host 7/7, static contracts 102/102, render 89/89, full mobile/typecheck/root build and chain 242/242 PASS; CI `31452618345` all 7 jobs PASS; live booking/API/Maps, responsive/device/runtime remain `UNPROVEN` |
 
 VNX-03 is frozen with an independent remote recovery ref and PostgreSQL-scoped
 runtime evidence. It does not authorize later Messenger capabilities or a
@@ -112,9 +114,9 @@ offline/realtime/typing/read/block/mute/voice until Phases 1–3 are adjudicated
 - Target `main`, production deploy, or production-ready claim: **NO-GO**.
 - PostgreSQL 16 migration replay and API journeys are verified by CI run
   `31396133572` on `6af3413`; this is not live/staging database certification.
-- VNX-05A–F freeze the five standalone headers and the bounded four-catalogue
-  `SectionSearchApp` host composition only at source/static/render/build/CI
-  layers. The separate `BookingStaysApp` parent, live facets/state journeys,
+- VNX-05A–G freeze all five standalone headers, the bounded four-catalogue
+  `SectionSearchApp` host, and the separate `BookingStaysApp` parent only at
+  source/static/render/build/CI layers. Live facets, booking/API/Maps journeys,
   current responsive/device certification, and the complete production program
   remain open.
 - Live PostgreSQL, Clerk, storage providers, Paymob, Docker/Compose/Coolify,
