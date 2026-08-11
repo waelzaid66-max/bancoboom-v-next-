@@ -10,7 +10,7 @@ recorded here or in its linked capability ledger.
 | Field | Current value |
 |---|---|
 | Canonical assembly branch | `canonical/vnext-assembly` |
-| Last protected product capability SHA | Materials contract `cc01e2e80c6f573b98c273f7ce91ced5eb686f36` |
+| Last protected capability SHA | Section host contract `be172d12ad614432bae67745dce12e45e0c75f36` (test-only; product source unchanged) |
 | Last build-control SHA | root serialization `d6b42b5542837ae502febc3a7425efc68241b4ac` |
 | Source ancestry | `bancoboomstor@a3db5bd8c3edd060d35078aefeec709297abbad9` |
 | Assembly status | `GO`, one reversible micro-batch at a time |
@@ -25,7 +25,7 @@ cannot be combined into a production certificate.
 | Program | Required capability closure | Minimum exact-SHA exit evidence | Current position |
 |---|---|---|---|
 | Shared mobile shell | Routes, five-tab escape paths, results/overlay ownership, state retention, safe-area authority | Static + RNTL + 320/360/390/430 + AR/EN + RTL/LTR + Android/iOS device journeys | Shared source/render `TESTED`; device `UNPROVEN` |
-| Five marketplace sections | Cars, Property, Stay, Facilities, Materials identities, filters, taxonomy, loading/results/empty/error, scroll/collapse | Independent lineage decision, renderer, screenshot geometry, interactions, API-backed device journey per section | All five standalone headers `TESTED`; Facilities palette reconciled; combined section/booking, current geometry, and device journeys open |
+| Five marketplace sections | Cars, Property, Stay, Facilities, Materials identities, filters, taxonomy, loading/results/empty/error, scroll/collapse | Independent lineage decision, renderer, screenshot geometry, interactions, API-backed device journey per section | All five standalone headers plus bounded four-catalogue host composition `TESTED`; separate Stay host, live facets/all states, current geometry, and device journeys open |
 | Maps | List/map sync, locate, clusters, draw polygon, honest count, pin picker, provider bridge, bottom clearance | Unit + generated-page parse + web browser + Android/iOS WebView + live provider + large-result journey | Source/static `TESTED`; provider/device `UNPROVEN` |
 | Messenger | Send/idempotency, outbox, unread/read cursor, retry/offline, block/mute, media, notifications, deep links, presence, optional realtime/typing/voice decisions | PostgreSQL concurrency + API + render + two-account Android/iOS + offline/reconnect + push/email/storage provider journeys | Send/outbox PostgreSQL-scoped `RUNTIME_VERIFIED`; remaining capabilities open |
 | Accounts/Auth/Profile | Personal, dealer, company, financial-institution journeys; MFA/social/reset/delete; tenant/role transitions | Policy matrix + PostgreSQL + live Clerk tenant + Android/iOS/web journeys | Source hardening preserved; live journeys `UNPROVEN` |
@@ -66,7 +66,7 @@ cannot be combined into a production certificate.
 |---|---|---|
 | 0 | Git preservation, canonical baseline, ledgers, guard-chain repair | Complete; immutable recovery refs retained |
 | 1 | Shared shell/navigation/results architecture | Complete at render/CI layer; device certification deferred to final device matrix |
-| 2 | Cars, Property, Stay, Facilities, Materials | VNX-05A–E standalone headers complete; next certify current combined section/booking states without wholesale `SectionSearchApp` replacement, then current width/device matrices |
+| 2 | Cars, Property, Stay, Facilities, Materials | VNX-05A–F freeze standalone headers plus bounded four-catalogue host composition; next VNX-05G mounts `BookingStaysApp`, then live state/facet and current width/device matrices without wholesale parent replacement |
 | 3 | Shared Maps engine and five domain integrations | No provider rewrite without reproduced defect and ADR |
 | 4 | Remaining Messenger integrity and product capabilities | DB/security first; transport changes require ADR |
 | 5 | Accounts/Auth/KYC/Profile | Four journeys and negative permission matrix |

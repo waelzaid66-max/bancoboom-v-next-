@@ -13,8 +13,9 @@
 | VNX-05C | `7e2b4ed4b17bca2d01f4c1ded8edd1d2965263eb` | COMPLETE at Stay component static/render/build/CI layers; full booking/device runtime `UNPROVEN` | No product delta; current pinned-all-bands/real-collapse Stay header adjudicated and protected by real mounting | Test `e85cd39`; Stay 7/7, render 8 suites/60 tests, full mobile/typecheck/root build PASS; CI `31406559372` all 7 jobs PASS | `7e2b4ed4b17bca2d01f4c1ded8edd1d2965263eb` |
 | VNX-05D | `a8036e67853ca00f097cbf2fc122d74e203fd4fc` | COMPLETE at Facilities component static/render/build/CI layers; combined section/device runtime `UNPROVEN` | Mounted protection at `4d28940`; final `2d39bc3` reconciles Facilities with canonical shared neutrals and corrects the pinned/scrolling contract comment; no routing delta | Facilities 8/8, neutral 4/4, render 9 suites/68 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31409307571` all 7 jobs PASS | `recovery/vnx-05-facilities-header-contracts` |
 | VNX-05E | `91eed368cf141396aa3f7d30b9a67691314c51b8` | COMPLETE at Materials component static/render/build/CI layers; combined section/device runtime `UNPROVEN` | No product delta; current split/collapse/tokenized Materials header adjudicated as strongest historical source and protected by real mounting | Materials 8/8, static contracts 18/18, render 10 suites/76 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31410714566` all 7 jobs PASS | `recovery/vnx-05-materials-header-contracts` |
-| VNX-05F | VNX-05E documentation commit | PENDING | Five-section combined integration certification; bounded repairs only after a reproduced failure, never a wholesale `SectionSearchApp` rewrite | Mounted loading/results/empty/error/facets/scroll/map-latch/section-isolation journeys; current 320–430 AR/EN RTL/LTR; root build | VNX-05E documentation commit |
-| VNX-06 | VNX-05F commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05F commit |
+| VNX-05F | `43372e40892eaf3539e3798cc55bd69fbae7693f` | COMPLETE at bounded static/render/build/CI layers; live facets, responsive and device runtime `UNPROVEN` | No product delta; mounted unchanged `SectionSearchApp` and froze four-catalogue header/list-slice composition, representative loading/error/empty states, category/engine locks, and map latch | Test `be172d1`; host 6/6, static 98/98, render 11 suites/82 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31451674276` all 7 jobs PASS | `recovery/vnx-05-section-host-contracts` |
+| VNX-05G | VNX-05F documentation commit | PENDING | No presumed product delta; mount and adjudicate the separate `BookingStaysApp` host without replacing it wholesale | Booking loading/results/empty/error, locked real-estate/rent state, list/map, navigation, full local gates, exact-SHA CI | VNX-05F documentation commit |
+| VNX-06 | VNX-05G commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05G commit |
 | VNX-07 | VNX-06 commit | PENDING | Messenger offline/read/block/mute/realtime/typing/voice in separate capabilities | Unit, PostgreSQL, storage, render, device/network/provider, root build | VNX-06 commit |
 | VNX-08 | VNX-07 commit | PENDING | Four account journeys, Auth, KYC, and Profile | Role-policy matrix, PostgreSQL, live Clerk/KYC, device, root build | VNX-07 commit |
 | VNX-09 | VNX-08 commit | PENDING | Search and Discover capability recovery | Domain isolation, saved/recent/trending, render/navigation/runtime, root build | VNX-08 commit |
@@ -299,3 +300,31 @@ command, package/workspace, test type, result, and untested external gates.
 - Combined type/origin/commodity facets, loading/results/empty/error, Maps,
   current 320–430 geometry, AR/EN/RTL/LTR, accessibility, Android/iOS native
   animation, and physical-device journeys remain `UNPROVEN`.
+
+## VNX-05F Section host evidence
+
+- Base: `43372e40892eaf3539e3798cc55bd69fbae7693f`; test/protection
+  commit: `be172d12ad614432bae67745dce12e45e0c75f36`; tree:
+  `3ed0b6947513001ad4fd3a8fa1556d84fcc14a0e`.
+- Remote freeze ref: `recovery/vnx-05-section-host-contracts`.
+- No product source changed. `SectionSearchApp.tsx` remains blob `bd0f46e`.
+  `a61c1e1` selected complete second-parent blob `f224420`; `11d8185` selected
+  complete second-parent blob `bd0f46e`, so the historical file remains
+  `CONFLICT_DAMAGED` even though the bounded current contracts are tested.
+- Targeted test/registry ESLint: **PASS**, zero warnings; host renderer:
+  **6/6 PASS**; combined host/render static contracts: **98/98 PASS**; full
+  render: **11 suites/82 tests PASS**; mobile typecheck/full chain and root
+  `npm run build`: **PASS**, including Expo 3,563 modules and Next 46/46 and
+  48/48 pages. Chain integrity: **242/242 PASS**.
+- GitHub Actions `31451674276` on exact SHA `be172d1` completed **SUCCESS**;
+  all seven jobs passed. PostgreSQL 16.14 migrate/replay completed in 459ms/7ms,
+  API 90 files/499 tests passed (1 file/3 tests skipped), CI reran the 11/82
+  mobile renderer set, and dependency-security/production static gates passed.
+- The renderer proves Cars/Property pinned composition, Facilities/Materials
+  pinned plus scrolling slices, Materials loading, Property error/retry,
+  Facilities empty/recovery, category/engine hard locks, and map-query latch.
+  It does not simulate live API/provider/device behavior.
+- Stay is not silently counted as a fifth `SectionSearchApp` branch. Its separate
+  `BookingStaysApp` parent is VNX-05G. Live facets/pagination/cancellation, every
+  domain/state, current 320–430 geometry, AR/EN/RTL/LTR, accessibility,
+  Android/iOS, Maps provider, and physical-device journeys remain `UNPROVEN`.
