@@ -164,7 +164,7 @@ test("an area cannot be committed from fewer than three corners", () => {
   );
 });
 
-test("every cluster injection goes through the one clipping point", () => {
+test("every cluster injection goes through one clipping point on both hosts", () => {
   // The bug this prevents: applying the area on the fetch path and forgetting
   // the cache path, so the filter works until the buyer pans back.
   const injections = nativeHost.match(/BANCO_MAP\.setClusters/g) ?? [];
@@ -174,16 +174,77 @@ test("every cluster injection goes through the one clipping point", () => {
     "clusters reach the map from exactly one place, so the clip cannot be skipped",
   );
   assert.match(nativeHost, /filterByArea\(clusters, shape\)/);
+
+  const webInjections =
+    webHost.match(/injectClusters\(iframeRef\.current/g) ?? [];
+  assert.equal(
+    webInjections.length,
+    1,
+    "web cached and fresh clusters must meet at one clipping point",
+  );
+  assert.match(webHost, /filterByArea\(clusters, shape\)/);
+  assert.match(webHost, /areaRef\.current/);
+});
+
+test("a cache hit still invalidates every older viewport response", () => {
+  for (const [name, src] of [
+    ["SearchResultsMap.tsx", nativeHost],
+    ["SearchResultsMap.web.tsx", webHost],
+  ]) {
+    const fetchStart = src.indexOf("const fetchClusters = useCallback");
+    const sequence = src.indexOf("++vpSeqRef.current", fetchStart);
+    const cacheLookup = src.indexOf("clusterCacheRef.current.get", fetchStart);
+    assert.ok(fetchStart >= 0 && sequence >= 0 && cacheLookup >= 0);
+    assert.ok(
+      sequence < cacheLookup,
+      `${name} lets an older in-flight response overwrite a newer cache hit`,
+    );
+  }
+});
+
+test("both hosts consume the area bridge and expose the honest area count", () => {
+  for (const [name, src] of [
+    ["SearchResultsMap.tsx", nativeHost],
+    ["SearchResultsMap.web.tsx", webHost],
+  ]) {
+    assert.match(src, /msg\.type === "area"/, `${name} ignores drawn areas`);
+    assert.match(src, /isUsableArea\(msg\.points\)/, `${name} accepts bad shapes`);
+    assert.match(src, /areaBounds\(next\)/, `${name} never queries the area box`);
+    assert.match(src, /areaCount=\{areaTotal\}/, `${name} hides area-count honesty`);
+  }
+});
+
+test("an area-box query never overwrites the real visible viewport", () => {
+  for (const [name, src] of [
+    ["SearchResultsMap.tsx", nativeHost],
+    ["SearchResultsMap.web.tsx", webHost],
+  ]) {
+    const areaBranch =
+      src.match(
+        /else if \(msg\.type === "area"\) \{[\s\S]*?\n\s*\} else if \(msg\.type === "draw_mode"\)/,
+      )?.[0] ?? "";
+    assert.ok(areaBranch, `${name} area bridge moved — update this guard`);
+    assert.doesNotMatch(
+      areaBranch,
+      /lastViewportRef\.current\s*=/,
+      `${name} must clear back to the map viewport, not the old area box`,
+    );
+  }
 });
 
 test("the drawn area survives a criteria change without going stale", () => {
   // fetchClusters is rebuilt from criteria; a closed-over area would filter the
   // next response against a shape the buyer already cleared.
-  assert.match(
-    nativeHost,
-    /areaRef\.current/,
-    "the area is read from a ref at publish time, not captured in a callback",
-  );
+  for (const [name, src] of [
+    ["SearchResultsMap.tsx", nativeHost],
+    ["SearchResultsMap.web.tsx", webHost],
+  ]) {
+    assert.match(
+      src,
+      /areaRef\.current/,
+      `${name} must read the area from a ref at publish time`,
+    );
+  }
 });
 
 test("draw controls are inline SVG, never an icon font", () => {

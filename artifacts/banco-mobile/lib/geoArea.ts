@@ -16,7 +16,7 @@
 
 export type GeoPoint = { lat: number; lng: number };
 
-/** A drawn area. Never fewer than three distinct corners — see `isUsableArea`. */
+/** A drawn area. Never fewer than three non-degenerate corners — see `isUsableArea`. */
 export type GeoArea = GeoPoint[];
 
 /** The box `GET /v1/search/map` actually understands. */
@@ -29,6 +29,11 @@ export type GeoBounds = {
 
 /** A shape with under three corners encloses nothing, so it is not a filter. */
 export const MIN_AREA_POINTS = 3;
+
+// Twice the polygon area in degree² must clear floating-point dust. At Cairo's
+// latitude this rejects a sub-metre accidental line while remaining far below
+// any area a finger can deliberately draw at the supported map zooms.
+const MIN_DOUBLE_AREA = 1e-12;
 
 function isFiniteLatLng(p: GeoPoint | undefined): p is GeoPoint {
   return (
@@ -45,17 +50,21 @@ function isFiniteLatLng(p: GeoPoint | undefined): p is GeoPoint {
 /**
  * Is this shape something we can actually search with?
  *
- * Three finite corners minimum, and they must not all be the same point — a
- * user who taps three times in one spot has drawn nothing, and treating that
- * as an area would silently return zero results and look like a broken filter.
+ * Three finite corners minimum, and the shoelace area must be non-zero. Merely
+ * asking whether one point differs from the first accepts A-B-A and three
+ * collinear taps; neither encloses anything, and treating either as an area
+ * silently returns zero results and looks like a broken filter.
  */
 export function isUsableArea(area: unknown): area is GeoArea {
   if (!Array.isArray(area) || area.length < MIN_AREA_POINTS) return false;
   if (!area.every(isFiniteLatLng)) return false;
-  const first = area[0] as GeoPoint;
-  return area.some(
-    (p: GeoPoint) => p.lat !== first.lat || p.lng !== first.lng,
-  );
+  let doubleArea = 0;
+  for (let i = 0, j = area.length - 1; i < area.length; j = i++) {
+    const a = area[j] as GeoPoint;
+    const b = area[i] as GeoPoint;
+    doubleArea += a.lng * b.lat - b.lng * a.lat;
+  }
+  return Math.abs(doubleArea) > MIN_DOUBLE_AREA;
 }
 
 /** The tightest box containing the shape — what the server gets asked for. */

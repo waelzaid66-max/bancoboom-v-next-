@@ -70,6 +70,13 @@ const RENDER_CRITICAL = [
     claim: "blocking overlays preserve the mounted results surface and its scroll contract",
   },
   {
+    source: "components/search/SearchResultsMap.web.tsx",
+    symbol: "SearchResultsMap",
+    suite: "tests/render/SearchResultsMap.web.render.test.tsx",
+    staticGuard: "tests/map-chrome-guard.test.mjs",
+    claim: "the web map host consumes draw-area messages and reports only its honestly clipped result set",
+  },
+  {
     source: "components/MiniAppBottomNav.tsx",
     symbol: "MiniAppBottomNav",
     suite: "tests/render/MiniAppBottomNav.render.test.tsx",

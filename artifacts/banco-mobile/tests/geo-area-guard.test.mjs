@@ -50,6 +50,27 @@ test("a shape needs three distinct corners to be a filter at all", () => {
   assert.equal(mod.isUsableArea(SQUARE), true);
 });
 
+test("a draw with repeated or collinear corners has no searchable area", () => {
+  assert.equal(
+    mod.isUsableArea([
+      { lat: 0, lng: 0 },
+      { lat: 1, lng: 1 },
+      { lat: 0, lng: 0 },
+    ]),
+    false,
+    "two unique points do not enclose an area",
+  );
+  assert.equal(
+    mod.isUsableArea([
+      { lat: 0, lng: 0 },
+      { lat: 1, lng: 1 },
+      { lat: 2, lng: 2 },
+    ]),
+    false,
+    "three distinct but collinear points do not enclose an area",
+  );
+});
+
 test("nonsense coordinates are refused, not silently plotted", () => {
   const bad = [
     { lat: NaN, lng: 0 },

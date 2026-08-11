@@ -9,6 +9,13 @@ import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
 import { miniAppNavClearance } from "@/components/MiniAppBottomNav";
 import {
+  areaBounds,
+  areaCount,
+  filterByArea,
+  isUsableArea,
+  type GeoArea,
+} from "@/lib/geoArea";
+import {
   buildMapClusterParams,
   type MapViewport,
 } from "@/lib/searchParams";
@@ -71,6 +78,11 @@ export function SearchResultsMap({
   const { t, isRTL } = useI18n();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [serverTotal, setServerTotal] = useState<number | null>(null);
+  const areaRef = useRef<GeoArea | null>(null);
+  const [areaTotal, setAreaTotal] = useState<{
+    total: number;
+    exact: boolean;
+  } | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const markers = useMemo(() => feedItemsToMarkers(items), [items]);
@@ -154,17 +166,28 @@ export function SearchResultsMap({
     vpSeqRef.current++;
   }, [sig]);
 
+  /** Cached and fresh responses meet here, so neither can bypass area clipping. */
+  const publish = useCallback(
+    (clusters: MapClusterMarker[], total: number) => {
+      const shape = areaRef.current;
+      const shown = filterByArea(clusters, shape);
+      setServerTotal(total);
+      setAreaTotal(shape ? areaCount(clusters, shape) : null);
+      injectClusters(iframeRef.current, shown);
+    },
+    [],
+  );
+
   const fetchClusters = useCallback(
     async (viewport: MapViewport) => {
+      const seq = ++vpSeqRef.current;
       const cacheKey = clusterCacheKey(criteriaSig, viewport);
       const cached = clusterCacheRef.current.get(cacheKey);
       if (cached) {
-        setServerTotal(cached.total);
-        injectClusters(iframeRef.current, cached.clusters);
+        publish(cached.clusters, cached.total);
         return;
       }
 
-      const seq = ++vpSeqRef.current;
       try {
         const res = await getMapClusters(buildMapClusterParams(criteria, viewport));
         if (seq !== vpSeqRef.current) return;
@@ -206,13 +229,12 @@ export function SearchResultsMap({
           const oldest = cache.keys().next().value;
           if (oldest !== undefined) cache.delete(oldest);
         }
-        setServerTotal(total);
-        injectClusters(iframeRef.current, enriched);
+        publish(enriched, total);
       } catch {
         // Leave current markers; map degrades to the loaded page.
       }
     },
-    [criteria, criteriaSig],
+    [criteria, criteriaSig, publish],
   );
 
   const scheduleFetchClusters = useCallback(
@@ -234,7 +256,19 @@ export function SearchResultsMap({
     if (lastViewportRef.current) {
       setServerTotal(null);
       clusterCacheRef.current.clear();
-      scheduleFetchClusters(lastViewportRef.current);
+      const shape = areaRef.current;
+      if (shape) {
+        const b = areaBounds(shape);
+        scheduleFetchClusters({
+          min_lat: b.south,
+          max_lat: b.north,
+          min_lng: b.west,
+          max_lng: b.east,
+          zoom: lastViewportRef.current.zoom,
+        });
+      } else {
+        scheduleFetchClusters(lastViewportRef.current);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig, criteriaSig]);
@@ -248,6 +282,27 @@ export function SearchResultsMap({
           const vp = { ...msg.bounds, zoom: msg.zoom };
           lastViewportRef.current = vp;
           scheduleFetchClusters(vp);
+        } else if (msg.type === "area") {
+          const next = isUsableArea(msg.points) ? (msg.points as GeoArea) : null;
+          areaRef.current = next;
+          if (next) {
+            const b = areaBounds(next);
+            void fetchClusters({
+              min_lat: b.south,
+              max_lat: b.north,
+              min_lng: b.west,
+              max_lng: b.east,
+              zoom: lastViewportRef.current?.zoom ?? 10,
+            });
+          } else {
+            setAreaTotal(null);
+            if (lastViewportRef.current) {
+              void fetchClusters(lastViewportRef.current);
+            }
+          }
+        } else if (msg.type === "draw_mode") {
+          // The generated page owns draw-button state; handling this message
+          // explicitly keeps the bridge exhaustive without duplicating chrome.
         } else if (msg.type === "select" && typeof msg.id === "string") {
           const hit = itemsRef.current.find((i) => i.id === msg.id);
           if (hit) setSelectedId(msg.id);
@@ -280,7 +335,7 @@ export function SearchResultsMap({
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [scheduleFetchClusters, onOpenListingId, t]);
+  }, [scheduleFetchClusters, fetchClusters, onOpenListingId, t]);
 
   const selected = useMemo(
     () => items.find((item) => item.id === selectedId) ?? null,
@@ -300,6 +355,7 @@ export function SearchResultsMap({
       />
       <MapOverlayChrome
         count={serverTotal ?? markers.length}
+        areaCount={areaTotal}
         selected={selected}
         onClose={() => setSelectedId(null)}
         onOpenListing={onOpenListing}

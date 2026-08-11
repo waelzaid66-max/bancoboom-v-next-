@@ -215,6 +215,7 @@ export function SearchResultsMap({
 
   const fetchClusters = useCallback(
     async (viewport: MapViewport) => {
+      const seq = ++vpSeqRef.current;
       const cacheKey = clusterCacheKey(criteriaSig, viewport);
       const cached = clusterCacheRef.current.get(cacheKey);
       if (cached) {
@@ -222,7 +223,6 @@ export function SearchResultsMap({
         return;
       }
 
-      const seq = ++vpSeqRef.current;
       try {
         const res = await getMapClusters(buildMapClusterParams(criteria, viewport));
         if (seq !== vpSeqRef.current) return;
@@ -300,7 +300,19 @@ export function SearchResultsMap({
     if (lastViewportRef.current) {
       setServerTotal(null);
       clusterCacheRef.current.clear();
-      scheduleFetchClusters(lastViewportRef.current);
+      const shape = areaRef.current;
+      if (shape) {
+        const b = areaBounds(shape);
+        scheduleFetchClusters({
+          min_lat: b.south,
+          max_lat: b.north,
+          min_lng: b.west,
+          max_lng: b.east,
+          zoom: lastViewportRef.current.zoom,
+        });
+      } else {
+        scheduleFetchClusters(lastViewportRef.current);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig, criteriaSig]);
@@ -355,7 +367,6 @@ export function SearchResultsMap({
               max_lng: b.east,
               zoom: lastViewportRef.current?.zoom ?? 10,
             };
-            lastViewportRef.current = vp;
             void fetchClusters(vp);
           } else {
             setAreaTotal(null);
