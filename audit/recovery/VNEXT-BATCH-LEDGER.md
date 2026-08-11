@@ -15,8 +15,9 @@
 | VNX-05E | `91eed368cf141396aa3f7d30b9a67691314c51b8` | COMPLETE at Materials component static/render/build/CI layers; combined section/device runtime `UNPROVEN` | No product delta; current split/collapse/tokenized Materials header adjudicated as strongest historical source and protected by real mounting | Materials 8/8, static contracts 18/18, render 10 suites/76 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31410714566` all 7 jobs PASS | `recovery/vnx-05-materials-header-contracts` |
 | VNX-05F | `43372e40892eaf3539e3798cc55bd69fbae7693f` | COMPLETE at bounded static/render/build/CI layers; live facets, responsive and device runtime `UNPROVEN` | No product delta; mounted unchanged `SectionSearchApp` and froze four-catalogue header/list-slice composition, representative loading/error/empty states, category/engine locks, and map latch | Test `be172d1`; host 6/6, static 98/98, render 11 suites/82 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31451674276` all 7 jobs PASS | `recovery/vnx-05-section-host-contracts` |
 | VNX-05G | `12cc8a4c8ee02f2392842d209606b02f8e30bfa6` | COMPLETE at bounded static/render/build/CI layers; live booking/geometry/provider/device runtime `UNPROVEN` | No product delta; mounted and adjudicated the unchanged independent `BookingStaysApp` parent without replacing it wholesale | Test `a7aa3a6`; host 7/7, static 102/102, render 12 suites/89 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31452618345` all 7 jobs PASS | `recovery/vnx-05-booking-stays-contracts` |
-| VNX-06 | VNX-05G documentation commit | PENDING | Shared Maps engine plus domain integrations | Web/native routes, map/list honesty, provider/device checks, root build | VNX-05G documentation commit |
-| VNX-07 | VNX-06 commit | PENDING | Messenger offline/read/block/mute/realtime/typing/voice in separate capabilities | Unit, PostgreSQL, storage, render, device/network/provider, root build | VNX-06 commit |
+| VNX-06A | `5156a3822af3ce7e4e7e034560554fcbfb661269` | COMPLETE at unit/static/RNTL/build/exact-SHA CI layers; browser/WebView/provider/device runtime `UNPROVEN` | Restored orphaned web draw-area handling; corrected non-degenerate geometry, clear-to-visible viewport, active-area refresh, one clipped publish path, and cache-hit response ordering across native/web | Product/test `0214983`; focused 37/37 + web host 4/4; render 13 suites/93 tests; full mobile/typecheck/root build and chain 242/242 PASS; CI `31454274073` all 7 jobs PASS | `recovery/vnx-06-map-draw-area-integrity` |
+| VNX-06B | VNX-06A documentation commit | PENDING | Remaining shared Maps engine/host and map/list contracts, one reproduced capability at a time | Browser/native host, large-result/latency, map/list, provider/device checks, root build | VNX-06A documentation commit |
+| VNX-07 | VNX-06 completion commit | PENDING | Messenger offline/read/block/mute/realtime/typing/voice in separate capabilities | Unit, PostgreSQL, storage, render, device/network/provider, root build | VNX-06 completion commit |
 | VNX-08 | VNX-07 commit | PENDING | Four account journeys, Auth, KYC, and Profile | Role-policy matrix, PostgreSQL, live Clerk/KYC, device, root build | VNX-07 commit |
 | VNX-09 | VNX-08 commit | PENDING | Search and Discover capability recovery | Domain isolation, saved/recent/trending, render/navigation/runtime, root build | VNX-08 commit |
 | VNX-10 | VNX-09 commit | PENDING | Publishing, listings, uploads, and private media | Create/edit/publish, ACL/signed media, storage/provider/device, root build | VNX-09 commit |
@@ -363,3 +364,37 @@ command, package/workspace, test type, result, and untested external gates.
   booking DB/API/host lifecycle, current 320–430 geometry, AR/EN/RTL/LTR,
   accessibility, Android/iOS, Maps provider, and physical-device journeys remain
   `UNPROVEN`.
+
+## VNX-06A Map draw-area integrity evidence
+
+- Base: `5156a3822af3ce7e4e7e034560554fcbfb661269`; product/test
+  commit: `02149836f57fc60cb99d641abd116c499c7da480`; tree:
+  `5c94a117765bcae46dcb884024221a7d3d692b7b`.
+- Remote freeze ref: `recovery/vnx-06-map-draw-area-integrity`.
+- Archaeology proved the generated page emitted `area` on both platforms while
+  the base web host blob `3d24c9f` ignored it. Web draw-area was `ORPHANED`, not
+  deleted. Base geometry `0b4ce53` accepted non-enclosing shapes; native
+  `5017d4b` replaced the visible viewport with an area box; and both hosts let
+  an older request overwrite a newer cache hit. Those behaviors were `MUTATED`.
+- RED evidence: render registry 3/6; initial web area journey 1 pass/1 fail;
+  geometry 11/12; map chrome 14 pass/3 fail; response-order static 18/19; late
+  response renderer 3 pass/1 fail. Each failure was expected and capability
+  specific.
+- GREEN evidence: geometry/map/meta **37/37 PASS**; focused web host **4/4
+  PASS**; targeted new-file lint and mobile typecheck **PASS**; full render **13
+  suites/93 tests PASS**; full mobile chain and root `npm run build` **PASS**;
+  chain integrity **242/242 PASS**. The first literal build invocation stopped
+  in workspace preflight because ambient pnpm was 11.16.0; the same tree passed
+  with the required Corepack pnpm 11.9.0, with no code change between attempts.
+- GitHub Actions `31454274073` on exact SHA `0214983` completed **SUCCESS**;
+  all seven jobs passed. PostgreSQL 16.14 migrate/replay completed in 636ms/7ms;
+  API 90 files/499 tests passed (1 file/3 tests skipped); CI reran the 13/93
+  mobile renderer set; chain 242/242 and dependency-security/production static
+  gates passed with two narrow audit waivers and zero blockers.
+- `SectionSearchApp.tsx` remained byte-identical at `bd0f46e`. `mapHtml`, map
+  chrome, Maps hub, and pin picker were also unchanged. No provider rewrite,
+  section-host rewrite, schema/API change, or historical tree transplant
+  occurred.
+- Real browser/WebView/provider behavior, large-result and real-latency map/list
+  consistency, five domain integrations, pin persistence, accessibility,
+  Android/iOS and physical-device journeys remain `UNPROVEN`.
