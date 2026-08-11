@@ -35,6 +35,13 @@ const RENDER_CRITICAL = [
     claim: "Stay keeps identity and browse controls pinned while reclaiming measured header height",
   },
   {
+    source: "components/search/BookingStaysApp.tsx",
+    symbol: "BookingStaysApp",
+    suite: "tests/render/BookingStaysApp.render.test.tsx",
+    staticGuard: "tests/section-miniapp-guard.test.mjs",
+    claim: "the independent Stay host keeps locked rental state, blocking overlays, results, and map intent composed",
+  },
+  {
     source: "components/search/facilities/FacilitiesHomeHeader.tsx",
     symbol: "FacilitiesHomeHeader",
     suite: "tests/render/FacilitiesHomeHeader.render.test.tsx",
