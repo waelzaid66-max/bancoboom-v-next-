@@ -130,6 +130,7 @@ export function MapsHubApp() {
   const { criteria, items, commit, loadMore, retry, phase } = search;
 
   const [world, setWorld] = useState<MapsWorld>("all");
+  const worldRef = useRef<MapsWorld>("all");
   const [listMode, setListMode] = useState(false);
   const seeded = useRef(false);
   const topPad = Math.max(insets.top, Platform.OS === "web" ? 12 : 0);
@@ -138,13 +139,24 @@ export function MapsHubApp() {
   useEffect(() => {
     if (seeded.current) return;
     seeded.current = true;
+    let cancelled = false;
     void loadPreferredMarketCountry().then((iso) => {
-      commit(criteriaForWorld("all", iso || DEFAULT_MARKET_COUNTRY));
+      if (cancelled) return;
+      commit(
+        criteriaForWorld(
+          worldRef.current,
+          iso || DEFAULT_MARKET_COUNTRY,
+        ),
+      );
     });
+    return () => {
+      cancelled = true;
+    };
   }, [commit]);
 
   const selectWorld = useCallback(
     (next: MapsWorld) => {
+      worldRef.current = next;
       setWorld(next);
       setListMode(false);
       commit(

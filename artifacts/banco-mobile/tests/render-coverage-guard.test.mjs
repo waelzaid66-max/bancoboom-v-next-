@@ -77,6 +77,13 @@ const RENDER_CRITICAL = [
     claim: "the web map host consumes draw-area messages and reports only its honestly clipped result set",
   },
   {
+    source: "components/search/maps/MapsHubApp.tsx",
+    symbol: "MapsHubApp",
+    suite: "tests/render/MapsHubApp.render.test.tsx",
+    staticGuard: "tests/section-miniapp-guard.test.mjs",
+    claim: "the selected Maps world and its committed search criteria remain one identity during market hydration",
+  },
+  {
     source: "components/MiniAppBottomNav.tsx",
     symbol: "MiniAppBottomNav",
     suite: "tests/render/MiniAppBottomNav.render.test.tsx",

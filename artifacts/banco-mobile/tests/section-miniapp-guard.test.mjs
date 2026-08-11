@@ -1405,6 +1405,28 @@ test("Maps mini-app §7 mounts MapsHubApp and reuses SearchResultsMap", () => {
   assert.match(hub, /\/section\/booking\?map=1/);
 });
 
+test("Maps hub late market hydration keeps the selected world authoritative", () => {
+  const hub = fs.readFileSync(
+    path.join(APP_ROOT, "components", "search", "maps", "MapsHubApp.tsx"),
+    "utf8",
+  );
+  assert.match(
+    hub,
+    /const worldRef = useRef<MapsWorld>\("all"\)/,
+    "Maps hub needs a synchronous world authority while market storage resolves",
+  );
+  assert.match(
+    hub,
+    /loadPreferredMarketCountry\(\)\.then\(\(iso\) => \{[\s\S]*?criteriaForWorld\(\s*worldRef\.current,/,
+    "late hydration must commit the currently selected world, never reset to all",
+  );
+  assert.match(
+    hub,
+    /const selectWorld = useCallback\([\s\S]*?worldRef\.current = next;[\s\S]*?setWorld\(next\)/,
+    "world authority must advance before the visible tab and query commit",
+  );
+});
+
 test("B-oom Car mounts CarsHomeHeader Stay-parity shell", () => {
   const section = fs.readFileSync(SECTION_APP, "utf8");
   assert.match(
