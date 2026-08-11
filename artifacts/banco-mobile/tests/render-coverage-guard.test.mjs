@@ -49,6 +49,13 @@ const RENDER_CRITICAL = [
     claim: "Materials keeps identity and search pinned while only the prose tagline scrolls",
   },
   {
+    source: "components/search/SectionSearchApp.tsx",
+    symbol: "SectionSearchApp",
+    suite: "tests/render/SectionSearchApp.render.test.tsx",
+    staticGuard: "tests/section-miniapp-guard.test.mjs",
+    claim: "the conflict-crossed section host keeps locked identity, overlays, list headers, and map intent composed",
+  },
+  {
     source: "components/search/SearchResultsSurface.tsx",
     symbol: "SearchResultsSurface",
     suite: "tests/render/SearchResultsSurface.render.test.tsx",
