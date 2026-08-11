@@ -26,6 +26,7 @@
 | Map draw-area integrity ref | `recovery/vnx-06-map-draw-area-integrity` → `02149836f57fc60cb99d641abd116c499c7da480` |
 | Maps hub world-integrity ref | `recovery/vnx-06-maps-hub-world-integrity` → `0341b65b1658fab9b951dfae1d04410b9c3738c5` |
 | Map criteria-response integrity ref | `recovery/vnx-06-map-criteria-integrity` → `290039db82f9c0ae927702f93b69ded92e8527b2` |
+| Messenger durable-text ref | `recovery/vnx-07-messenger-durable-text-outbox` → `5c2631a94408a509b7ea35dde972ae31d75e9f76` |
 
 The target is an assembly repository with the complete source ancestry, not a
 manual source dump. The `bancoboomstor` worktree remains read-only. No target
@@ -54,10 +55,12 @@ manual source dump. The `bancoboomstor` worktree remains read-only. No target
 | VNX-06A Maps draw-area integrity | `0214983` | Restored the orphaned web area bridge and reconciled non-degenerate geometry, clear-to-visible viewport, active-area refresh, one clipped publish path, and cache-hit response ordering across both hosts | Local focused 37/37 plus web host 4/4; render 13 suites/93 tests; full mobile/typecheck/root build and chain 242/242 PASS; CI `31454274073` all 7 jobs PASS; browser/WebView/provider/device runtime remains `UNPROVEN` |
 | VNX-06B Maps hub world integrity | `0341b65` | Kept the selected Maps world authoritative during late saved-market hydration and ended the async continuation on unmount; no map-host, API, route, schema, provider, or section-parent delta | Local hub 4/4, named static 1/1, render 14 suites/97 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31455520472` all 7 jobs PASS; browser/provider/device runtime remains `UNPROVEN` |
 | VNX-06C Map criteria-response integrity | `290039d` | Invalidated prior-criteria in-flight responses immediately across native/web before the replacement debounce; preserved cache, clipping, API, provider, hook, hub, and section parents | Local web host 5/5, map 20/20, render 14 suites/98 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31457288589` all 7 jobs PASS; browser/WebView/provider/device runtime remains `UNPROVEN` |
+| VNX-07A Messenger durable text outbox | `5c2631a` | Reconstructed a body-only, persist-before-POST, account/session-fenced mobile outbox over the unchanged VNX-02/VNX-03 server contract; replies/offers/media remain on their existing path | Local focused 2 suites/22 tests, static/meta 22/22, render 16 suites/120 tests, targeted lint, mobile typecheck/full chain, root build and chain 242/242 PASS; CI `31460794057` all 7 jobs PASS with PostgreSQL API 499 tests; physical-device/live auth/network runtime remains `UNPROVEN` |
 
-VNX-03 is frozen with an independent remote recovery ref and PostgreSQL-scoped
-runtime evidence. It does not authorize later Messenger capabilities or a
-production claim.
+VNX-03 and VNX-07A are frozen with independent remote recovery refs. The
+server UUID/notification transaction has PostgreSQL-scoped runtime evidence;
+the client durable-text lifecycle has source/static/RNTL/build/CI evidence.
+Neither authorizes later Messenger capabilities or a production claim.
 
 ## Preserved production safety rail from `a3db5bd8`
 
@@ -76,9 +79,10 @@ repairs a reproduced `MapsHubApp` world/query race during saved-market
 hydration. VNX-06C prevents a prior-criteria cluster response from publishing
 during the replacement criteria's debounce. Browser,
 native/WebView/provider/device runtime and the remaining
-Maps integrations are still uncertified. The advanced Messenger wave was not recoverable as a Git
-object; missing capabilities are explicitly bounded reconstruction on top of
-current security and schema authority.
+Maps integrations are still uncertified. The advanced Messenger wave was not
+recoverable as a Git object. VNX-07A reconstructs only durable body-text
+attempts on top of current security and schema authority; the remaining missing
+capabilities stay explicitly bounded and unproven.
 
 ## Golden capability protocol
 
@@ -117,9 +121,10 @@ reports are inputs to that matrix, not automatic certification of vNext.
 | 9 | Admin, Dealer, Website | Role-aware end-to-end journeys certified |
 | 10 | Cross-product regression and deployment | Clean install through rollback/restore and exact-SHA staging certification |
 
-VNX-03 Message outbox was the one bounded in-flight exception because it began
-before this sequence was adopted. It is now frozen; do not continue into
-offline/realtime/typing/read/block/mute/voice until Phases 1–3 are adjudicated.
+VNX-03 began before this sequence was adopted. VNX-07A later closed only the
+explicit body-text durability boundary after the Phase 1–3 source/render
+adjudications. Do not conflate it with realtime/typing/read/block/mute/voice or
+durable media.
 
 ## Current release decision
 
@@ -132,10 +137,18 @@ offline/realtime/typing/read/block/mute/voice until Phases 1–3 are adjudicated
   source/static/render/build/CI layers. VNX-06A separately freezes corrected
   native/web draw-area integrity, VNX-06B freezes Maps-hub world/hydration
   integrity, and VNX-06C freezes criteria-response ordering at
-  unit/static/RNTL/build/CI layers. Live
+  unit/static/RNTL/build/CI layers. VNX-07A freezes the account-bound body-text
+  outbox at source/static/RNTL/build/CI layers on `5c2631a`; its unchanged
+  same-UUID server transaction passed PostgreSQL CI, while mobile relaunch and
+  account-switch behavior remain device-unproven. Live
   facets, booking/API/remaining Maps journeys,
   current responsive/device certification, and the complete production program
   remain open.
+- Migration runtime authority is preserved, but operator-facing Coolify/DB
+  documents still contain obsolete push-force/order wording, and root CI lint
+  covers maintenance scripts rather than the monorepo. VNX-OPS-02 plus a
+  final-RC workspace-lint design remain blocking; no staging/production action
+  is authorized from the current documents.
 - Live PostgreSQL, Clerk, storage providers, Paymob, Docker/Compose/Coolify,
   Android, iOS, EAS, push/email delivery, and restore/rollback remain
   **UNPROVEN** on this target.

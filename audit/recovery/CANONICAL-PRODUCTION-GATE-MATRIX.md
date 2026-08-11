@@ -10,7 +10,7 @@ recorded here or in its linked capability ledger.
 | Field | Current value |
 |---|---|
 | Canonical assembly branch | `canonical/vnext-assembly` |
-| Last protected capability SHA | Map criteria-response integrity `290039db82f9c0ae927702f93b69ded92e8527b2` (bounded product/test repair) |
+| Last protected capability SHA | Messenger durable account-bound body-text outbox `5c2631a94408a509b7ea35dde972ae31d75e9f76` (bounded product/test reconstruction) |
 | Last build-control SHA | root serialization `d6b42b5542837ae502febc3a7425efc68241b4ac` |
 | Source ancestry | `bancoboomstor@a3db5bd8c3edd060d35078aefeec709297abbad9` |
 | Assembly status | `GO`, one reversible micro-batch at a time |
@@ -27,7 +27,7 @@ cannot be combined into a production certificate.
 | Shared mobile shell | Routes, five-tab escape paths, results/overlay ownership, state retention, safe-area authority | Static + RNTL + 320/360/390/430 + AR/EN + RTL/LTR + Android/iOS device journeys | Shared source/render `TESTED`; device `UNPROVEN` |
 | Five marketplace sections | Cars, Property, Stay, Facilities, Materials identities, filters, taxonomy, loading/results/empty/error, scroll/collapse | Independent lineage decision, renderer, screenshot geometry, interactions, API-backed device journey per section | All five standalone headers plus both bounded parents—the four-catalogue host and independent Stay host—`TESTED`; live facets/booking/all states, current geometry, accessibility, provider, and device journeys open |
 | Maps | List/map sync, locate, clusters, draw polygon, honest count, pin picker, provider bridge, bottom clearance | Unit + generated-page parse + web browser + Android/iOS WebView + live provider + large-result journey | VNX-06A draw-area geometry/web-host/cache ordering, VNX-06B hub-world hydration, and VNX-06C criteria-response ordering `TESTED` at unit/static/RNTL/build/CI layers; real browser, provider, device, large-result, domain and pin-persistence journeys remain `UNPROVEN` |
-| Messenger | Send/idempotency, outbox, unread/read cursor, retry/offline, block/mute, media, notifications, deep links, presence, optional realtime/typing/voice decisions | PostgreSQL concurrency + API + render + two-account Android/iOS + offline/reconnect + push/email/storage provider journeys | Send/outbox PostgreSQL-scoped `RUNTIME_VERIFIED`; remaining capabilities open |
+| Messenger | Send/idempotency, outbox, unread/read cursor, retry/offline, block/mute, media, notifications, deep links, presence, optional realtime/typing/voice decisions | PostgreSQL concurrency + API + render + two-account Android/iOS + offline/reconnect + push/email/storage provider journeys | Server send/notification transaction is PostgreSQL-scoped `RUNTIME_VERIFIED`; VNX-07A body-text client outbox is `TESTED` at source/static/RNTL/build/CI on `5c2631a`; physical-device relaunch/account-switch and all excluded capabilities remain open |
 | Accounts/Auth/Profile | Personal, dealer, company, financial-institution journeys; MFA/social/reset/delete; tenant/role transitions | Policy matrix + PostgreSQL + live Clerk tenant + Android/iOS/web journeys | Source hardening preserved; live journeys `UNPROVEN` |
 | KYC and permissions | KYC ownership/access, staff roles, company/dealer/FI permissions, deletion/tombstone rules | Negative authorization matrix + PostgreSQL + private-document provider journey | Source hardening preserved; runtime/live `UNPROVEN` |
 | Search and Discover | Domain isolation, routing, filters/facets, saved/recent/popular/trending/recently-viewed, map entry | Capability-level archaeology + static/render/integration/device journeys | Mixed `DELETED/ORPHANED/REVERTED_BY_GUARD/UNPROVEN` |
@@ -44,10 +44,11 @@ cannot be combined into a production certificate.
 | Gate | Required proof on the same release SHA | Blocking status |
 |---|---|---|
 | Reproducible checkout | Fresh clone, Corepack `pnpm 11.9.0`, `pnpm install --frozen-lockfile`, workspace identity | OPEN for final RC |
-| Code quality | Root lint, targeted workspace lint, all package typechecks, all unit/static/render/integration tests | Repeated per batch; must rerun on final RC |
+| Code quality | Root lint, targeted workspace lint, all package typechecks, all unit/static/render/integration tests | VNX-07A touched-file lint passed with zero warnings, but root `lint`/CI currently cover maintenance scripts only. Full workspace/final-RC lint remains OPEN and must not be inferred from `ESLint (scripts)` |
 | Root production build | `npm run build` across API, Expo export, both Next apps, Admin, Dealer, Landing, sandbox | VNX-OPS-01 serial scheduling protected at `d6b42b5`; one full local pass and exact-SHA CI green. One inconclusive local Next stall remains recorded; two clean bounded runs must pass on final RC |
 | Dependency/security | `npm run security:audit`, lockfile policy, secret scan, image/dependency vulnerability review | OPEN for final RC |
-| PostgreSQL | Drift check, fresh migration, idempotent replay, full suite, concurrency, snapshot upgrade | Partial CI proof; snapshot/concurrency matrix OPEN |
+| PostgreSQL | Drift check, fresh migration, idempotent replay, full suite, concurrency, snapshot upgrade | Exact VNX-07A CI applied committed migrations in 418ms and replayed in 7ms; API 90 files/499 tests passed. Snapshot/restore/live and broader concurrency matrix OPEN |
+| Migration operator authority | Executable and operator-facing sources agree on committed migrations, safe baseline rules, and Postgres → migrate → API order | BLOCKED: executable CI/compose paths use `migrate`, but current operator docs/comments retain obsolete push-force/order claims. VNX-OPS-02 is the next bounded repair; no staging/production operation before closure |
 | Docker images | Build every shipped Dockerfile from clean context; immutable digest/SBOM/provenance | OPEN |
 | Compose runtime | Start full stack, health/readiness, migrations-before-traffic, inter-service routing, restart behavior | OPEN |
 | Coolify staging | Exact image/SHA, managed networking, domains/TLS, proxy hops, secrets, well-known files, smoke journeys | OPEN |
@@ -68,7 +69,7 @@ cannot be combined into a production certificate.
 | 1 | Shared shell/navigation/results architecture | Complete at render/CI layer; device certification deferred to final device matrix |
 | 2 | Cars, Property, Stay, Facilities, Materials | VNX-05A–G freeze standalone headers plus both bounded parent hosts; live state/facet/booking, current-width, accessibility, provider, and device matrices remain release blockers without wholesale parent replacement |
 | 3 | Shared Maps engine and five domain integrations | VNX-06A draw-area integrity, VNX-06B hub-world integrity, and VNX-06C criteria-response ordering complete; shared browser/native engine, map/list, pin persistence, five domains, provider/device journeys still open; no provider rewrite without reproduced defect and ADR |
-| 4 | Remaining Messenger integrity and product capabilities | DB/security first; transport changes require ADR |
+| 4 | Remaining Messenger integrity and product capabilities | VNX-07A body-text durability complete at source/render/CI; device certification plus read/block/mute/non-text durability remain independent. Realtime/typing/voice still require transport/privacy/battery ADRs |
 | 5 | Accounts/Auth/KYC/Profile | Four journeys and negative permission matrix |
 | 6 | Search/Discover | Deleted, orphaned, routed, and guard-reverted capabilities remain separate |
 | 7 | Listings/publishing/import/storage/media | Preserve current private-media and ownership invariants |

@@ -469,3 +469,59 @@ command, package/workspace, test type, result, and untested external gates.
   `SectionSearchApp.tsx` remains `bd0f46e`. Browser/WebView/provider,
   large-result and rapid-churn latency, five-domain map/list, pin persistence,
   accessibility, Android/iOS, and physical-device journeys remain `UNPROVEN`.
+
+## VNX-07A Messenger durable account-bound text outbox evidence
+
+- Base: `cd16d17abbaea48fe8bf82edd85dbcc2228e7a15`, tree
+  `325cddf584a5da6fefb8ff03619eaee87120974e`; product/test commit:
+  `5c2631a94408a509b7ea35dde972ae31d75e9f76`, tree
+  `ebf2c817e4cf1ae3880674eb783322f9b2c50fd1`.
+- Remote freeze ref: `recovery/vnx-07-messenger-durable-text-outbox` → exact
+  product/test commit. The canonical branch pointed to the same SHA before this
+  documentation closeout.
+- No historical client-outbox object was recovered. Base thread blob `62412e8`
+  held optimistic attempts only in component memory. VNX-07A is a bounded
+  reconstruction over the unchanged VNX-02 `client_message_id` and VNX-03
+  transactional notification-outbox authority, not a cherry-pick claim.
+- The scope is normal-composer body-only text. It persists before POST, retains
+  one UUID, enforces owner/session/generation/JWT-subject fences, uses an
+  explicit bearer and abort signal, sanitizes explicit identity teardown, and
+  retries matching-ACK cleanup locally without another network POST. Replies,
+  offers, listing shares, images, video, audio and other media stay on the
+  existing direct path.
+- Adversarial review reproduced and closed late A-ACK/B-cache contamination,
+  in-flight logout/delete ordering, purge/sign-out failure wedges, failed owner
+  cleanup blocking next hydration, persistent ACK-removal replay storms,
+  same-millisecond FIFO reversal, missed AppState background state, and stale
+  A→B→A composer/reply clearing. Both final independent reviews returned `GO`
+  for the bounded freeze.
+- Final local focused renderer: **2 suites/22 tests PASS**; Messenger + render
+  meta guards: **22/22 PASS**; touched product/test ESLint with
+  `--max-warnings 0`: **PASS**; mobile typecheck/full chain: **PASS**, ending
+  **16 suites/120 renderer tests**; chain integrity: **242/242 PASS**; root
+  `npm run build`: **PASS** with Corepack pnpm 11.9.0, Expo 3,566 modules, and
+  Next 46/46 plus 48/48 pages.
+- GitHub Actions
+  [`31460794057`](https://github.com/waelzaid66-max/bancoboom-v-next-/actions/runs/31460794057)
+  is bound to exact SHA `5c2631a`, workflow-dispatch run 16/attempt 1. It
+  completed **SUCCESS** in 2m22s; all seven jobs passed. PostgreSQL 16 committed
+  migrations completed in 418ms and replayed in 7ms; `ConversationService`
+  passed 10/10; full API passed 90 files/499 tests with 1 file/3 tests skipped;
+  mobile passed 16 suites/120 renderer tests; production confidence passed
+  23/23 and chain integrity 242/242.
+- The dependency gate reported two narrowly scoped upstream Metro build-time
+  `image-size` waivers through 2026-09-09 and zero blockers. Root/CI lint remains
+  scripts-only; only the VNX-07A touched-file lint is closed. Full workspace
+  lint remains a final-RC gate.
+- `SectionSearchApp.tsx` remains blob `bd0f46e`; ConversationService remains
+  `35fef65`; migration `0006` remains `caf7600`. No DB/API/OpenAPI/provider,
+  Maps, section-parent, or deployment-runtime change occurred.
+- Android/iOS airplane mode, process-kill/relaunch, two-account switching, live
+  Clerk/network, encrypted-at-rest extraction, PII-free telemetry, realtime,
+  read/block/mute/voice, and durable non-text sends remain `UNPROVEN` or
+  explicitly excluded. Production remains `NO-GO`.
+- Closeout also found a separate production blocker: executable migration
+  authority uses committed `migrate`, but operator-facing Coolify/migration
+  docs retain obsolete push-force/order claims. VNX-OPS-02 must repair and
+  guard those documents without changing compose runtime, migrations, workflow,
+  or deployment target before any staging/production operation.
