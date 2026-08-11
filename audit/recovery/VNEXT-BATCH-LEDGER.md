@@ -433,3 +433,39 @@ command, package/workspace, test type, result, and untested external gates.
 - Browser iframe, native WebView/provider, real latency/large results,
   five-domain identity/query journeys, `MapPinPicker`, accessibility,
   Android/iOS, and physical-device behavior remain `UNPROVEN`.
+
+## VNX-06C Map criteria-response integrity evidence
+
+- Base: `56dba29c0e8eccef7276ffafe22ec023c167e078`; product/test
+  commit: `290039db82f9c0ae927702f93b69ded92e8527b2`; tree:
+  `a60e182c3e2220f38477fc4ef3590e1db8291914`.
+- Remote freeze ref: `recovery/vnx-06-map-criteria-integrity`.
+- Base native/web blobs `e8c9c65`/`ebd9db4` scheduled a replacement cluster
+  request 300ms after a criteria transition without first invalidating an old
+  request already in flight. Because refresh retains items and marker
+  signature excludes criteria, an All response could publish under Cars.
+- RED evidence: focused web-host renderer **4 pass/1 fail**, with `old-all`
+  injected during the Cars debounce; named both-host static contract **0/1
+  EXPECTED FAIL**, first identifying the native host.
+- Minimal repair: final native/web blobs `289acb6`/`cb54dc3` advance the existing
+  monotonic generation immediately on a pure criteria transition before any
+  replacement scheduling. Cache keys, cache-hit ordering, area clipping, API,
+  provider, hook, hub, routes, schema, and section parents are unchanged.
+- GREEN evidence: focused web host **5/5 PASS**; named static **1/1 PASS**; map
+  guard **20/20**, geometry **12/12**, render meta **6/6**, full render **14
+  suites/98 tests**, full mobile chain, mobile typecheck, chain integrity
+  **242/242**, and root `npm run build` **PASS** with Expo 3,564 modules and
+  Next 46/46 plus 48/48 pages.
+- The new renderer passes ESLint. A combined direct-file diagnostic still
+  reports only inherited missing-rule/unused/regex findings; final-RC targeted
+  workspace lint remains open and no unrelated refactor was folded into this
+  repair.
+- GitHub Actions
+  [`31457288589`](https://github.com/waelzaid66-max/bancoboom-v-next-/actions/runs/31457288589)
+  is bound to exact SHA `290039d` and completed **SUCCESS** in 3m03s. All seven
+  jobs passed, including PostgreSQL migration/replay/API, mobile regression and
+  bundle, typecheck/build, scripts lint, GCP config, and production static gates.
+- `useSearchMiniApp` remains blob `13b8cd2`; `MapsHubApp` remains `a4baa09`;
+  `SectionSearchApp.tsx` remains `bd0f46e`. Browser/WebView/provider,
+  large-result and rapid-churn latency, five-domain map/list, pin persistence,
+  accessibility, Android/iOS, and physical-device journeys remain `UNPROVEN`.

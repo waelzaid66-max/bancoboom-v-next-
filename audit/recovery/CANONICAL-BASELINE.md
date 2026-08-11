@@ -25,6 +25,7 @@
 | Booking Stays host contract ref | `recovery/vnx-05-booking-stays-contracts` → `a7aa3a6824f1d16a570dcd1c823701caafe386df` |
 | Map draw-area integrity ref | `recovery/vnx-06-map-draw-area-integrity` → `02149836f57fc60cb99d641abd116c499c7da480` |
 | Maps hub world-integrity ref | `recovery/vnx-06-maps-hub-world-integrity` → `0341b65b1658fab9b951dfae1d04410b9c3738c5` |
+| Map criteria-response integrity ref | `recovery/vnx-06-map-criteria-integrity` → `290039db82f9c0ae927702f93b69ded92e8527b2` |
 
 The target is an assembly repository with the complete source ancestry, not a
 manual source dump. The `bancoboomstor` worktree remains read-only. No target
@@ -52,6 +53,7 @@ manual source dump. The `bancoboomstor` worktree remains read-only. No target
 | VNX-05G Booking Stays host protection | `a7aa3a6` | Mounted the unchanged independent Stay parent and froze pinned identity/results composition, loading/error/empty recovery, rental locks, Stay-card routing, dirty-back reset, and map latch; no product delta | Local host 7/7, static contracts 102/102, render 89/89, full mobile/typecheck/root build and chain 242/242 PASS; CI `31452618345` all 7 jobs PASS; live booking/API/Maps, responsive/device/runtime remain `UNPROVEN` |
 | VNX-06A Maps draw-area integrity | `0214983` | Restored the orphaned web area bridge and reconciled non-degenerate geometry, clear-to-visible viewport, active-area refresh, one clipped publish path, and cache-hit response ordering across both hosts | Local focused 37/37 plus web host 4/4; render 13 suites/93 tests; full mobile/typecheck/root build and chain 242/242 PASS; CI `31454274073` all 7 jobs PASS; browser/WebView/provider/device runtime remains `UNPROVEN` |
 | VNX-06B Maps hub world integrity | `0341b65` | Kept the selected Maps world authoritative during late saved-market hydration and ended the async continuation on unmount; no map-host, API, route, schema, provider, or section-parent delta | Local hub 4/4, named static 1/1, render 14 suites/97 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31455520472` all 7 jobs PASS; browser/provider/device runtime remains `UNPROVEN` |
+| VNX-06C Map criteria-response integrity | `290039d` | Invalidated prior-criteria in-flight responses immediately across native/web before the replacement debounce; preserved cache, clipping, API, provider, hook, hub, and section parents | Local web host 5/5, map 20/20, render 14 suites/98 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31457288589` all 7 jobs PASS; browser/WebView/provider/device runtime remains `UNPROVEN` |
 
 VNX-03 is frozen with an independent remote recovery ref and PostgreSQL-scoped
 runtime evidence. It does not authorize later Messenger capabilities or a
@@ -71,7 +73,9 @@ that this did not mean semantic completeness: the web draw-area bridge was
 `ORPHANED`, and geometry/viewport/response-order behavior was `MUTATED`.
 VNX-06A repairs and protects that bounded slice only. VNX-06B separately
 repairs a reproduced `MapsHubApp` world/query race during saved-market
-hydration. Browser, native/WebView/provider/device runtime and the remaining
+hydration. VNX-06C prevents a prior-criteria cluster response from publishing
+during the replacement criteria's debounce. Browser,
+native/WebView/provider/device runtime and the remaining
 Maps integrations are still uncertified. The advanced Messenger wave was not recoverable as a Git
 object; missing capabilities are explicitly bounded reconstruction on top of
 current security and schema authority.
@@ -126,8 +130,9 @@ offline/realtime/typing/read/block/mute/voice until Phases 1–3 are adjudicated
 - VNX-05A–G freeze all five standalone headers, the bounded four-catalogue
   `SectionSearchApp` host, and the separate `BookingStaysApp` parent only at
   source/static/render/build/CI layers. VNX-06A separately freezes corrected
-  native/web draw-area integrity and VNX-06B freezes Maps-hub world/hydration
-  integrity at unit/static/RNTL/build/CI layers. Live
+  native/web draw-area integrity, VNX-06B freezes Maps-hub world/hydration
+  integrity, and VNX-06C freezes criteria-response ordering at
+  unit/static/RNTL/build/CI layers. Live
   facets, booking/API/remaining Maps journeys,
   current responsive/device certification, and the complete production program
   remain open.
