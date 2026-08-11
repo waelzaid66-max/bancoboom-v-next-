@@ -19,6 +19,8 @@ import { useColors } from "@/hooks/useColors";
 const STORAGE_KEY = "banco.biometric.enabled";
 
 type BiometricContextValue = {
+  /** Whether hardware and the saved preference have finished hydrating. */
+  hydrated: boolean;
   /** Whether the device has biometric hardware that is enrolled. */
   supported: boolean;
   /** Whether the user has turned biometric unlock on. */
@@ -148,7 +150,7 @@ export function BiometricProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BiometricContext.Provider
-      value={{ supported, enabled, locked, setEnabled, unlock }}
+      value={{ hydrated, supported, enabled, locked, setEnabled, unlock }}
     >
       {children}
       {!hydrated ? <HydrationGate /> : locked ? <LockOverlay onUnlock={unlock} /> : null}

@@ -18,7 +18,6 @@ import {
   useGetMe,
   useGetMyMetrics,
   useGetMySocialLinks,
-  type FeedItem,
   type SocialLink,
   type SocialLinkPlatform,
 } from "@workspace/api-client-react";
@@ -48,6 +47,7 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { PermissionRationaleModal } from "@/components/PermissionRationaleModal";
 import { PromoteButton } from "@/components/PromoteButton";
 import { useI18n } from "@/context/LanguageContext";
+import { useMessageOutbox } from "@/context/MessageOutboxContext";
 import { useSession } from "@/context/SessionContext";
 import { filterBookableListings } from "@/lib/rentalHost";
 import { useColors } from "@/hooks/useColors";
@@ -191,6 +191,7 @@ export default function ProfileScreen() {
   const topPad = Math.max(insets.top, Platform.OS === "web" ? 12 : 0);
 
   const { cacheFeedItem, listingsVersion } = useSession();
+  const { prepareForSignOut, resumeAfterSignOutFailure } = useMessageOutbox();
   const { signIn, errors: signInErrors, fetchStatus: signInStatus } = useSignIn();
   const { signUp, errors: signUpErrors, fetchStatus: signUpStatus } = useSignUp();
   const { user, isLoaded } = useUser();
@@ -918,7 +919,6 @@ export default function ProfileScreen() {
     switchMode(authMode);
     // Intentionally keyed on the param alone. Re-running when switchMode's
     // identity changes would wipe whatever the user has typed on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authMode]);
 
   const inputStyle = [
@@ -1252,7 +1252,7 @@ export default function ProfileScreen() {
         label: t("importHub.title"),
         onPress: () => {
           setShowMenu(false);
-          router.push("/import" as any);
+          router.push("/import" as Href);
         },
       },
       {
@@ -1316,11 +1316,29 @@ export default function ProfileScreen() {
         onPress: () => {
           setShowMenu(false);
           void (async () => {
+            try {
+              await prepareForSignOut();
+            } catch {
+              resumeAfterSignOutFailure();
+              Alert.alert(
+                t("settings.outboxCleanupErrorTitle"),
+                t("settings.outboxCleanupErrorBody"),
+              );
+              return;
+            }
             const { unregisterCachedPushTokenBestEffort } = await import(
               "@/lib/unregisterPushBestEffort"
             );
             await unregisterCachedPushTokenBestEffort();
-            await signOut();
+            try {
+              await signOut();
+            } catch {
+              resumeAfterSignOutFailure();
+              Alert.alert(
+                t("settings.signOutErrorTitle"),
+                t("settings.signOutErrorBody"),
+              );
+            }
           })();
         },
         danger: true,

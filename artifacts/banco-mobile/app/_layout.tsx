@@ -28,6 +28,10 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { logClientCrash, installGlobalCrashHandler } from "@/lib/crashLog";
 import { BiometricProvider } from "@/context/BiometricContext";
 import { LanguageProvider } from "@/context/LanguageContext";
+import {
+  MessageOutboxProvider,
+  useMessageOutbox,
+} from "@/context/MessageOutboxContext";
 import { SessionProvider } from "@/context/SessionContext";
 import { AuthGateProvider } from "@/hooks/useAuthGate";
 import { ThemeProvider } from "@/context/ThemeContext";
@@ -103,6 +107,7 @@ function ClerkLoadGate({
 
 function AuthTokenBridge() {
   const { getToken, signOut, userId } = useAuth();
+  const { prepareForSignOut } = useMessageOutbox();
   useEffect(() => {
     // getToken can reject while clerk-js is still initializing (or failed to
     // init). API calls must degrade to anonymous, never crash the request.
@@ -124,6 +129,13 @@ function AuthTokenBridge() {
       if (code !== "ACCOUNT_DELETED") return;
       void (async () => {
         try {
+          await prepareForSignOut();
+        } catch (error) {
+          // The account is already tombstoned, so sign-out must still finish.
+          // A loaded signed-out start retries the prefix purge defensively.
+          logClientCrash(error, { kind: "messageOutboxTombstonePurge" });
+        }
+        try {
           const { unregisterCachedPushTokenBestEffort } = await import(
             "@/lib/unregisterPushBestEffort"
           );
@@ -135,7 +147,7 @@ function AuthTokenBridge() {
       })();
     });
     return () => setAuthFailureHandler(null);
-  }, [signOut]);
+  }, [prepareForSignOut, signOut]);
 
   return null;
 }
@@ -450,39 +462,41 @@ export default function RootLayout() {
         >
           <ClerkLoadGate waitExpired={clerkWaitExpired}>
             <QueryClientProvider client={queryClient}>
-              <AuthTokenBridge />
               <ReactQueryFocusBridge />
               <ThemeProvider>
                 <LanguageProvider>
                   <AuthGateProvider>
                     <SessionProvider>
                       <BiometricProvider>
-                        <SoundProvider>
-                          <PushNotificationsBridge />
-                          <GestureHandlerRootView style={{ flex: 1 }}>
-                            <KeyboardProvider>
-                              <RootLayoutNav />
-                            </KeyboardProvider>
-                            {!introDone && (
-                              <CinematicIntro
-                                onDone={() => {
-                                  setIntroDone(true);
-                                  if (
-                                    Platform.OS === "web" &&
-                                    typeof window !== "undefined"
-                                  ) {
-                                    try {
-                                      window.sessionStorage.setItem(
-                                        "banco_intro_seen",
-                                        "1",
-                                      );
-                                    } catch {}
-                                  }
-                                }}
-                              />
-                            )}
-                          </GestureHandlerRootView>
-                        </SoundProvider>
+                        <MessageOutboxProvider>
+                          <AuthTokenBridge />
+                          <SoundProvider>
+                            <PushNotificationsBridge />
+                            <GestureHandlerRootView style={{ flex: 1 }}>
+                              <KeyboardProvider>
+                                <RootLayoutNav />
+                              </KeyboardProvider>
+                              {!introDone && (
+                                <CinematicIntro
+                                  onDone={() => {
+                                    setIntroDone(true);
+                                    if (
+                                      Platform.OS === "web" &&
+                                      typeof window !== "undefined"
+                                    ) {
+                                      try {
+                                        window.sessionStorage.setItem(
+                                          "banco_intro_seen",
+                                          "1",
+                                        );
+                                      } catch {}
+                                    }
+                                  }}
+                                />
+                              )}
+                            </GestureHandlerRootView>
+                          </SoundProvider>
+                        </MessageOutboxProvider>
                       </BiometricProvider>
                     </SessionProvider>
                   </AuthGateProvider>

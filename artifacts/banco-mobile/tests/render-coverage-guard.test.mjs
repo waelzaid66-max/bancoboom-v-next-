@@ -14,6 +14,20 @@ const read = (path) => readFileSync(join(root, path), "utf8");
 
 const RENDER_CRITICAL = [
   {
+    source: "app/messages/[id].tsx",
+    symbol: "ThreadScreen",
+    suite: "tests/render/ThreadScreen.render.test.tsx",
+    staticGuard: "tests/messenger-wiring-guard.test.mjs",
+    claim: "the real thread preserves the composer until durable text persistence and isolates conversation rows",
+  },
+  {
+    source: "context/MessageOutboxContext.tsx",
+    symbol: "MessageOutboxProvider",
+    suite: "tests/render/MessageOutboxProvider.render.test.tsx",
+    staticGuard: "tests/messenger-wiring-guard.test.mjs",
+    claim: "body-only chat attempts persist before transport and never cross Clerk identities",
+  },
+  {
     source: "components/search/car/CarsHomeHeader.tsx",
     symbol: "CarsHomeHeader",
     suite: "tests/render/CarsHomeHeader.render.test.tsx",

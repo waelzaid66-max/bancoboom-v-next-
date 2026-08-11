@@ -31,6 +31,7 @@ import { AppText } from "@/components/AppText";
 import { DeleteAccountModal } from "@/components/DeleteAccountModal";
 import { useBiometric } from "@/context/BiometricContext";
 import { useI18n } from "@/context/LanguageContext";
+import { useMessageOutbox } from "@/context/MessageOutboxContext";
 import { useSound } from "@/context/SoundContext";
 import { useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
@@ -376,6 +377,13 @@ export default function SettingsScreen() {
     setNotificationsEnabled,
   } = useSound();
   const biometric = useBiometric();
+  const {
+    prepareForSignOut,
+    resumeAfterSignOutFailure,
+    suspendForAccountDeletion,
+    resumeAfterAccountDeletionFailure,
+    purgeAfterAccountDeletion,
+  } = useMessageOutbox();
   const insets = useSafeAreaInsets();
   const { isSignedIn, signOut, sessionId } = useAuth();
   const { user } = useUser();
@@ -479,8 +487,27 @@ export default function SettingsScreen() {
         style: "destructive",
         onPress: () => {
           void (async () => {
+            try {
+              await prepareForSignOut();
+            } catch {
+              resumeAfterSignOutFailure();
+              Alert.alert(
+                t("settings.outboxCleanupErrorTitle"),
+                t("settings.outboxCleanupErrorBody"),
+              );
+              return;
+            }
             await unregisterCachedPushTokenBestEffort();
-            await signOut().catch(() => {});
+            try {
+              await signOut();
+            } catch {
+              resumeAfterSignOutFailure();
+              Alert.alert(
+                t("settings.signOutErrorTitle"),
+                t("settings.signOutErrorBody"),
+              );
+              return;
+            }
             router.replace("/(tabs)");
           })();
         },
@@ -622,15 +649,23 @@ export default function SettingsScreen() {
 
   const handleDelete = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    await suspendForAccountDeletion();
     try {
       setDeleting(true);
       await deleteAccount();
       setShowDelete(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await purgeAfterAccountDeletion().catch(() => {
+        Alert.alert(
+          t("settings.outboxCleanupErrorTitle"),
+          t("settings.outboxCleanupAfterDeleteBody"),
+        );
+      });
       await unregisterCachedPushTokenBestEffort();
       await signOut();
       router.replace("/(tabs)");
     } catch {
+      resumeAfterAccountDeletionFailure();
       setDeleting(false);
       Alert.alert(t("settings.deleteErrorTitle"), t("settings.deleteErrorBody"));
     }
@@ -677,13 +712,21 @@ export default function SettingsScreen() {
     // deletion error, not a wrong-password error, so report it separately.
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      await suspendForAccountDeletion();
       await deleteAccount();
       setShowDeletePw(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await purgeAfterAccountDeletion().catch(() => {
+        Alert.alert(
+          t("settings.outboxCleanupErrorTitle"),
+          t("settings.outboxCleanupAfterDeleteBody"),
+        );
+      });
       await unregisterCachedPushTokenBestEffort();
       await signOut();
       router.replace("/(tabs)");
     } catch {
+      resumeAfterAccountDeletionFailure();
       setDeletePwError(t("settings.deleteFailed"));
       setDeletePwBusy(false);
     }

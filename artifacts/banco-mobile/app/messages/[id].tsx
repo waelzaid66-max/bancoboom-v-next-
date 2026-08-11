@@ -46,6 +46,7 @@ import { EmojiPicker } from "@/components/EmojiPicker";
 import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
 import { PermissionRationaleModal } from "@/components/PermissionRationaleModal";
 import { useI18n } from "@/context/LanguageContext";
+import { useMessageOutbox } from "@/context/MessageOutboxContext";
 import { useSession } from "@/context/SessionContext";
 import { quickReplyKeys, type ChatParty } from "@/constants/quickReplies";
 import { PresenceLabel, type Presence } from "@/components/PresenceDot";
@@ -77,7 +78,7 @@ const isOfferBody = (b: string | null | undefined): boolean =>
 // Optimistic, client-only message that renders instantly while the send is in
 // flight. It carries a delivery status so the bubble can show sending/failed and
 // offer a tap-to-retry, then it is dropped once the server echo arrives.
-type PendingStatus = "sending" | "failed";
+type PendingStatus = "queued" | "sending" | "retrying" | "failed";
 type PendingMessage = {
   /** UUID shared with the API as client_message_id and reused on every retry. */
   tempId: string;
@@ -89,6 +90,8 @@ type PendingMessage = {
   status: PendingStatus;
   /** Preserved so tap-to-retry can re-send a quote (MSG-10). */
   reply_to_id?: string;
+  /** Body-only item owned by the root durable outbox rather than this screen. */
+  durable?: boolean;
 };
 type Row =
   | { kind: "server"; msg: Message }
@@ -105,7 +108,7 @@ function timeLabel(iso: string, locale: string): string {
   }
 }
 
-export default function ThreadScreen() {
+export function ThreadScreen() {
   const colors = useColors();
   const { t, isRTL, lang } = useI18n();
   const insets = useSafeAreaInsets();
@@ -123,6 +126,12 @@ export default function ThreadScreen() {
   const conversationId = params.id;
   const qc = useQueryClient();
   const { bumpListings } = useSession();
+  const {
+    entries: outboxEntries,
+    enqueueText,
+    retry: retryOutbox,
+    discard: discardOutbox,
+  } = useMessageOutbox();
 
   // Mark-sold is seller-only when route params include listingId + role=seller
   // (inbox always does; listing/company createConversation now pass buyer role
@@ -154,6 +163,19 @@ export default function ThreadScreen() {
   }, [qc, conversationId]);
 
   const [draft, setDraft] = useState("");
+  const [queueingText, setQueueingText] = useState(false);
+  const draftRevisionRef = useRef(0);
+  const replyRevisionRef = useRef(0);
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
+  const changeDraft = useCallback((next: React.SetStateAction<string>) => {
+    draftRevisionRef.current += 1;
+    setDraft(next);
+  }, []);
+  const changeReplyTo = useCallback((next: Message | null) => {
+    replyRevisionRef.current += 1;
+    setReplyTo(next);
+  }, []);
 
   /**
    * The section this chat belongs to, read from the listing it is attached to.
@@ -251,6 +273,7 @@ export default function ThreadScreen() {
   useEffect(() => {
     const committed = new Set(
       (query.data?.data ?? [])
+        .filter((message) => message.is_mine)
         .map((message) => message.client_message_id)
         .filter((id): id is string => typeof id === "string"),
     );
@@ -259,7 +282,12 @@ export default function ThreadScreen() {
       const next = current.filter((message) => !committed.has(message.tempId));
       return next.length === current.length ? current : next;
     });
-  }, [query.data?.data]);
+    for (const entry of outboxEntries) {
+      if (entry.conversationId === conversationId && committed.has(entry.clientMessageId)) {
+        void discardOutbox(entry.clientMessageId).catch(() => {});
+      }
+    }
+  }, [conversationId, discardOutbox, outboxEntries, query.data?.data]);
 
   // Reset older page when switching threads (never absorb across conversations).
   useEffect(() => {
@@ -331,8 +359,27 @@ export default function ThreadScreen() {
     return out;
   })();
 
+  const committedClientIds = new Set(
+    serverMessages
+      .filter((message) => message.is_mine)
+      .map((message) => message.client_message_id)
+      .filter((id): id is string => typeof id === "string"),
+  );
+  const durablePending: PendingMessage[] = outboxEntries
+    .filter(
+      (entry) =>
+        entry.conversationId === conversationId &&
+        !committedClientIds.has(entry.clientMessageId),
+    )
+    .map((entry) => ({
+      tempId: entry.clientMessageId,
+      body: entry.body,
+      status: entry.state,
+      durable: true,
+    }));
   const rows: Row[] = [
     ...serverMessages.map((msg) => ({ kind: "server" as const, msg })),
+    ...durablePending.map((msg) => ({ kind: "pending" as const, msg })),
     ...pending.map((msg) => ({ kind: "pending" as const, msg })),
   ];
 
@@ -466,18 +513,54 @@ export default function ThreadScreen() {
   );
 
   const handleSend = () => {
-    const body = draft.trim();
-    if (!body || !conversationId) return;
-    setDraft("");
+    const submittedDraft = draft;
+    const body = submittedDraft.trim();
+    if (!body || !conversationId || queueingText) return;
     const replyId = replyTo?.id;
-    setReplyTo(null);
+    const submittedDraftRevision = draftRevisionRef.current;
+    const submittedReplyRevision = replyRevisionRef.current;
+    const submittedConversationId = conversationId;
     const tempId = Crypto.randomUUID();
+    if (!replyId) {
+      setQueueingText(true);
+      void (async () => {
+        try {
+          await enqueueText({ conversationId, clientMessageId: tempId, body });
+          // Text can change A→B→A while persistence is pending, so string
+          // equality is not enough. Clear only the exact composer revision in
+          // the same conversation; a later reply selection also bumps it.
+          if (conversationIdRef.current === submittedConversationId) {
+            if (draftRevisionRef.current === submittedDraftRevision) {
+              draftRevisionRef.current += 1;
+              setDraft("");
+            }
+            if (replyRevisionRef.current === submittedReplyRevision) {
+              replyRevisionRef.current += 1;
+              setReplyTo(null);
+            }
+          }
+          scrollToEnd(true);
+        } catch {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          // Persist-before-send failed. Keep the draft intact so a storage
+          // outage can never turn a tap into silent message loss.
+        } finally {
+          setQueueingText(false);
+        }
+      })();
+      return;
+    }
+
+    setDraft("");
+    setReplyTo(null);
+    draftRevisionRef.current += 1;
+    replyRevisionRef.current += 1;
     setPending((p) => [
       ...p,
-      { tempId, body, status: "sending", ...(replyId ? { reply_to_id: replyId } : {}) },
+      { tempId, body, status: "sending", reply_to_id: replyId },
     ]);
     scrollToEnd(true);
-    void deliver(tempId, { body, ...(replyId ? { reply_to_id: replyId } : {}) });
+    void deliver(tempId, { body, reply_to_id: replyId });
   };
 
   const sendOffer = () => {
@@ -629,6 +712,10 @@ export default function ThreadScreen() {
   // Retry a failed optimistic message in place.
   const retry = useCallback(
     (m: PendingMessage) => {
+      if (m.durable) {
+        void retryOutbox(m.tempId);
+        return;
+      }
       setPending((p) =>
         p.map((x) => (x.tempId === m.tempId ? { ...x, status: "sending" } : x))
       );
@@ -660,7 +747,26 @@ export default function ThreadScreen() {
         });
       }
     },
-    [deliver]
+    [deliver, retryOutbox]
+  );
+
+  const handleFailedPending = useCallback(
+    (message: PendingMessage) => {
+      if (!message.durable) {
+        retry(message);
+        return;
+      }
+      Alert.alert(t("chat.unsentTitle"), t("chat.unsentBody"), [
+        { text: t("common.cancel"), style: "cancel" },
+        {
+          text: t("chat.discard"),
+          style: "destructive",
+          onPress: () => void discardOutbox(message.tempId),
+        },
+        { text: t("common.retry"), onPress: () => retry(message) },
+      ]);
+    },
+    [discardOutbox, retry, t],
   );
 
   // Step 1: in-app disclosure THEN OS gallery (images + videos — MSG-14b).
@@ -787,7 +893,11 @@ export default function ThreadScreen() {
     const body = row.msg.body;
     const isPending = row.kind === "pending";
     const failed = isPending && row.msg.status === "failed";
-    const inFlight = isPending && row.msg.status === "sending";
+    const inFlight =
+      isPending &&
+      (row.msg.status === "queued" ||
+        row.msg.status === "sending" ||
+        row.msg.status === "retrying");
     const showReceipt =
       row.kind === "server" && mine && row.msg.id === lastMineId;
 
@@ -995,8 +1105,12 @@ export default function ThreadScreen() {
           >
             {row.kind === "server"
               ? timeLabel(row.msg.created_at, lang)
-              : inFlight
-                ? t("chat.sending")
+              : row.msg.status === "queued"
+                ? t("chat.queued")
+                : row.msg.status === "retrying"
+                  ? t("chat.retrying")
+                  : inFlight
+                    ? t("chat.sending")
                 : t("chat.failedTap")}
           </AppText>
           {inFlight ? (
@@ -1022,7 +1136,9 @@ export default function ThreadScreen() {
           ]}
         >
           {failed ? (
-            <Pressable onPress={() => retry(row.msg as PendingMessage)}>
+            <Pressable
+              onPress={() => handleFailedPending(row.msg as PendingMessage)}
+            >
               {bubbleInner}
             </Pressable>
           ) : server ? (
@@ -1284,7 +1400,7 @@ export default function ThreadScreen() {
         )}
 
         {emojiOpen ? (
-          <EmojiPicker onSelect={(e) => setDraft((d) => d + e)} />
+          <EmojiPicker onSelect={(e) => changeDraft((d) => d + e)} />
         ) : null}
 
         {replyTo ? (
@@ -1307,7 +1423,7 @@ export default function ThreadScreen() {
                 {replyTo.body || t("chat.attachment")}
               </AppText>
             </View>
-            <Pressable onPress={() => setReplyTo(null)} hitSlop={10} testID="reply-cancel">
+            <Pressable onPress={() => changeReplyTo(null)} hitSlop={10} testID="reply-cancel">
               <Feather name="x" size={18} color={colors.mutedForeground} />
             </Pressable>
           </View>
@@ -1334,7 +1450,7 @@ export default function ThreadScreen() {
                 onPress={() => {
                   Haptics.selectionAsync();
                   // Fill, do not send — the user reviews and edits first.
-                  setDraft(t(key as never));
+                  changeDraft(t(key as never));
                 }}
                 style={[
                   styles.quickChip,
@@ -1422,7 +1538,7 @@ export default function ThreadScreen() {
           </Pressable>
           <AppTextInput
             value={draft}
-            onChangeText={setDraft}
+            onChangeText={changeDraft}
             placeholder={t("messages.inputPlaceholder")}
             placeholderTextColor={colors.mutedForeground}
             style={[
@@ -1441,14 +1557,15 @@ export default function ThreadScreen() {
           />
           <Pressable
             onPress={handleSend}
-            disabled={!draft.trim()}
+            disabled={!draft.trim() || queueingText}
             style={[
               styles.sendBtn,
               {
-                backgroundColor: !draft.trim()
+                backgroundColor: !draft.trim() || queueingText
                   ? colors.secondary
                   : colors.primary,
-                borderColor: !draft.trim() ? colors.border : colors.primary,
+                borderColor:
+                  !draft.trim() || queueingText ? colors.border : colors.primary,
               },
             ]}
             testID="message-send"
@@ -1457,7 +1574,9 @@ export default function ThreadScreen() {
               name="send"
               size={18}
               color={
-                !draft.trim() ? colors.mutedForeground : colors.primaryForeground
+                !draft.trim() || queueingText
+                  ? colors.mutedForeground
+                  : colors.primaryForeground
               }
               // The paper-plane points toward the send direction — mirror it in RTL
               // so it flies left in Arabic, matching WhatsApp/Messenger.
@@ -1689,7 +1808,7 @@ export default function ThreadScreen() {
               onPress={() => {
                 const m = actionFor;
                 setActionFor(null);
-                setReplyTo(m);
+                changeReplyTo(m);
               }}
               style={[styles.sheetAction, { flexDirection: isRTL ? "row-reverse" : "row" }]}
               testID="action-reply"
@@ -1752,6 +1871,8 @@ export default function ThreadScreen() {
     </View>
   );
 }
+
+export default ThreadScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
