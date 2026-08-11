@@ -29,7 +29,7 @@
 | Compose **service** name | Docker **image** name | What it actually is | Public port |
 |--------------------------|------------------------|---------------------|-------------|
 | `postgres` | `postgres:16` | Database | internal only |
-| `migrate` | (build, profile `migrate`) | One-off schema push — **not** auto-started | — |
+| `migrate` | (build, profile `migrate`) | One-off committed migrations — **not** auto-started | — |
 | `api` | `banco-api:latest` | Node API | **8080** · health **`/api/readyz`** |
 | `banco-web` | `banco-web:latest` | Frozen Next twin (**profile `legacy-banco-web`**, off by default) | **3000** |
 | `banco-website` | `banco-website:latest` | Canonical Next marketing/consumer | **3001** host |
@@ -58,8 +58,12 @@ That one origin gives you:
 | `/.well-known/` | AASA + assetlinks (replace `REPLACE_*` later) |
 | `/nginx-health` | Liveness |
 
-**Default services on Deploy:** `postgres` + `api` + `banco-website` + `web`.  
-Frozen twin `banco-web` is **profile-gated** (`legacy-banco-web`) — do not enable unless you still need the old Next twin.
+The ungated default Compose set is `postgres` + `api` + `banco-website` +
+`web`. **Do not use the one-click/default Deploy before committed migrations
+have succeeded**: `api` depends on Postgres health, not on the manual `migrate`
+profile. Follow the controlled order in §5. Frozen twin `banco-web` is
+**profile-gated** (`legacy-banco-web`) — do not enable unless you still need the
+old Next twin.
 
 Optional later (split origins):
 
@@ -122,15 +126,35 @@ Full reference: `docs/DEPLOY_COOLIFY.md`.
 
 ## 5. Deploy + migrate order
 
-1. Fill env → **Deploy** (Coolify builds all services).
-2. Wait until `postgres` + `api` are healthy (`api` uses **`/api/readyz`**).
-3. Run migrate **once** (Coolify terminal / SSH on the stack):
+### Build the exact release without starting it
+
+Fill env and pin Coolify's checkout to the exact approved release SHA. From the
+stack terminal/SSH, build the release images without starting the default
+services:
+
+```bash
+docker compose -f docker-compose.coolify.yml build migrate api banco-website web
+```
+
+### Controlled service start
+
+1. Start only `postgres` and wait until it is healthy (`pg_isready`).
+2. Run the manual committed migrations from that same exact-SHA checkout:
 
 ```bash
 docker compose -f docker-compose.coolify.yml --profile migrate run --rm migrate
 ```
 
-4. Smoke (after DNS points here):
+A fresh empty database runs that command directly. For an existing pre-journal
+database, independently prove its live schema is equivalent to the exact
+committed migration state for the release SHA, then run
+`pnpm --filter @workspace/db run baseline` once before `migrate`; a non-empty
+database is not equivalence proof. Full policy:
+`lib/db/MIGRATIONS.md`.
+
+3. Start `api`, wait for **`/api/readyz`**, then start `banco-website` and `web`
+   (plus profile-gated `banco-web` only if explicitly required).
+4. Smoke after DNS points here:
 
 ```bash
 curl -fsS https://<apex>/nginx-health

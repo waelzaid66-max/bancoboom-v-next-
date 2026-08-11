@@ -1,5 +1,9 @@
 # BANCO — Master Production Tracker (anti-forgetting ledger)
 
+> **HISTORICAL EVIDENCE — DO NOT USE FOR DEPLOYMENT.** This tracker preserves a
+> pre-canonical program snapshot and its old repository/OPS instructions. Current
+> deployment authority is `docs/DEPLOYMENT_SOURCE_OF_TRUTH.md`.
+
 > Single ledger for the Master Production Recovery Program. Every owner instruction, every module, every open task lands here so nothing is lost between sessions.
 > Source of truth repo: **`bancostormainvirgen` / main**. Mirror: `bancoo` branch `claude/facebook-oauth-e1` (PR #8) — used to run CI.
 

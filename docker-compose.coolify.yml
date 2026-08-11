@@ -11,12 +11,14 @@
 #      compose file path = docker-compose.coolify.yml
 #   2. Set required env vars (see COOLIFY_DEPLOY_NOW.md) BEFORE first Deploy
 #   3. Map apex domain to service `web` port 80 (recommended single-origin)
-#   4. Deploy, then: docker compose --profile migrate run --rm migrate
+#   4. Start `postgres` and wait for its healthcheck
+#   5. Run: docker compose --profile migrate run --rm migrate
+#   6. Start `api`, then the web surfaces after API readiness
 #
 # ─── Service ↔ Image map (DO NOT CONFUSE THESE NAMES) ────────────────────────
 #   Service          Image                    Role
 #   postgres         postgres:16              DB (internal)
-#   migrate          (profile migrate)        one-off drizzle push
+#   migrate          (profile migrate)        one-off committed migrations
 #   api              banco-api:latest         API · compose health = /api/readyz
 #                                             (Dockerfile HEALTHCHECK = /api/healthz
 #                                              is image liveness only; compose wins)
@@ -36,10 +38,15 @@
 #   See COOLIFY_DEPLOY_NOW.md + docs/DEPLOY_COOLIFY.md.
 #
 # ─── Migrations ──────────────────────────────────────────────────────────────
-#   Schema migrations are NOT run automatically on deploy. Apply them explicitly
-#   once per schema change with the profile-gated one-off `migrate` service:
+#   Committed migrations are NOT run automatically on deploy. Apply them
+#   explicitly after Postgres is healthy and before API readiness with the
+#   profile-gated one-off `migrate` service:
 #       docker compose --profile migrate run --rm migrate
-#   (creates/updates tables such as import_orders). See docs/DEPLOY_COOLIFY.md.
+#   A fresh empty database runs `migrate` directly. For an existing pre-journal
+#   database, independently prove its live schema is equivalent to the exact
+#   committed migration state for the release SHA, then run `baseline` once
+#   before `migrate`. Merely being non-empty
+#   is not proof. See lib/db/MIGRATIONS.md and docs/DEPLOY_COOLIFY.md.
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: banco
@@ -75,12 +82,13 @@ services:
     # Postgres is internal-only. Do NOT expose a host port in production.
 
   # ── DB migrate (one-off; NEVER runs on `up`) ────────────────────────────────
-  # Applies the Drizzle schema to Postgres (creates/updates tables, e.g.
-  # import_orders). Profile-gated so a normal deploy never touches the schema.
+  # Applies committed migrations to Postgres in journal order. Profile-gated so
+  # a normal deploy never touches the schema.
   # Run it explicitly after the DB is healthy, once per schema change:
   #   docker compose --profile migrate run --rm migrate
-  # Reuses the API builder stage (it has drizzle-kit + the schema). --force applies
-  # the diff non-interactively; on a real data migration review the SQL first.
+  # Reuses the API builder stage, which contains the committed migration runner.
+  # Review generated SQL before commit; production never computes a live schema
+  # diff or suppresses a destructive prompt here.
   migrate:
     profiles: ["migrate"]
     build:
@@ -98,7 +106,9 @@ services:
     # Applies committed migrations in order, once each. Was `push -- --force`,
     # which diffed the schema file against the live database and suppressed the
     # prompt that catches a rename — first row of the adoption table in
-    # lib/db/MIGRATIONS.md. An existing database must be stamped once first:
+    # lib/db/MIGRATIONS.md. An existing pre-journal database may be stamped once
+    # only after its live schema is independently proven equivalent to the exact
+    # committed migration state for the release SHA:
     #     DATABASE_URL=... pnpm --filter @workspace/db run baseline
     command: ["pnpm", "--filter", "@workspace/db", "run", "migrate"]
 

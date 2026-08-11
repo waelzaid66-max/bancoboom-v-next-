@@ -1,5 +1,10 @@
 # BANCO / B-OOM — Production Delivery & Acceptance Report
 
+> **HISTORICAL EVIDENCE — DO NOT USE FOR DEPLOYMENT.** This report preserves a
+> 2026-07-25 branch/PR snapshot. Current deployment authority is
+> `docs/DEPLOYMENT_SOURCE_OF_TRUTH.md`; its commands and migration order supersede
+> every operational instruction below.
+
 > Delivered by the Production Chief Architect (Claude). Repo `bancoo` · branch `claude/facebook-oauth-e1` → **PR #8** into `main`. Date 2026-07-25.
 > Every claim below is backed by a green CI run on clean Linux (PR #8), not a local-only check.
 

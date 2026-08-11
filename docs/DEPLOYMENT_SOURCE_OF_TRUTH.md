@@ -98,6 +98,11 @@ Nginx map (`deploy/coolify/nginx.conf`): `/` landing · `/market/` dealer-os · 
 4. `banco-web` + `banco-website` + `web` (parallel after API healthy)
 5. Mobile — EAS after API is publicly reachable
 
+The ungated default Compose set starts `api` as soon as Postgres is healthy; it
+does not wait for the manual migration profile. For a first or schema-bearing
+release, build the exact approved SHA without `up`, then use the controlled
+service order below.
+
 ---
 
 ## 4. Coolify resource settings (exact)
@@ -188,10 +193,19 @@ Runtime: `PORT` · `NODE_ENV` · `CLERK_SECRET_KEY` · `BANCO_WEBSITE_HOST_PORT`
 □ Set `POSTGRES_PASSWORD` `CLERK_SECRET_KEY` `SESSION_SECRET` `PAYMENT_CONFIG_ENCRYPTION_KEY`
 □ Set S3: `OBJECT_STORAGE_PROVIDER=s3` + `AWS_*` / `S3_BUCKET` / object paths
 □ Set build-time `NEXT_PUBLIC_*` / `VITE_*` / public URLs
-□ Deploy → wait **postgres** healthy
-□ Run **migrate** profile once
-□ Wait **api** `/api/readyz` = 200
-□ Wait **banco-web** / **banco-website** / **web** healthy
+
+### Controlled service order
+
+□ Pin the exact approved release SHA and build images without starting services
+□ Start only **postgres** and wait for `pg_isready`
+□ Classify the database before any stamp: a fresh empty database runs the
+committed migrations directly and is never baselined
+□ For an existing pre-journal database, independently prove its live schema is
+equivalent to the exact committed migration state for the release SHA; only then
+run `baseline` once
+□ Run the committed **migrate** profile and require exit 0
+□ Start **api** and require `/api/readyz` = 200
+□ Start **banco-web** / **banco-website** / **web** after API readiness
 □ Configure domains on Traefik
 □ Fill well-known `REPLACE_*` · redeploy `web`
 □ EAS bake `EXPO_PUBLIC_*` for `com.bancooom.app`

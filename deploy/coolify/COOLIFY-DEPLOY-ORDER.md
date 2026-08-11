@@ -48,7 +48,13 @@ docker compose -f docker-compose.coolify.yml ps postgres
 docker compose -f docker-compose.coolify.yml --profile migrate run --rm migrate
 ```
 
-Uses `drizzle-kit push --force` (non-interactive). Safe to re-run.
+This runs the committed migrations in journal order. A fresh empty database
+runs this command directly. For an existing pre-journal database, independently
+prove its live schema is equivalent to the exact committed migration state for
+the release SHA, then run `pnpm --filter @workspace/db run baseline` once before
+`migrate`; merely finding tables is not equivalence proof. See
+`lib/db/MIGRATIONS.md`. A migration failure blocks the API step and must be
+investigated; never replace it with schema push.
 
 ## 3. API
 

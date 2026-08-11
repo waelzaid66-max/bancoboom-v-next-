@@ -59,16 +59,50 @@ GIT_SHA=
 
 - [ ] All required vars filled in Coolify
 - [ ] Build-time Clerk keys filled
-- [ ] **Deploy** clicked and all services healthy
-- [ ] Migrate run once:
+
+### Controlled deployment order
+
+- [ ] Approved exact release SHA and database restore point recorded
+- [ ] `postgres` started by itself and healthy:
+
+```bash
+docker compose -f docker-compose.coolify.yml up -d postgres
+docker compose -f docker-compose.coolify.yml ps postgres
+```
+
+- [ ] Database path classified before any stamp:
+  - A fresh empty database runs the committed migrations directly and is never
+    baselined.
+  - For an existing pre-journal database, independently prove its live schema is
+    equivalent to the exact committed migration state for the release SHA, then
+    run `pnpm --filter @workspace/db run baseline` exactly once through the
+    profile-gated migrate container. A backup or non-empty database is not proof.
+- [ ] Committed migrations completed with exit 0:
 
 ```bash
 docker compose -f docker-compose.coolify.yml --profile migrate run --rm migrate
 ```
 
+- [ ] `api` started only after migration success and `/api/readyz` is healthy:
+
+```bash
+docker compose -f docker-compose.coolify.yml up -d --build api
+curl -fsS http://127.0.0.1:${API_HOST_PORT:-8080}/api/readyz
+```
+
+- [ ] `banco-website` and `web` started after API readiness; the legacy
+  `banco-web` profile remains off unless explicitly approved:
+
+```bash
+docker compose -f docker-compose.coolify.yml up -d --build banco-website web
+```
+
+The one-time baseline command and the required equivalence boundary are in
+`lib/db/MIGRATIONS.md`; stop if the proof or migration fails.
+
 ---
 
-## C. Smoke (after Deploy + migrate)
+## C. Smoke (after committed migrations and controlled service start)
 
 Manual curls:
 

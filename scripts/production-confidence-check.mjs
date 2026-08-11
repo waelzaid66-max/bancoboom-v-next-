@@ -579,6 +579,201 @@ function checkMigrationAuthority() {
   );
 }
 
+function checkMigrationOperatorDocs() {
+  const documents = [
+    "docker-compose.coolify.yml",
+    "deploy/coolify/COOLIFY-DEPLOY-ORDER.md",
+    "docs/DEPLOY_COOLIFY.md",
+    "lib/db/MIGRATIONS.md",
+    "COOLIFY_DEPLOY_NOW.md",
+    "OPS_GO_LIVE_CHECKLIST.md",
+    "docs/DEPLOYMENT_SOURCE_OF_TRUTH.md",
+  ];
+  const archivalDocuments = [
+    "docs/PRODUCTION-DELIVERY-ACCEPTANCE.md",
+    "docs/audit/MASTER-TRACKER.md",
+  ];
+  const sources = new Map();
+
+  for (const relPath of [...documents, ...archivalDocuments]) {
+    const fullPath = path.join(ROOT, relPath);
+    if (!fs.existsSync(fullPath)) {
+      fail("migration operator docs", `missing ${relPath}`);
+      return;
+    }
+    sources.set(relPath, fs.readFileSync(fullPath, "utf8"));
+  }
+
+  const violations = [];
+  const forbid = (relPath, pattern, detail) => {
+    if (pattern.test(sources.get(relPath))) {
+      violations.push(`${relPath}: ${detail}`);
+    }
+  };
+  const requireText = (relPath, pattern, detail) => {
+    if (!pattern.test(sources.get(relPath))) {
+      violations.push(`${relPath}: ${detail}`);
+    }
+  };
+
+  forbid(
+    "docker-compose.coolify.yml",
+    /one-off (?:drizzle|schema) push/i,
+    "migrate service is still labelled as schema push",
+  );
+  forbid(
+    "docker-compose.coolify.yml",
+    /--force applies the diff/i,
+    "comments still present push-force as the current runner",
+  );
+  forbid(
+    "deploy/coolify/COOLIFY-DEPLOY-ORDER.md",
+    /Uses `drizzle-kit push --force`/i,
+    "deploy order claims the migrate profile runs push-force",
+  );
+  forbid(
+    "deploy/coolify/COOLIFY-DEPLOY-ORDER.md",
+    /Safe to re-run\./i,
+    "deploy order gives an unconditional rerun guarantee",
+  );
+  forbid(
+    "docs/DEPLOY_COOLIFY.md",
+    /pnpm[^\n`]*--filter @workspace\/db run push(?:\s|$)/i,
+    "guide publishes a production push command",
+  );
+  forbid(
+    "docs/DEPLOY_COOLIFY.md",
+    /Schema apply uses Drizzle \*\*push\*\*/i,
+    "guide names push as the current schema authority",
+  );
+  forbid(
+    "docs/DEPLOY_COOLIFY.md",
+    /push -- --force/i,
+    "guide claims the migrate profile executes push-force",
+  );
+  forbid(
+    "docs/DEPLOY_COOLIFY.md",
+    /database schema push once/i,
+    "production checklist still asks for schema push",
+  );
+  forbid(
+    "lib/db/MIGRATIONS.md",
+    /callers below must\s+stay on `push`/is,
+    "transitional push instruction is still written as current",
+  );
+  forbid(
+    "lib/db/MIGRATIONS.md",
+    /scripts\/post-merge\.sh`, which runs `push-force` after every merge/i,
+    "post-merge runner is described with its obsolete command",
+  );
+  forbid(
+    "COOLIFY_DEPLOY_NOW.md",
+    /One-off schema push/i,
+    "migrate service is still labelled as schema push",
+  );
+  forbid(
+    "OPS_GO_LIVE_CHECKLIST.md",
+    /Deploy[^\n]*all services healthy[\s\S]{0,240}?Migrate run once/i,
+    "checklist starts every service before applying migrations",
+  );
+  forbid(
+    "docs/DEPLOYMENT_SOURCE_OF_TRUTH.md",
+    /□ Deploy[^\n]*wait \*\*postgres\*\* healthy/i,
+    "first-deploy checklist starts the default stack before migrations",
+  );
+
+  for (const relPath of [
+    "COOLIFY_DEPLOY_NOW.md",
+    "docs/DEPLOY_COOLIFY.md",
+  ]) {
+    requireText(
+      relPath,
+      /do not use[\s\S]{0,160}(?:one-click|default)[\s\S]{0,80}deploy[\s\S]{0,160}before[\s\S]{0,160}migrat/i,
+      "must explicitly block an ungated default deploy before migrations",
+    );
+  }
+
+  for (const relPath of archivalDocuments) {
+    requireText(
+      relPath,
+      /HISTORICAL EVIDENCE — DO NOT USE FOR DEPLOYMENT/i,
+      "stale deployment instructions need a non-authoritative archive banner",
+    );
+  }
+
+  for (const relPath of documents) {
+    requireText(
+      relPath,
+      /committed migrations?/i,
+      "must identify committed migrations as the authority",
+    );
+  }
+  for (const relPath of [
+    "deploy/coolify/COOLIFY-DEPLOY-ORDER.md",
+    "docs/DEPLOY_COOLIFY.md",
+    "lib/db/MIGRATIONS.md",
+    "COOLIFY_DEPLOY_NOW.md",
+    "OPS_GO_LIVE_CHECKLIST.md",
+    "docs/DEPLOYMENT_SOURCE_OF_TRUTH.md",
+  ]) {
+    requireText(
+      relPath,
+      /fresh\s+empty\s+database/i,
+      "must distinguish a fresh empty database",
+    );
+    requireText(
+      relPath,
+      /existing\s+pre-journal\s+database/i,
+      "must distinguish an existing pre-journal database",
+    );
+    requireText(
+      relPath,
+      /independently\s+prove(?:n)?[\s\S]{0,160}?schema[\s\S]{0,160}?equivalent/i,
+      "must require independent schema-equivalence proof before baseline",
+    );
+  }
+
+  const orderedHeadings = sources.get(
+    "deploy/coolify/COOLIFY-DEPLOY-ORDER.md",
+  );
+  const postgresHeading = orderedHeadings.indexOf("## 1. Postgres");
+  const migrateHeading = orderedHeadings.indexOf("## 2. Migrate schema");
+  const apiHeading = orderedHeadings.indexOf("## 3. API");
+  if (!(postgresHeading >= 0 && postgresHeading < migrateHeading && migrateHeading < apiHeading)) {
+    violations.push(
+      "deploy/coolify/COOLIFY-DEPLOY-ORDER.md: order must remain Postgres → migrate → API",
+    );
+  }
+
+  for (const [relPath, heading] of [
+    ["docs/DEPLOY_COOLIFY.md", "## Deployment Order"],
+    ["COOLIFY_DEPLOY_NOW.md", "### Controlled service start"],
+    ["OPS_GO_LIVE_CHECKLIST.md", "### Controlled deployment order"],
+    ["docs/DEPLOYMENT_SOURCE_OF_TRUTH.md", "### Controlled service order"],
+  ]) {
+    const source = sources.get(relPath);
+    const start = source.indexOf(heading);
+    const tail = start >= 0 ? source.slice(start + heading.length) : "";
+    const nextHeading = tail.search(/\n## /);
+    const section = nextHeading >= 0 ? tail.slice(0, nextHeading) : tail;
+    const postgres = section.search(/postgres/i);
+    const migrate = section.search(/migrate/i);
+    const api = section.search(/\bapi\b/i);
+    if (!(postgres >= 0 && postgres < migrate && migrate < api)) {
+      violations.push(`${relPath}: documented order must be Postgres → migrate → API`);
+    }
+  }
+
+  if (violations.length) {
+    fail("migration operator docs", violations.join("; "));
+    return;
+  }
+  pass(
+    "migration operator docs",
+    "seven operator surfaces use committed migrations; two historical surfaces are quarantined",
+  );
+}
+
 function checkLandingDomainHops() {
   const landing = path.join(ROOT, "artifacts/landing/src/App.tsx");
   if (!fs.existsSync(landing)) {
@@ -854,6 +1049,7 @@ function main() {
   checkCoolifyDocsApex();
   checkCoolifyProductionLocks();
   checkMigrationAuthority();
+  checkMigrationOperatorDocs();
   checkLandingDomainHops();
   checkReplitWipePollution();
   checkWellKnownTemplates();

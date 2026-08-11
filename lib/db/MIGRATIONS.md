@@ -63,57 +63,56 @@ pnpm --filter @workspace/db run check
 `push` and `push-force` are still present. They are for throwaway local
 databases only — never point them at a database whose data you would miss.
 
-## Adopting an existing database — do this once, in this order
+## Current authority and database adoption
 
-The production database already has the tables. Running `migrate` against it
-directly would fail on the first `CREATE TABLE`, because that table is already
-there. The database has to be told it is already up to date first.
+The committed migrations `0000` through `0007` and their journal are the current
+schema authority. Every new schema change is: edit the schema, `generate`, read
+the SQL, commit both SQL and journal, and let `migrate` apply it.
 
-**Order matters. Doing step 3 before step 2 stamps a migration that was never
-reviewed; doing step 2 on an empty database permanently skips the schema.**
+### Fresh empty database
 
-1. **Generate the baseline migration** from the current schema. This produces a
-   `migrations/0000_*.sql` describing the schema as it stands today, plus a
-   journal entry:
+A fresh empty database runs `migrate` directly. It must never be baselined,
+because baselining records the migrations without executing the statements that
+create its schema.
 
-   ```bash
-   pnpm --filter @workspace/db run generate
-   ```
+```bash
+DATABASE_URL=... pnpm --filter @workspace/db run migrate
+```
 
-2. **Read the generated SQL before it goes anywhere.** It should be entirely
-   `CREATE` statements. If it contains a `DROP`, the schema file and the live
-   database have diverged and that must be understood before continuing — a
-   `DROP` here is exactly the data loss this whole exercise is meant to prevent.
+### Existing pre-journal database
 
-3. **Stamp the existing database** as already having it. This writes the
-   migration's hash into `drizzle.__drizzle_migrations` *without executing the
-   SQL*:
+An existing pre-journal database may contain tables created by the historical
+schema-push flow but no `drizzle.__drizzle_migrations` history. Do not infer
+equivalence from a non-empty database. Before baseline, independently prove its
+live schema is equivalent to the exact committed schema represented by the
+release SHA and migration journal, and take the required production backup.
 
-   ```bash
-   DATABASE_URL=... pnpm --filter @workspace/db run baseline
-   ```
+This is a hard operator boundary: `src/baseline.ts` checks only that at least one
+public table exists, then stamps every current migration hash without executing
+its SQL. It does not compare tables, columns, enums, indexes, constraints, or
+data migrations. Therefore `baseline` is safe only after the independent schema
+comparison has succeeded.
 
-   The script refuses to run against an empty database, because baselining one
-   would skip the migrations that build its schema and leave it permanently
-   broken in a way that looks fine.
+Then, and only then, stamp that existing database once:
 
-4. **Confirm it worked** — this must now report nothing to do:
+```bash
+DATABASE_URL=... pnpm --filter @workspace/db run baseline
+```
 
-   ```bash
-   DATABASE_URL=... pnpm --filter @workspace/db run migrate
-   ```
+Immediately run the committed migration runner. It should apply only migrations
+that are genuinely newer than the proven baseline:
 
-From here on, every schema change is: edit the schema, `generate`, read the SQL,
-commit it, and let `migrate` apply it.
+```bash
+DATABASE_URL=... pnpm --filter @workspace/db run migrate
+```
+
+If the schema comparison cannot prove equivalence, stop and reconcile the
+database. Never baseline or use schema push merely to bypass a migration error.
 
 ## Switching the deployment over
 
-Until step 1 above has produced real migration files, **the callers below must
-stay on `push`**. Switching them first would point them at an empty migrations
-folder and break a flow that currently works.
-
 Production/runtime callers and disposable-PostgreSQL test gates now use the
-same committed authority. The precondition above is met:
+same committed migration authority. The completed adoption produced:
 `0000_fantastic_warbird.sql` (293 `CREATE`s, zero `DROP`s) plus the later
 journalled migrations exist in Git.
 
@@ -127,16 +126,16 @@ journalled migrations exist in Git.
 | `.github/workflows/deploy.yml` verification DB | `push-force` | `check` + `migrate` twice ✅ |
 | `scripts/run-api-tests-local.mjs` disposable DB | `push-force` | `check` + `migrate` twice ✅ |
 
-> **Step 3 above must be run once against every existing database before the
-> next merge lands.** `migrate` on an un-stamped database dies on its first
-> `CREATE TABLE`, because that table is already there. The failure is loud and
-> safe — nothing is written, nothing is lost — but it will stop a deploy until
-> the baseline is taken. A brand-new empty database needs no stamp.
+> An existing pre-journal database must complete independent schema-equivalence
+> proof before its one-time baseline. `migrate` on an un-stamped historical
+> database fails loudly on the first already-existing object; do not bypass that
+> signal. A fresh empty database needs no stamp and runs `migrate` directly.
 
 Note on blast radius, since it was mis-stated in the Phase 0 audit and corrected
 here: the Coolify `migrate` service is gated behind `profiles: ["migrate"]` and
-does **not** run on a normal deploy — it is a deliberate one-off. The automatic
-one is `scripts/post-merge.sh`, which runs `push-force` after every merge.
+does **not** run on a normal deploy — it is a deliberate one-off. The
+post-merge helper also executes the committed migration runner; neither path
+uses live schema push as production authority.
 
 ## Absorbing `ensureSchema.ts`
 

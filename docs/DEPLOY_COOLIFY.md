@@ -30,7 +30,8 @@ The Expo mobile app (`artifacts/banco-mobile`) runs on iOS/Android via EAS — i
 - Coolify installed on your Hostinger VPS (see [Coolify docs](https://coolify.io/docs/installation))
 - A domain (or subdomain per service)
 - A GitHub personal access token with repo access (or SSH key) configured in Coolify
-- PNPM and Node.js 24 installed only on your local machine for migrations
+- PNPM and Node.js 24 locally only when running repository verification; the
+  production migration runner is the profile-gated compose service
 
 ### 2. Add your repository to Coolify
 
@@ -67,8 +68,10 @@ Service `web` is **Nginx** (image `banco-web-static`). It already serves:
 | `/.well-known/` | Universal / App Links templates |
 | `/nginx-health` | Liveness |
 
-**Default deploy services:** `postgres` + `api` + `banco-website` + `web`.  
-Enable frozen `banco-web` only with `COMPOSE_PROFILES=legacy-banco-web`.
+The ungated default Compose set is `postgres` + `api` + `banco-website` +
+`web`. **Do not use the one-click/default Deploy before committed migrations
+have succeeded**: `api` has no dependency on the manual profile. Enable frozen
+`banco-web` only with `COMPOSE_PROFILES=legacy-banco-web`.
 
 This avoids putting the marketing Next app on the apex by accident.
 
@@ -89,11 +92,21 @@ Let's Encrypt.
 
 ### 5. Deploy
 
-Click **Deploy** in Coolify. Coolify will:
-1. Pull the source code from GitHub
-2. Build all Docker images (API, Next.js apps, Nginx SPAs)
-3. Start all containers in dependency order
-4. Run health checks on each service
+Save the resource, pin its checkout to the exact approved release SHA, and use
+the stack terminal/SSH to build without starting the default services:
+
+```bash
+docker compose -f docker-compose.coolify.yml build migrate api banco-website web
+```
+
+Then use this operator-controlled first-start order:
+
+1. start `postgres` and wait for `pg_isready`;
+2. run the manual `migrate` profile against the committed migrations;
+3. start/verify `api`; and
+4. start the Next/Nginx web surfaces after API readiness.
+
+The exact commands and the fresh-vs-existing database decision are below.
 
 ---
 
@@ -190,38 +203,48 @@ Click **Deploy** in Coolify. Coolify will:
 > ⚠️  **Migrations are NOT run automatically on container start.** This is
 > intentional — auto-running schema changes on every boot is unsafe in production.
 
-### First-time setup (new database)
+The authority is the committed migration files and journal under
+`lib/db/migrations`, executed in order by `@workspace/db`'s `migrate` script.
+Production never computes a live schema diff or suppresses a destructive prompt.
 
-After the `postgres` and `api` containers are running, open a shell in the
-API container and push the schema:
+### Fresh empty database
 
-```bash
-# In Coolify: select the `api` container → Execute Command → /bin/sh
-
-# Push schema (applies all pending migrations, creating tables from scratch)
-pnpm --filter @workspace/db run push
-```
-
-Or with a local `DATABASE_URL` pointing to your production Postgres:
+Start Postgres, wait for health, then run the profile exactly once before the
+API is considered ready:
 
 ```bash
-DATABASE_URL="postgresql://banco:<password>@<vps-ip>:5432/banco" \
-  pnpm --filter @workspace/db run push
-```
-
-### Subsequent deployments
-
-Schema apply uses Drizzle **push** (there is no `generate` / `migrate` script
-in `@workspace/db`). After the DB is healthy:
-
-```bash
-# One-shot (profile-gated — never runs on a normal `up`)
 docker compose -f docker-compose.coolify.yml --profile migrate run --rm migrate
 ```
 
-That runs `pnpm --filter @workspace/db run push -- --force` inside the API
-builder image. On a real data migration, review the SQL first; re-runs are
-idempotent for additive schema.
+A fresh empty database must not be baselined; it needs every committed migration
+to execute and create the schema.
+
+### Existing pre-journal database
+
+An existing pre-journal database may already contain tables created before the
+committed journal became authoritative. Before stamping anything, independently
+prove its live schema is equivalent to the exact committed migration state for
+the release SHA. A backup, non-empty table count, and the `baseline` script are not
+equivalence proof: `baseline` deliberately checks only that the database is
+non-empty and then records every current migration without executing it.
+
+Only after that independent comparison succeeds, baseline that database once:
+
+```bash
+docker compose -f docker-compose.coolify.yml --profile migrate run --rm migrate \
+  pnpm --filter @workspace/db run baseline
+```
+
+Then run the normal committed migration command:
+
+```bash
+docker compose -f docker-compose.coolify.yml --profile migrate run --rm migrate
+```
+
+If equivalence cannot be proved, stop and reconcile the schema; never use
+baseline or schema push to make the error disappear. Future schema changes are
+generated, reviewed, committed, and applied by `migrate`. See
+`lib/db/MIGRATIONS.md` for the full authority and adoption boundary.
 
 ### Postgres connection string
 
@@ -239,14 +262,16 @@ DNS on the `banco_net` network.
 
 ## Deployment Order
 
-Coolify respects Docker Compose `depends_on` semantics:
+Use this order for first deployment and every schema-bearing release:
 
-1. `postgres` starts first (health-checked: `pg_isready`)
-2. `api` starts after Postgres is healthy (health-checked: `/api/readyz`)
-3. `banco-web`, `banco-website`, `web` start after API is healthy
+1. `postgres` starts first and passes `pg_isready`.
+2. `migrate` runs manually and applies the committed migrations.
+3. `api` starts and passes `/api/readyz`.
+4. `banco-web`, `banco-website`, and `web` start after API readiness.
 
-This order is enforced by `depends_on: condition: service_healthy` in
-`docker-compose.coolify.yml`.
+Compose health dependencies enforce Postgres → API and API → web. The
+profile-gated migrate step is deliberately manual, so the operator and this
+runbook—not `depends_on`—must keep it between Postgres and API.
 
 ---
 
@@ -385,7 +410,7 @@ Before going live:
 - [ ] Set all **required** environment variables (see table above)
 - [ ] Set `BANCO_WEB_URL`, `BANCO_WEBSITE_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` before first build
 - [ ] Configure domains in Coolify → Traefik issues TLS certificates automatically
-- [ ] Run database schema push once via Coolify migrate profile (`--profile migrate run --rm migrate`)
+- [ ] Run committed database migrations after Postgres health and before API readiness (`--profile migrate run --rm migrate`)
 - [ ] Set `PAYMOB_MODE=live` and fill in production Paymob credentials
 - [ ] Verify `CORS_ALLOWED_ORIGINS` includes all frontend domains
 - [ ] Set up object storage (`S3_BUCKET` etc.) for media uploads
