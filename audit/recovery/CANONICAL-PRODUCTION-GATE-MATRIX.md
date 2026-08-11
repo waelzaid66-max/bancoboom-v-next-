@@ -10,7 +10,7 @@ recorded here or in its linked capability ledger.
 | Field | Current value |
 |---|---|
 | Canonical assembly branch | `canonical/vnext-assembly` |
-| Last protected capability SHA | Maps draw-area integrity `02149836f57fc60cb99d641abd116c499c7da480` (bounded product/test repair) |
+| Last protected capability SHA | Maps hub world integrity `0341b65b1658fab9b951dfae1d04410b9c3738c5` (bounded product/test repair) |
 | Last build-control SHA | root serialization `d6b42b5542837ae502febc3a7425efc68241b4ac` |
 | Source ancestry | `bancoboomstor@a3db5bd8c3edd060d35078aefeec709297abbad9` |
 | Assembly status | `GO`, one reversible micro-batch at a time |
@@ -26,7 +26,7 @@ cannot be combined into a production certificate.
 |---|---|---|---|
 | Shared mobile shell | Routes, five-tab escape paths, results/overlay ownership, state retention, safe-area authority | Static + RNTL + 320/360/390/430 + AR/EN + RTL/LTR + Android/iOS device journeys | Shared source/render `TESTED`; device `UNPROVEN` |
 | Five marketplace sections | Cars, Property, Stay, Facilities, Materials identities, filters, taxonomy, loading/results/empty/error, scroll/collapse | Independent lineage decision, renderer, screenshot geometry, interactions, API-backed device journey per section | All five standalone headers plus both bounded parents—the four-catalogue host and independent Stay host—`TESTED`; live facets/booking/all states, current geometry, accessibility, provider, and device journeys open |
-| Maps | List/map sync, locate, clusters, draw polygon, honest count, pin picker, provider bridge, bottom clearance | Unit + generated-page parse + web browser + Android/iOS WebView + live provider + large-result journey | VNX-06A draw-area geometry/web-host/ordering `TESTED` at unit/static/RNTL/build/CI layers; real browser, provider, device, large-result, hub/domain and pin-persistence journeys remain `UNPROVEN` |
+| Maps | List/map sync, locate, clusters, draw polygon, honest count, pin picker, provider bridge, bottom clearance | Unit + generated-page parse + web browser + Android/iOS WebView + live provider + large-result journey | VNX-06A draw-area geometry/web-host/ordering and VNX-06B hub-world hydration `TESTED` at unit/static/RNTL/build/CI layers; a stale criteria-response race is reproduced but not yet repaired; real browser, provider, device, large-result, domain and pin-persistence journeys remain `UNPROVEN` |
 | Messenger | Send/idempotency, outbox, unread/read cursor, retry/offline, block/mute, media, notifications, deep links, presence, optional realtime/typing/voice decisions | PostgreSQL concurrency + API + render + two-account Android/iOS + offline/reconnect + push/email/storage provider journeys | Send/outbox PostgreSQL-scoped `RUNTIME_VERIFIED`; remaining capabilities open |
 | Accounts/Auth/Profile | Personal, dealer, company, financial-institution journeys; MFA/social/reset/delete; tenant/role transitions | Policy matrix + PostgreSQL + live Clerk tenant + Android/iOS/web journeys | Source hardening preserved; live journeys `UNPROVEN` |
 | KYC and permissions | KYC ownership/access, staff roles, company/dealer/FI permissions, deletion/tombstone rules | Negative authorization matrix + PostgreSQL + private-document provider journey | Source hardening preserved; runtime/live `UNPROVEN` |
@@ -67,7 +67,7 @@ cannot be combined into a production certificate.
 | 0 | Git preservation, canonical baseline, ledgers, guard-chain repair | Complete; immutable recovery refs retained |
 | 1 | Shared shell/navigation/results architecture | Complete at render/CI layer; device certification deferred to final device matrix |
 | 2 | Cars, Property, Stay, Facilities, Materials | VNX-05A–G freeze standalone headers plus both bounded parent hosts; live state/facet/booking, current-width, accessibility, provider, and device matrices remain release blockers without wholesale parent replacement |
-| 3 | Shared Maps engine and five domain integrations | VNX-06A draw-area integrity complete; shared browser/native engine, map/list, hub, pin persistence, five domains, provider/device journeys still open; no provider rewrite without reproduced defect and ADR |
+| 3 | Shared Maps engine and five domain integrations | VNX-06A draw-area integrity and VNX-06B hub-world integrity complete; stale criteria-response publication is the next bounded defect; shared browser/native engine, map/list, pin persistence, five domains, provider/device journeys still open; no provider rewrite without reproduced defect and ADR |
 | 4 | Remaining Messenger integrity and product capabilities | DB/security first; transport changes require ADR |
 | 5 | Accounts/Auth/KYC/Profile | Four journeys and negative permission matrix |
 | 6 | Search/Discover | Deleted, orphaned, routed, and guard-reverted capabilities remain separate |

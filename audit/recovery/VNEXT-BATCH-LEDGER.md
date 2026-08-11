@@ -398,3 +398,38 @@ command, package/workspace, test type, result, and untested external gates.
 - Real browser/WebView/provider behavior, large-result and real-latency map/list
   consistency, five domain integrations, pin persistence, accessibility,
   Android/iOS and physical-device journeys remain `UNPROVEN`.
+
+## VNX-06B Maps hub world integrity evidence
+
+- Base: `444f944f099be9cf5329da7479f2c28cb557759f`; product/test
+  commit: `0341b65b1658fab9b951dfae1d04410b9c3738c5`; tree:
+  `fc1bc880e8a55f0dba619001a2c863b71f509fd1`.
+- Remote freeze ref: `recovery/vnx-06-maps-hub-world-integrity`.
+- Snapshot lineage `89d28d3` introduced the target-history hub. Base blob
+  `01bba4f` hard-coded late saved-market hydration to the `all` world and had
+  no unmount cancellation. Selecting Cars first could commit `car/EG` and then
+  stale `all/SA` while the visible world remained Cars. This was `MUTATED`.
+- RED evidence: registry **3/6 EXPECTED FAIL**; mounted hub first **2 pass/1
+  fail**, then strengthened **2 pass/2 fail** for world reset and post-unmount
+  commit; named static contract **0/1 EXPECTED FAIL**. A separate initial Jest
+  factory-hoisting mistake was test harness only and is not counted as product
+  evidence.
+- Minimal repair: hub blob `a4baa09` advances a synchronous `worldRef` before
+  state/query commit, hydrates the current world, and cancels the async
+  continuation on unmount. Shared hook `13b8cd2`, both map hosts, API, routes,
+  provider, schema, five section parents, and `SectionSearchApp` blob
+  `bd0f46e` remain unchanged.
+- GREEN evidence: focused hub **4/4 PASS**; named static **1/1 PASS**; render
+  meta **6/6 PASS**; full render **14 suites/97 tests PASS**; mobile typecheck,
+  full mobile chain, chain integrity **242/242**, and root `npm run build`
+  **PASS** with Corepack pnpm 11.9.0. The new renderer alone passes ESLint;
+  direct hub lint still reports one inherited asset-`require` finding.
+- GitHub Actions
+  [`31455520472`](https://github.com/waelzaid66-max/bancoboom-v-next-/actions/runs/31455520472)
+  is bound to exact SHA `0341b65` and completed **SUCCESS** in 2m18s. All seven
+  jobs passed: Typecheck/build, PostgreSQL migrations/replay/API tests, scripts
+  ESLint, GCP config, mobile regression, Expo-web bundle, and production static
+  gates.
+- Browser iframe, native WebView/provider, real latency/large results,
+  five-domain identity/query journeys, `MapPinPicker`, accessibility,
+  Android/iOS, and physical-device behavior remain `UNPROVEN`.
