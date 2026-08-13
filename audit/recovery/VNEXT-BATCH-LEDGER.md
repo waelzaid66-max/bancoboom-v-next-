@@ -16,9 +16,13 @@
 | VNX-05F | `43372e40892eaf3539e3798cc55bd69fbae7693f` | COMPLETE at bounded static/render/build/CI layers; live facets, responsive and device runtime `UNPROVEN` | No product delta; mounted unchanged `SectionSearchApp` and froze four-catalogue header/list-slice composition, representative loading/error/empty states, category/engine locks, and map latch | Test `be172d1`; host 6/6, static 98/98, render 11 suites/82 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31451674276` all 7 jobs PASS | `recovery/vnx-05-section-host-contracts` |
 | VNX-05G | `12cc8a4c8ee02f2392842d209606b02f8e30bfa6` | COMPLETE at bounded static/render/build/CI layers; live booking/geometry/provider/device runtime `UNPROVEN` | No product delta; mounted and adjudicated the unchanged independent `BookingStaysApp` parent without replacing it wholesale | Test `a7aa3a6`; host 7/7, static 102/102, render 12 suites/89 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31452618345` all 7 jobs PASS | `recovery/vnx-05-booking-stays-contracts` |
 | VNX-06A | `5156a3822af3ce7e4e7e034560554fcbfb661269` | COMPLETE at unit/static/RNTL/build/exact-SHA CI layers; browser/WebView/provider/device runtime `UNPROVEN` | Restored orphaned web draw-area handling; corrected non-degenerate geometry, clear-to-visible viewport, active-area refresh, one clipped publish path, and cache-hit response ordering across native/web | Product/test `0214983`; focused 37/37 + web host 4/4; render 13 suites/93 tests; full mobile/typecheck/root build and chain 242/242 PASS; CI `31454274073` all 7 jobs PASS | `recovery/vnx-06-map-draw-area-integrity` |
-| VNX-06B | VNX-06A documentation commit | PENDING | Remaining shared Maps engine/host and map/list contracts, one reproduced capability at a time | Browser/native host, large-result/latency, map/list, provider/device checks, root build | VNX-06A documentation commit |
-| VNX-07 | VNX-06 completion commit | PENDING | Messenger offline/read/block/mute/realtime/typing/voice in separate capabilities | Unit, PostgreSQL, storage, render, device/network/provider, root build | VNX-06 completion commit |
-| VNX-08 | VNX-07 commit | PENDING | Four account journeys, Auth, KYC, and Profile | Role-policy matrix, PostgreSQL, live Clerk/KYC, device, root build | VNX-07 commit |
+| VNX-06B | `444f944f099be9cf5329da7479f2c28cb557759f` | COMPLETE at static/RNTL/build/exact-SHA CI layers; browser/WebView/provider/device runtime `UNPROVEN` | Added synchronous Maps-world authority and cancelled late saved-market hydration without changing provider/hosts/API/schema | Product/test `0341b65`; hub 4/4, named static 1/1, render 14 suites/97 tests, root build and chain 242/242 PASS; CI `31455520472` all 7 jobs PASS | `recovery/vnx-06-maps-hub-world-integrity` |
+| VNX-06C | `56dba29c0e8eccef7276ffafe22ec023c167e078` | COMPLETE at static/RNTL/build/exact-SHA CI layers; browser/WebView/provider/device runtime `UNPROVEN` | Invalidated the prior native/web map request generation before debounced criteria replacement, preventing old-world publication | Product/test `290039d`; web host 5/5, map 20/20, render 14 suites/98 tests, root build and chain 242/242 PASS; CI `31457288589` all 7 jobs PASS | `recovery/vnx-06-map-criteria-integrity` |
+| VNX-07A | `cd16d17abbaea48fe8bf82edd85dbcc2228e7a15` | COMPLETE at source/static/RNTL/build/exact-SHA CI layers; device/live runtime `UNPROVEN` | Durable account-bound normal-composer body-text client outbox over unchanged server UUID/outbox authority | Product/test `5c2631a`; focused 22/22, render 16 suites/120 tests, root build and chain 242/242 PASS; CI `31460794057` all 7 jobs PASS with PostgreSQL 90 files/499 tests | `recovery/vnx-07-messenger-durable-text-outbox` |
+| VNX-OPS-02 | `ef2f8a6eee232ab3281f951f452f6da2aac345b7` | COMPLETE at source/docs/guard/exact-SHA CI layers; runtime deployment remains `UNPROVEN` | Corrected seven active operator surfaces to committed migrations and Postgres → migrate → API; added narrow confidence protection without changing runtime/deploy | Commit `e4b8f297`; workflow-dispatch CI `31462992521` all 7 jobs PASS. No Docker image, Compose, Coolify, deploy, production DB adoption, backup/restore, or rollback proof | `ef2f8a6eee232ab3281f951f452f6da2aac345b7` |
+| VNX-07B | `e4b8f29727ca2d3c314196113a6db85b488d04cc` | COMPLETE on published recovery branch; canonical promotion pending; PostgreSQL scope `RUNTIME_VERIFIED` | Serialized send/read on the participant conversation row, made mark-read atomic, and protected monotonic message/conversation projection timestamps | Product/test `2892179`; decoder follow-up `2e659bb`; first CI `31705692589` expected fail; accepted CI `31706332675` all 7 jobs PASS with PostgreSQL 90 files/500 tests | `codex/recovery-messenger-read-serialization-20260813` at `2e659bb` |
+| VNX-07C | VNX-07B accepted recovery commit | PENDING | Messenger block/mute, durable non-text, realtime/typing/voice and remaining device/provider capabilities as independent batches | ADRs, unit/PostgreSQL/storage/render, two-account device/network/provider journeys, root build | `2e659bbad94f7999b346b96b0bcd6f9127cf492b` |
+| VNX-08 | VNX-07C completion commit | PENDING | Four account journeys, Auth, KYC, and Profile | Role-policy matrix, PostgreSQL, live Clerk/KYC, device, root build | VNX-07C completion commit |
 | VNX-09 | VNX-08 commit | PENDING | Search and Discover capability recovery | Domain isolation, saved/recent/trending, render/navigation/runtime, root build | VNX-08 commit |
 | VNX-10 | VNX-09 commit | PENDING | Publishing, listings, uploads, and private media | Create/edit/publish, ACL/signed media, storage/provider/device, root build | VNX-09 commit |
 | VNX-11 | VNX-10 commit | PENDING | Payments and financing | PostgreSQL concurrency, Paymob/FI lifecycle, audit/refund, root build | VNX-10 commit |
@@ -521,7 +525,56 @@ command, package/workspace, test type, result, and untested external gates.
   read/block/mute/voice, and durable non-text sends remain `UNPROVEN` or
   explicitly excluded. Production remains `NO-GO`.
 - Closeout also found a separate production blocker: executable migration
-  authority uses committed `migrate`, but operator-facing Coolify/migration
-  docs retain obsolete push-force/order claims. VNX-OPS-02 must repair and
-  guard those documents without changing compose runtime, migrations, workflow,
-  or deployment target before any staging/production operation.
+  authority used committed `migrate`, but operator-facing Coolify/migration
+  docs retained obsolete push-force/order claims. VNX-OPS-02 later closed that
+  source/docs/guard defect at `e4b8f297`; its evidence and untested deployment
+  boundaries are recorded below.
+
+## VNX-OPS-02 migration operator-authority evidence
+
+- Base: `ef2f8a6eee232ab3281f951f452f6da2aac345b7`; product/control commit:
+  `e4b8f29727ca2d3c314196113a6db85b488d04cc`; tree:
+  `26c7ce3818f2f1b362800ba9372a8c95e58de990`.
+- The batch changed seven active operator surfaces, the migration authority
+  documentation, and the narrow production-confidence guard. It replaced
+  push-force wording with committed migrations and enforced Postgres → migrate
+  → API ordering without changing application product code, migration files,
+  compose service commands, workflow behavior, or the deployment target.
+- GitHub Actions
+  [`31462992521`](https://github.com/waelzaid66-max/bancoboom-v-next-/actions/runs/31462992521)
+  is bound to exact SHA `e4b8f297`, was started by `workflow_dispatch`, and
+  completed **SUCCESS** across all seven jobs.
+- This closes only the source/docs/guard contradiction. The manual CI run did
+  not build the shipped product Docker images and did not exercise Compose,
+  Coolify staging, deploy, production DB adoption/equivalence, backup/restore,
+  rollback, or any live provider/device journey. Production remains `NO-GO`.
+
+## VNX-07B Messenger read/unread serialization evidence
+
+- Base: canonical `e4b8f29727ca2d3c314196113a6db85b488d04cc`.
+  Product/test commit: `289217999c97c2b36c1b806d625b0b899ceb6e28`.
+  Timestamp decoder follow-up and accepted head:
+  `2e659bbad94f7999b346b96b0bcd6f9127cf492b`; tree:
+  `ca7ef735bad106dae02e0043acc7e23f468126e5`.
+- Published recovery ref:
+  `codex/recovery-messenger-read-serialization-20260813` at exact accepted head.
+  It is not merged or promoted to `canonical/vnext-assembly`.
+- Scope is limited to `ConversationService.ts` and its PostgreSQL test. Send and
+  mark-read take the same participant-conversation row lock; mark-read updates
+  messages and the counter atomically; the post-lock projection timestamp is
+  monotonic; existing UUID idempotency, private-media finalization, notification
+  outbox, cooldown, schema, OpenAPI, controller, and mobile behavior are retained.
+- First exact-SHA CI
+  [`31705692589`](https://github.com/waelzaid66-max/bancoboom-v-next-/actions/runs/31705692589)
+  correctly failed PostgreSQL because a raw timestamp projection decoded as a
+  string. No failed result was hidden or amended. Follow-up `2e659bb` maps the
+  projection through the existing Drizzle timestamp decoder.
+- Accepted exact-SHA CI
+  [`31706332675`](https://github.com/waelzaid66-max/bancoboom-v-next-/actions/runs/31706332675)
+  completed **SUCCESS** across all seven jobs. PostgreSQL passed 90 files/500
+  tests (1 file/3 tests skipped), including the deterministic concurrency
+  journey that forbids an unread row with a zero conversation counter.
+- Android/iOS, two-account device journeys, live provider and multi-replica
+  stress remain `UNPROVEN`. Block/mute, realtime/typing/voice and durable
+  non-text capabilities are independent future work. Production remains
+  `NO-GO`.

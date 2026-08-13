@@ -27,6 +27,8 @@
 | Maps hub world-integrity ref | `recovery/vnx-06-maps-hub-world-integrity` → `0341b65b1658fab9b951dfae1d04410b9c3738c5` |
 | Map criteria-response integrity ref | `recovery/vnx-06-map-criteria-integrity` → `290039db82f9c0ae927702f93b69ded92e8527b2` |
 | Messenger durable-text ref | `recovery/vnx-07-messenger-durable-text-outbox` → `5c2631a94408a509b7ea35dde972ae31d75e9f76` |
+| Migration operator-authority commit | `e4b8f29727ca2d3c314196113a6db85b488d04cc` |
+| Messenger read/unread recovery branch | `codex/recovery-messenger-read-serialization-20260813` → `2e659bbad94f7999b346b96b0bcd6f9127cf492b` |
 
 The target is an assembly repository with the complete source ancestry, not a
 manual source dump. The `bancoboomstor` worktree remains read-only. No target
@@ -56,11 +58,15 @@ manual source dump. The `bancoboomstor` worktree remains read-only. No target
 | VNX-06B Maps hub world integrity | `0341b65` | Kept the selected Maps world authoritative during late saved-market hydration and ended the async continuation on unmount; no map-host, API, route, schema, provider, or section-parent delta | Local hub 4/4, named static 1/1, render 14 suites/97 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31455520472` all 7 jobs PASS; browser/provider/device runtime remains `UNPROVEN` |
 | VNX-06C Map criteria-response integrity | `290039d` | Invalidated prior-criteria in-flight responses immediately across native/web before the replacement debounce; preserved cache, clipping, API, provider, hook, hub, and section parents | Local web host 5/5, map 20/20, render 14 suites/98 tests, full mobile/typecheck/root build and chain 242/242 PASS; CI `31457288589` all 7 jobs PASS; browser/WebView/provider/device runtime remains `UNPROVEN` |
 | VNX-07A Messenger durable text outbox | `5c2631a` | Reconstructed a body-only, persist-before-POST, account/session-fenced mobile outbox over the unchanged VNX-02/VNX-03 server contract; replies/offers/media remain on their existing path | Local focused 2 suites/22 tests, static/meta 22/22, render 16 suites/120 tests, targeted lint, mobile typecheck/full chain, root build and chain 242/242 PASS; CI `31460794057` all 7 jobs PASS with PostgreSQL API 499 tests; physical-device/live auth/network runtime remains `UNPROVEN` |
+| VNX-OPS-02 migration operator authority | `e4b8f297` | Corrected seven operator surfaces to committed migrations and Postgres → migrate → API order; added a fail-closed production-confidence guard; no runtime command, migration, workflow, or deployment occurred | Manual exact-SHA CI `31462992521` all 7 jobs PASS. This closes stale push-force/order documentation only; Docker/Compose/Coolify staging, production DB adoption, backup/restore, and deploy remain `UNPROVEN` |
+| VNX-07B Messenger read/unread serialization | `2e659bb` on published recovery branch | Serializes send/read projections on the conversation row and makes mark-read atomic; preserves idempotency, private media, and notification outbox | First CI `31705692589` exposed and rejected an undecoded raw timestamp; additive correction retained history. Accepted exact-SHA CI `31706332675` all 7 jobs PASS; PostgreSQL 90 files/500 tests PASS. Canonical promotion and physical-device/live multi-replica runtime remain pending |
 
-VNX-03 and VNX-07A are frozen with independent remote recovery refs. The
-server UUID/notification transaction has PostgreSQL-scoped runtime evidence;
-the client durable-text lifecycle has source/static/RNTL/build/CI evidence.
-Neither authorizes later Messenger capabilities or a production claim.
+VNX-03 and VNX-07A are frozen with independent remote recovery refs. VNX-07B
+is source/CI accepted on its published recovery branch and has not been
+promoted into canonical. The server UUID/notification transaction and bounded
+read/unread serialization have PostgreSQL-scoped runtime evidence; the client
+durable-text lifecycle has source/static/RNTL/build/CI evidence. None authorizes
+later Messenger capabilities or a production claim.
 
 ## Preserved production safety rail from `a3db5bd8`
 
@@ -132,6 +138,11 @@ durable media.
 - Target `main`, production deploy, or production-ready claim: **NO-GO**.
 - PostgreSQL 16 migration replay and API journeys are verified by CI run
   `31396133572` on `6af3413`; this is not live/staging database certification.
+- VNX-OPS-02 is closed at commit `e4b8f297`: seven operator surfaces and the
+  confidence guard agree on committed migrations and Postgres → migrate → API.
+  Exact-SHA workflow-dispatch CI `31462992521` passed 7/7. That manual CI did
+  not build every shipped Dockerfile or prove Compose, Coolify staging,
+  production DB adoption, deployment, backup/restore, or rollback.
 - VNX-05A–G freeze all five standalone headers, the bounded four-catalogue
   `SectionSearchApp` host, and the separate `BookingStaysApp` parent only at
   source/static/render/build/CI layers. VNX-06A separately freezes corrected
@@ -139,16 +150,19 @@ durable media.
   integrity, and VNX-06C freezes criteria-response ordering at
   unit/static/RNTL/build/CI layers. VNX-07A freezes the account-bound body-text
   outbox at source/static/RNTL/build/CI layers on `5c2631a`; its unchanged
-  same-UUID server transaction passed PostgreSQL CI, while mobile relaunch and
-  account-switch behavior remain device-unproven. Live
+  same-UUID server transaction passed PostgreSQL CI. VNX-07B separately closes
+  the reproduced unread/read projection race on recovery head `2e659bb`; CI
+  `31706332675` passed all seven jobs and PostgreSQL 90 files/500 tests. It is
+  not yet canonical, and mobile relaunch/account-switch behavior remains
+  device-unproven. Live
   facets, booking/API/remaining Maps journeys,
   current responsive/device certification, and the complete production program
   remain open.
-- Migration runtime authority is preserved, but operator-facing Coolify/DB
-  documents still contain obsolete push-force/order wording, and root CI lint
-  covers maintenance scripts rather than the monorepo. VNX-OPS-02 plus a
-  final-RC workspace-lint design remain blocking; no staging/production action
-  is authorized from the current documents.
+- Migration runtime and operator-document authority are aligned by VNX-OPS-02,
+  but root CI lint still covers maintenance scripts rather than the monorepo.
+  Final-RC workspace lint, DB adoption/equivalence, Docker/Compose/Coolify, and
+  live staging proof remain blocking; the VNX-OPS-02 source/CI result is not a
+  staging or deployment certificate.
 - Live PostgreSQL, Clerk, storage providers, Paymob, Docker/Compose/Coolify,
   Android, iOS, EAS, push/email delivery, and restore/rollback remain
   **UNPROVEN** on this target.
