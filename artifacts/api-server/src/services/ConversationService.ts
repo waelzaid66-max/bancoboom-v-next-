@@ -692,7 +692,7 @@ export async function sendMessage(
         at: sql<Date>`GREATEST(
           clock_timestamp()::timestamp,
           ${conversations.lastMessageAt} + interval '1 millisecond'
-        )`,
+        )`.mapWith(conversations.lastMessageAt),
       })
       .from(conversations)
       .where(eq(conversations.id, conversationId))
