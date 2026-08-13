@@ -26,6 +26,7 @@ import { enqueueMessageNotification } from "./MessageNotificationService";
 const objectStorageService = getObjectStorageService();
 
 type CodedError = Error & { code?: string };
+type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 import { presenceState, type PresenceState } from "../lib/presenceState";
 
 function codedError(code: string, message: string): CodedError {
@@ -148,6 +149,30 @@ async function loadParticipantConversation(conversationId: string, userId: strin
     .select()
     .from(conversations)
     .where(eq(conversations.id, conversationId))
+    .limit(1);
+  if (!conv) throw codedError("NOT_FOUND", "Conversation not found");
+  if (conv.buyerId !== userId && conv.sellerId !== userId) {
+    throw codedError("UNAUTHORIZED", "Not a participant in this conversation");
+  }
+  return conv;
+}
+
+/**
+ * Serialize message sends and mark-read projections for one thread. Both
+ * operations must take this lock before touching messages or unread counters;
+ * otherwise mark-read can stamp an older snapshot after a concurrent send and
+ * then erase the recipient's newly incremented unread counter.
+ */
+async function lockParticipantConversation(
+  tx: DbTx,
+  conversationId: string,
+  userId: string,
+) {
+  const [conv] = await tx
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .for("update")
     .limit(1);
   if (!conv) throw codedError("NOT_FOUND", "Conversation not found");
   if (conv.buyerId !== userId && conv.sellerId !== userId) {
@@ -652,8 +677,31 @@ export async function sendMessage(
     .where(eq(users.id, userId))
     .limit(1);
   const senderName = sender?.name ?? "مستخدم BANCO · BANCO User";
-  const now = new Date();
   const committed = await db.transaction(async (tx) => {
+    // Mark-read uses the same row lock before taking its messages snapshot.
+    // This makes the message row and denormalized unread projection advance in
+    // one deterministic order without replacing DB-backed idempotency.
+    await lockParticipantConversation(tx, conversationId, userId);
+
+    // PostgreSQL now()/DEFAULT now() is fixed at transaction start, which may
+    // predate a wait on FOR UPDATE. Read the wall clock only after owning the
+    // row and advance at least 1ms beyond its prior projection so a later send
+    // can never move inbox ordering backwards (including across API replicas).
+    const [projectionClock] = await tx
+      .select({
+        at: sql<Date>`GREATEST(
+          clock_timestamp()::timestamp,
+          ${conversations.lastMessageAt} + interval '1 millisecond'
+        )`,
+      })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+      .limit(1);
+    if (!projectionClock) {
+      throw codedError("NOT_FOUND", "Conversation not found");
+    }
+    const messageCreatedAt = projectionClock.at;
+
     const [inserted] = await tx
       .insert(messages)
       .values({
@@ -665,6 +713,7 @@ export async function sendMessage(
         mediaKind,
         replyToId,
         listingRefId,
+        createdAt: messageCreatedAt,
       })
       .onConflictDoNothing()
       .returning();
@@ -697,7 +746,7 @@ export async function sendMessage(
       .update(conversations)
       .set({
         lastMessageText: preview,
-        lastMessageAt: now,
+        lastMessageAt: messageCreatedAt,
         buyerDeletedAt: null,
         sellerDeletedAt: null,
         ...(isBuyer
@@ -718,7 +767,7 @@ export async function sendMessage(
       preview: preview.slice(0, 100),
     });
 
-    return { message: inserted, inserted: true as const };
+    return { message: inserted, inserted: true as const, messageCreatedAt };
   });
 
   if (finalizedMedia) {
@@ -759,7 +808,9 @@ export async function sendMessage(
     client_message_id: msg.clientMessageId ?? null,
     body: msg.body,
     is_mine: true,
-    created_at: msg.createdAt ? msg.createdAt.toISOString() : now.toISOString(),
+    created_at: msg.createdAt
+      ? msg.createdAt.toISOString()
+      : committed.messageCreatedAt.toISOString(),
     read_at: null,
     media_url: msg.mediaUrl ?? null,
     media_kind: msg.mediaKind ?? null,
@@ -775,24 +826,26 @@ export async function markConversationRead(
   conversationId: string
 ): Promise<{ read: boolean }> {
   const userId = await getUserId(clerkId);
-  const conv = await loadParticipantConversation(conversationId, userId);
-  const isBuyer = conv.buyerId === userId;
+  await db.transaction(async (tx) => {
+    const conv = await lockParticipantConversation(tx, conversationId, userId);
+    const isBuyer = conv.buyerId === userId;
 
-  await db
-    .update(messages)
-    .set({ readAt: new Date() })
-    .where(
-      and(
-        eq(messages.conversationId, conversationId),
-        ne(messages.senderId, userId),
-        isNull(messages.readAt)
-      )
-    );
+    await tx
+      .update(messages)
+      .set({ readAt: new Date() })
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          ne(messages.senderId, userId),
+          isNull(messages.readAt),
+        ),
+      );
 
-  await db
-    .update(conversations)
-    .set(isBuyer ? { buyerUnread: 0 } : { sellerUnread: 0 })
-    .where(eq(conversations.id, conversationId));
+    await tx
+      .update(conversations)
+      .set(isBuyer ? { buyerUnread: 0 } : { sellerUnread: 0 })
+      .where(eq(conversations.id, conversationId));
+  });
 
   return { read: true };
 }

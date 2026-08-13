@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import {
   createConversation,
   listConversations,
@@ -8,8 +8,9 @@ import {
   markConversationRead,
   deleteConversation,
 } from "./ConversationService";
-import { db, deleteUsers, uniq, randomUUID } from "../__tests__/helpers";
+import { db, pool, deleteUsers, uniq, randomUUID } from "../__tests__/helpers";
 import {
+  conversations,
   users,
   listings,
   notifications,
@@ -57,6 +58,10 @@ async function mkActiveListing(sellerId: string): Promise<string> {
   });
   listingIds.push(id);
   return id;
+}
+
+async function connectPoolClient() {
+  return pool.connect();
 }
 
 afterAll(async () => {
@@ -172,6 +177,159 @@ describe("ConversationService — buyer↔seller messaging journey", () => {
         message_id?: string;
       } | null)?.message_id,
     ).toBe(first.id);
+  });
+
+  it("keeps unread counters aligned when send commits during mark-read", async () => {
+    const seller = await mkUser();
+    const buyer = await mkUser();
+    const listingId = await mkActiveListing(seller.id);
+    const conv = await createConversation(buyer.clerkId, listingId);
+    await sendMessage(buyer.clerkId, conv.id, "first unread message", {
+      clientMessageId: randomUUID(),
+    });
+    const racingClientMessageId = randomUUID();
+    const suffix = conv.id.replaceAll("-", "");
+    const triggerName = `test_pause_mark_read_${suffix}`;
+    const functionName = `${triggerName}_fn`;
+    let controlClient: Awaited<ReturnType<typeof connectPoolClient>> | undefined;
+    let observerClient: Awaited<ReturnType<typeof connectPoolClient>> | undefined;
+    let controlTransactionOpen = false;
+    let markRead: Promise<{ read: boolean }> | undefined;
+    let racingSend: Promise<unknown> | undefined;
+
+    try {
+      const control = await connectPoolClient();
+      controlClient = control;
+      const observer = await connectPoolClient();
+      observerClient = observer;
+
+      // Pause mark-read after its UPDATE statement has taken a snapshot and
+      // found the first message, but before that statement can commit. This
+      // gives a concurrent send one precise chance to commit in the gap between
+      // the message projection and unread-counter projection.
+      await observer.query(`
+        CREATE FUNCTION ${functionName}() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.conversation_id = '${conv.id}'::uuid THEN
+            PERFORM set_config('application_name', '${triggerName}', true);
+            PERFORM pg_advisory_xact_lock(hashtextextended('${conv.id}', 0));
+          END IF;
+          RETURN NEW;
+        END
+        $$
+      `);
+      await observer.query(`
+        CREATE TRIGGER ${triggerName}
+        AFTER UPDATE OF read_at ON messages
+        FOR EACH ROW EXECUTE FUNCTION ${functionName}()
+      `);
+
+      await control.query("BEGIN");
+      controlTransactionOpen = true;
+      await control.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+        [conv.id],
+      );
+
+      markRead = markConversationRead(seller.clerkId, conv.id);
+
+      const waitDeadline = Date.now() + 5_000;
+      let markReadBackendPid: number | null = null;
+      while (Date.now() < waitDeadline) {
+        const paused = await observer.query<{ pid: number }>(
+          `SELECT pid
+           FROM pg_stat_activity
+           WHERE application_name = $1
+             AND wait_event_type = 'Lock'
+             AND wait_event = 'advisory'`,
+          [triggerName],
+        );
+        if (paused.rows[0]?.pid) {
+          markReadBackendPid = paused.rows[0].pid;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(markReadBackendPid).not.toBeNull();
+
+      racingSend = sendMessage(buyer.clerkId, conv.id, "message racing with read", {
+        clientMessageId: racingClientMessageId,
+      });
+
+      // On the vulnerable implementation the send commits while mark-read is
+      // paused. On the corrected implementation it blocks on the conversation
+      // row lock. Observe either state before releasing the test barrier.
+      let concurrencyState: "send_committed" | "send_serialized" | null = null;
+      const sendDeadline = Date.now() + 5_000;
+      while (Date.now() < sendDeadline) {
+        const visible = await observer.query<{ visible: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM messages WHERE client_message_id = $1
+           ) AS visible`,
+          [racingClientMessageId],
+        );
+        if (visible.rows[0]?.visible) {
+          concurrencyState = "send_committed";
+          break;
+        }
+
+        const serialized = await observer.query<{ serialized: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1
+             FROM pg_stat_activity
+             WHERE pid <> $1
+               AND wait_event_type = 'Lock'
+               AND $1 = ANY(pg_blocking_pids(pid))
+               AND query ILIKE '%conversations%'
+               AND query ILIKE '%for update%'
+           ) AS serialized`,
+          [markReadBackendPid],
+        );
+        if (serialized.rows[0]?.serialized) {
+          concurrencyState = "send_serialized";
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(concurrencyState).toBe("send_serialized");
+
+      await control.query("COMMIT");
+      controlTransactionOpen = false;
+      await Promise.all([markRead, racingSend]);
+
+      const [thread] = await db
+        .select({ sellerUnread: conversations.sellerUnread })
+        .from(conversations)
+        .where(eq(conversations.id, conv.id));
+      const [unread] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversationId, conv.id),
+            ne(messages.senderId, seller.id),
+            isNull(messages.readAt),
+          ),
+        );
+
+      expect(thread.sellerUnread).toBe(Number(unread.count));
+      expect(thread.sellerUnread).toBe(1);
+    } finally {
+      if (controlTransactionOpen && controlClient) {
+        await controlClient.query("ROLLBACK").catch(() => undefined);
+      }
+      await Promise.allSettled([markRead, racingSend].filter(Boolean));
+      try {
+        if (observerClient) {
+          await observerClient.query(`DROP TRIGGER IF EXISTS ${triggerName} ON messages`);
+          await observerClient.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
+        }
+      } finally {
+        controlClient?.release();
+        observerClient?.release();
+      }
+    }
   });
 
   it("rolls the notification work item back with an aborted message transaction", async () => {
