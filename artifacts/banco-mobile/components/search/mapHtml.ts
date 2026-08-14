@@ -364,7 +364,10 @@ export function buildMapHtml(
     L.control.zoom({ position: "topright" }).addTo(map);
     L.tileLayer("${OSM_TILES}", {
       maxZoom: 19,
-      attribution: "&copy; OpenStreetMap"
+      // ODbL requires crediting the contributors, with a link to the copyright
+      // page — not the project name alone. rel=noopener because the page runs
+      // inside a WebView/iframe host.
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'
     }).addTo(map);
 ${nearScript}
     // "Locate me" control — centres the map on the device GPS and drops a
