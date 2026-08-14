@@ -78,7 +78,14 @@ overrides:
   'brace-expansion@<2.0.0': '1.1.18'
   'brace-expansion@>=2.0.0 <3.0.0': '2.1.4'
   'brace-expansion@>=3.0.0': '5.0.9'
-  tar: '>=7.5.17'
+  # Security-bump overrides carry an upper bound on purpose. An open '>=x' lets
+  # a future major in with no review step: it is not caught by the audit gate
+  # (a newer major is not "vulnerable"), and the lockfile hides it until someone
+  # re-resolves from scratch. uuid demonstrates the failure mode - a declared
+  # floor of '>=11.1.1' had silently absorbed three majors and installs 14.0.0.
+  # Bound each to the major it was written for; widening is then a deliberate,
+  # reviewable edit. None of these bounds changes a resolved version today.
+  tar: '>=7.5.17 <8'
   markdown-it: '^14.2.0'
   '@babel/core': '7.29.6'
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
@@ -113,13 +120,43 @@ overrides:
   form-data: '2.5.6'
   ip-address: '10.3.1'
   js-yaml: '4.3.1'
-  'nanoid@3.3.12': '3.3.17'
+  # GHSA-2V37-7H3G-55P8 (high): a custom generator can loop indefinitely when
+  # size is zero. Patched in 3.3.18. This REPLACES the earlier targeted pin
+  # 'nanoid@3.3.12': '3.3.17', which answered the previous advisory (patched
+  # >=3.3.16) but is itself inside the new vulnerable range (<3.3.18).
+  #
+  # Replaced rather than supplemented: pnpm gives a `pkg@version` override
+  # precedence over a general one, so a blanket line added beside the targeted
+  # pin would have left the 3.3.17 and 3.3.8 requesters on vulnerable copies
+  # while looking correct in review.
+  #
+  # The upper bound is load-bearing here in a way it is not for tar/qs, where
+  # the patched line IS the current major. 3.3.18 is only the `legacy` tag;
+  # `latest` is 6.0.1 and nanoid >=4 is ESM-only, so an unbounded '>=3.3.18'
+  # resolves to 6.0.1 on a clean resolve (verified) and breaks the CommonJS
+  # require in postcss and @react-navigation. It would pass every gate and fail
+  # only on the next from-scratch resolution, because the lockfile already holds
+  # a satisfying 3.3.18 entry.
+  #
+  # 3.x is also where canonical already had every requester: vite declares
+  # nanoid ^5.1.6 yet resolved to 3.3.17 before this change.
+  #
+  # nanoid reaches the mobile RUNTIME via @react-navigation/core, so this is
+  # resolved rather than waived - and the gate has no generic waiver list.
+  nanoid: '>=3.3.18 <4'
   postcss: '8.5.23'
-  qs: '>=6.15.2'
+  qs: '>=6.15.2 <7'
   sharp: '0.35.0'
   shell-quote: '1.9.0'
   undici: '6.28.0'
-  uuid: '>=11.1.1'
+  # Bound at <15 to pin the major this tree actually installs (14.0.0), not the
+  # 11.1.1 the floor was written for - the open range had already absorbed three
+  # majors unreviewed. <15 is chosen over <12 deliberately: it changes nothing
+  # today, whereas dropping back to 11.x would be a real downgrade. Verified
+  # that 14 keeps a CommonJS entry (exports."." carries a `node` condition) and
+  # the full v9 API surface consumers declare (v1 v3 v4 v5 NIL parse stringify
+  # validate version), so no requester is broken by staying on 14.
+  uuid: '>=11.1.1 <15'
   vite: '7.3.5'
   ws: '8.21.0'
   esbuild>@esbuild/aix-ppc64: '-'
