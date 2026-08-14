@@ -104,7 +104,7 @@ overrides:
   form-data: 2.5.6
   ip-address: 10.3.1
   js-yaml: 4.3.1
-  nanoid: '>=3.3.18'
+  nanoid@3.3.12: 3.3.17
   postcss: 8.5.23
   qs: '>=6.15.2'
   sharp: 0.35.0
@@ -7919,8 +7919,18 @@ packages:
   nan@2.28.0:
     resolution: {integrity: sha512-fTsDz99OTq2sVePhGdp4qQhggZFtKr64ZNVyVajRKtMOkJxYekplBh577PiJB12v/D3s2E5cGtOI45LWp6rnLQ==}
 
+  nanoid@3.3.17:
+    resolution: {integrity: sha512-xQLf0A3HOMlgHq0n247/LRuAOYmB7dXJ/DvAxGvsSBij45XtBSmQycu+F8ODbHwns/XyFZagyL1+J0Offw1E0g==}
+    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+    hasBin: true
+
   nanoid@3.3.18:
     resolution: {integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==}
+    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+    hasBin: true
+
+  nanoid@3.3.8:
+    resolution: {integrity: sha512-WNLf5Sd8oZxOm+TzppcYk8gVOgP+l58xNy58D0nbUnOxOWRWvlcCV4kUF7ltmI6PsrLl/BgKEyS4mqsGChFN0w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -13503,7 +13513,7 @@ snapshots:
       '@react-navigation/routers': 7.6.0
       escape-string-regexp: 4.0.0
       fast-deep-equal: 3.1.3
-      nanoid: 3.3.18
+      nanoid: 3.3.17
       query-string: 7.1.3
       react: 19.1.0
       react-is: 19.2.7
@@ -13539,7 +13549,7 @@ snapshots:
       '@react-navigation/core': 7.21.1(react@19.1.0)
       escape-string-regexp: 4.0.0
       fast-deep-equal: 3.1.3
-      nanoid: 3.3.18
+      nanoid: 3.3.17
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.29.6)(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1)
       standard-navigation: 0.0.7
@@ -13547,7 +13557,7 @@ snapshots:
 
   '@react-navigation/routers@7.6.0':
     dependencies:
-      nanoid: 3.3.18
+      nanoid: 3.3.17
 
   '@replit/vite-plugin-cartographer@0.5.21(supports-color@8.1.1)':
     dependencies:
@@ -15920,7 +15930,7 @@ snapshots:
       mime: 3.0.0
       minimatch: 5.1.2
       minizlib: 3.0.1
-      nanoid: 3.3.18
+      nanoid: 3.3.8
       node-fetch: 2.6.7
       node-forge: 1.4.0
       node-stream-zip: 1.15.0
@@ -16409,7 +16419,7 @@ snapshots:
       expo-server: 1.0.7
       fast-deep-equal: 3.1.3
       invariant: 2.2.4
-      nanoid: 3.3.18
+      nanoid: 3.3.17
       query-string: 7.1.3
       react: 19.1.0
       react-fast-compare: 3.2.2
@@ -18427,7 +18437,11 @@ snapshots:
   nan@2.28.0:
     optional: true
 
+  nanoid@3.3.17: {}
+
   nanoid@3.3.18: {}
+
+  nanoid@3.3.8: {}
 
   natural-compare@1.4.0: {}
 
