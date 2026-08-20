@@ -25,7 +25,7 @@ import {
   feedItemsToMarkers,
   type MapBridgeMessage,
   type MapClusterMarker,
-} from "./mapHtml";
+} from "./mapHtmlTileGuard";
 import { MapOverlayChrome } from "./MapOverlayChrome";
 import type { SearchResultsMapProps } from "./SearchResultsMap";
 
@@ -84,6 +84,7 @@ export function SearchResultsMap({
     exact: boolean;
   } | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const tileFailureShownRef = useRef(false);
 
   const markers = useMemo(() => feedItemsToMarkers(items), [items]);
   const sig = useMemo(
@@ -163,6 +164,7 @@ export function SearchResultsMap({
   useEffect(() => {
     setSelectedId(null);
     setServerTotal(null);
+    tileFailureShownRef.current = false;
     vpSeqRef.current++;
   }, [sig]);
 
@@ -281,7 +283,17 @@ export function SearchResultsMap({
       if (event.source !== iframeRef.current?.contentWindow) return;
       try {
         const msg = JSON.parse(String(event.data)) as MapBridgeMessage;
-        if (msg.type === "viewport") {
+        if (msg.type === "tile_error") {
+          if (!tileFailureShownRef.current) {
+            tileFailureShownRef.current = true;
+            Alert.alert(
+              isRTL ? "الخريطة غير متاحة مؤقتًا" : "Map temporarily unavailable",
+              isRTL
+                ? "تعذر تحميل صور الخريطة. يمكنك الاستمرار في استخدام النتائج والقوائم والمحاولة لاحقًا."
+                : "Map tiles could not be loaded. You can keep using the results and listings and try the map again later.",
+            );
+          }
+        } else if (msg.type === "viewport") {
           const vp = { ...msg.bounds, zoom: msg.zoom };
           lastViewportRef.current = vp;
           scheduleFetchClusters(vp);
@@ -338,7 +350,7 @@ export function SearchResultsMap({
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [scheduleFetchClusters, fetchClusters, onOpenListingId, t]);
+  }, [scheduleFetchClusters, fetchClusters, isRTL, onOpenListingId, t]);
 
   const selected = useMemo(
     () => items.find((item) => item.id === selectedId) ?? null,
