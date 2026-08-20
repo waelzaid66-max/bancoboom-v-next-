@@ -16,9 +16,30 @@ Closes the source half of an open `P0` in `CODEX-RECOVERY-BACKLOG.md`:
 |---|---|---|---|
 | `individual` | ✅ | default at signup — `UserService.ts:69` | — |
 | `dealer` | ✅ | business onboarding, or any `account_type` not matching a named branch — `UserService.ts:253`, `:274` | self-service |
-| `company` | ✅ | `account_type: "company"` — `UserService.ts:248` | self-service |
+| `company` | ⚠️ **API only** | `account_type: "company"` — `UserService.ts:248` | see correction below |
 | `financial_institution` | ✅ | `account_type: "financial_institution"`, or `business.activity_type` bank — `UserService.ts:250`, `:269` | self-service **role**; features gated, see §3 |
 | `enterprise` | ❌ **NO PATH** | — | `seed.ts:1236` only |
+
+> ### ⚠️ CORRECTION to this handoff — the client half, checked after first publication
+>
+> The row above first read **`company` · ✅ · self-service**. That is true of the **API** and misleading about the **product**. The client half of the matrix changes the picture:
+>
+> `apiAccountTypeForFamily` (`app/(tabs)/profile.tsx:109`) declares its return type as `"individual" | "dealer" | "company" | "financial_institution"` and maps the four UI families:
+>
+> | UI family | sends `account_type` | resulting role |
+> |---|---|---|
+> | `individual` | `individual` | `individual` |
+> | `business` | `dealer` — **or `company` only if the user already holds `company`** | `dealer` / `company` |
+> | `bank` | `financial_institution` | `financial_institution` |
+> | `funder` | `financial_institution` | `financial_institution` |
+>
+> The `business` branch reads `currentRole === "company" ? "company" : "dealer"` — it **preserves** an existing `company` and never **grants** one. A repository-wide search confirms **no shipped client anywhere sends `account_type: "company"`**.
+>
+> **Corrected status of `company`:** the validator accepts it, the DB supports it, `seed.ts:1233` creates it and production code branches on it — but **no shipped surface can create it**. It is reachable only by a hand-crafted API call. Practically it behaves like a second orphaned enum value, differing from `enterprise` only in that the API would accept it if something ever sent it.
+>
+> **This also strengthens the `enterprise` finding rather than weakening it:** the mapper's *return type* excludes `enterprise` at compile time, so the exclusion is enforced by the type system, not merely by a missing branch. The original audit's M-4 wording — *"no `apiAccountTypeForFamily` branch can produce it"* — is confirmed, and its function citation is accurate.
+>
+> **Recommended:** rule on `company` and `enterprise` **together**. They are one question — two enum values the product cannot reach — not two.
 
 **Method.** Every `.update(users)` call site in `artifacts/api-server/src` was enumerated and each `set()` payload inspected. Seven sites write to `users`; **exactly one writes `role`** — `UserService.ts:303`. Two others write `staffRole`, a separate axis. `adminController.setUserRoleHandler` looked like a second path but is not: `SetUserRoleSchema` (`schemas.ts:1816`) admits `["owner","admin","moderator","support","user"]` — **`staffRoleEnum` values**, not account types.
 

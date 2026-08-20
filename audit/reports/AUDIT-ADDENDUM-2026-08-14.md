@@ -32,7 +32,20 @@ Without that, a transaction which started earlier but waited on the row lock wou
 
 Gate results reproduced independently on `f45c32c`: chain integrity **242/242** · production confidence **26/26** (full run) · render **120/120** across 16 suites · root `npm run build` **exit 0**.
 
-**Correction to the original audit.** The audit stated a read cursor exists. That was imprecise: `conversations` carries only `buyer_unread`/`seller_unread` counters and `messages` carries a per-message `read_at`. There is **no per-conversation read cursor** (`last_read_message_id`). The manager's backlog classification was right; the audit's sentence was not.
+**~~Correction to the original audit.~~ WITHDRAWN — this "correction" was itself false.**
+
+> This paragraph originally read: *"The audit stated a read cursor exists. That was imprecise … the audit's sentence was not [right]."*
+>
+> **That accusation is wrong, and re-checking the source proves it.** The string `cursor` appears exactly **twice** in `INDEPENDENT-PRODUCTION-AUDIT-2026-08-11.md`, and both times it is classified as absent:
+>
+> - `:106` — lists `per-conversation read cursor` under **Missing**
+> - `:288` — *"Per-conversation read cursor | **Absent** — per-message `read_at` plus side counters exist, which is not a cursor"*
+>
+> **The original audit never claimed a read cursor exists. It was accurate, and this addendum falsely discredited it.** The substantive facts below are correct and unchanged — `conversations` carries only `buyer_unread`/`seller_unread`, `messages` carries per-message `read_at`, and there is no `last_read_message_id`. What was wrong was the **attribution**: the imprecise claim was made by this auditor in conversation, not in the audit document, and the error was then recorded against the wrong artifact.
+>
+> The manager's backlog classification was right — that part stands. So was the audit's.
+>
+> *Retained rather than deleted, because a report that quietly removes a false accusation is less trustworthy than one that carries it corrected.*
 
 ## 3. 🔴 NEW CRITICAL — C-5: `canonical` fails its own dependency security gate
 
@@ -61,15 +74,33 @@ The `image-size` waivers are justified as *"build-time-only … no patched relea
 
 **Recommended resolution — precedent already in the tree.** `pnpm-workspace.yaml` carries an `overrides:` block used this way eight times (`tar: '>=7.5.17'`, `markdown-it: '^14.2.0'`, `@babel/core: '7.29.6'`, …). One line in the same style resolves rather than suppresses it:
 
-```yaml
-  nanoid: '>=3.3.18'
-```
+> ### 🔴 CORRECTION — 2026-08-14, later the same day. **Do not apply the line as first written.**
+>
+> This section originally recommended:
+>
+> ```yaml
+>   nanoid: '>=3.3.18'          # ← WRONG. Do not use.
+> ```
+>
+> **That recommendation was a trap, and it was mine.** Copying the `tar`/`qs`/`uuid` house style does not transfer to this package: `3.3.18` is only the **`legacy`** dist-tag — `latest` is **6.0.1**, and nanoid `>=4` is **ESM-only**. Verified in an isolated probe (pnpm 11.9.0, `minimumReleaseAge` applied): the unbounded range resolves to **6.0.1**, which breaks the CommonJS `require` in `postcss` and `@react-navigation`.
+>
+> It does not fail immediately, which is what makes it dangerous. The lockfile already holds a satisfying `3.3.18` entry and pnpm reuses it rather than re-resolving, so the override passes every gate and detonates only on the next from-scratch resolve. **It was written, and exact-SHA CI passed it 7/7** (run `31825603049`, commit `71c9173`). No gate catches this class. That commit was reverted and the branch reduced to a canonical-identical tree before the corrected fix was applied.
+>
+> **The correct form, and the one that is verified:**
+>
+> ```yaml
+>   nanoid: '>=3.3.18 <4'
+> ```
+>
+> A second requirement is equally invisible in review: pnpm gives a `pkg@version` override **precedence** over a general one, so the existing `'nanoid@3.3.12': '3.3.17'` must be **replaced**, not supplemented. A blanket line added beside it leaves the 3.3.17 and 3.3.8 requesters on vulnerable copies while reviewing as correct.
+>
+> Full evidence, and the same bounding applied to `tar`/`qs`/`uuid`: `CODEX-INVESTIGATION-HANDOFF-01-2026-08-14.md` and `TRAP-AUDIT-FUTURE-FAILURES-2026-08-14.md`. Verified fix on `fix/nanoid-override` @ `76f7f26`, CI **7/7**.
 
 A waiver is the weaker option: the gate has no generic waiver list — `IMAGE_SIZE_WAIVER_IDS` and `IMAGE_SIZE_WAIVER_EXPIRES_AT` are hardcoded for one package (`dependency-security-gate.mjs:13-18`) — so waiving would mean editing gate code to excuse a runtime dependency that has a published fix.
 
 **Operational impact until resolved:** every CI run on every branch fails `Production gates (static)`, and `Production confidence` is then **skipped rather than evaluated**, so that gate stops reporting entirely. Batches will show 6/7 for this reason alone.
 
-**Not applied.** The change regenerates the lockfile, so its blast radius is the dependency graph — beyond a bounded maintenance edit. The decision is the manager's.
+**~~Not applied.~~ STATUS UPDATE — 2026-08-14, later the same day.** A verified fix now exists on `fix/nanoid-override` @ `76f7f26`, exact-SHA CI **7/7** (run `31831418894`). Two files, four effective lines, and the same bounding applied to `tar`/`qs`/`uuid` because they share the failure mode — `uuid`'s open `>=11.1.1` floor had already absorbed **three majors** and installs `14.0.0`. Verified that none of the three changes a resolved version. **Still not merged**: promotion to `canonical/vnext-assembly` remains the manager's decision.
 
 ## 4. Two audit findings now have a fix on a branch
 
@@ -91,7 +122,7 @@ CI on that branch: **6 of 7 jobs green**, the seventh being C-5 above, which rep
 | C-2 basemap on OSM public tiles | **open** — procurement decision |
 | C-3 no `tileerror` handling | **open** |
 | C-4 language never reaches the server | **open** — contract + codegen only |
-| **C-5 nanoid blocking advisory** | 🔴 **NEW — open, blocking every CI run** |
+| **C-5 nanoid blocking advisory** | 🟠 **fix verified on `fix/nanoid-override` @ `76f7f26`, CI 7/7 — not merged; blocks every CI run until promoted** |
 | H-1 origin guard | fix on `maint/safe-batch-01` |
 | H-2 social sign-in invisible | **open** — Clerk Dashboard, zero code |
 | H-3 no block/mute | **open** — manager's `P0 later` |
