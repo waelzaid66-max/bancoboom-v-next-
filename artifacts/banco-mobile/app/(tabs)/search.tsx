@@ -98,8 +98,13 @@ const CATEGORIES: FilterCategory[] = [
   "materials",
 ];
 
+// Quick brand chips = popular brands that actually have live inventory (the
+// create-safe set). The full rich catalogue is reachable via the "All brands"
+// picker; brands with no inventory there honestly return empty results.
 const QUICK_BRANDS: CarBrand[] = POPULAR_BRANDS.filter((b) => b.createSafe);
 
+// Car/industrial attribute fields are category-specific; clear them whenever the
+// category changes so e.g. a car fuel filter never leaks into a real-estate browse.
 const CLEAR_ATTRS: Partial<SearchCriteria> = {
   engineKey: "all",
   brand: null,
@@ -114,6 +119,8 @@ const CLEAR_ATTRS: Partial<SearchCriteria> = {
   rentalTerm: null,
 };
 
+// The category-independent filters, reset by the sheet's "Clear all" (combined
+// with CLEAR_ATTRS). The text query is intentionally preserved.
 const CLEAR_FILTERS: Partial<SearchCriteria> = {
   category: "all",
   sort: "recommended",
@@ -128,6 +135,8 @@ const CLEAR_FILTERS: Partial<SearchCriteria> = {
   nearRadiusKm: DEFAULT_NEAR_RADIUS_KM,
 };
 
+// Valid sort keys arriving via navigation (e.g. the Home "Sort" launcher). Any
+// other / missing value falls back to "recommended".
 const SORTS: SearchSort[] = [
   "recommended",
   "newest",
@@ -136,6 +145,12 @@ const SORTS: SearchSort[] = [
   "popular",
 ];
 
+/**
+ * Leading icon of the search box. Morphs between the generic search glyph (no
+ * category filter) and the active section's icon when a category is selected —
+ * crossfading the same two stacked nodes via Reanimated (never remounted). The
+ * last concrete category is retained so fading back out reads cleanly.
+ */
 function MorphSearchIcon({
   category,
   color,
@@ -193,13 +208,16 @@ export default function SearchScreen() {
     recentQueries,
   } = useSession();
   const { requireAuth } = useAuthGate();
+  // Match section mini-apps: real safe-area only — never a fake 67px web pad.
   const topPad = Math.max(insets.top, Platform.OS === "web" ? 12 : 0);
 
+  // expo-router typed Routes overload rejects Record<> as TRoute; cast params shape.
   const params = useLocalSearchParams() as Record<
     string,
     string | string[] | undefined
   >;
 
+  // Fire a coarse behaviour signal on each committed search (category intent).
   const onCommitted = useCallback(
     (c: SearchCriteria) => {
       sendBehaviorSignal({
@@ -217,6 +235,9 @@ export default function SearchScreen() {
   const { criteria, items, viewState, phase, hasNext, commit, update, applyPatch, loadMore, retry } =
     search;
 
+  // Map view toggle. Only results that carry real coordinates are mappable, so
+  // both the toggle's visibility and the map's honest "N on the map" caption are
+  // driven by this subset — never the full result list.
   const [mapMode, setMapMode] = useState(false);
   const mappableItems = useMemo(
     () =>
@@ -229,10 +250,14 @@ export default function SearchScreen() {
     [items]
   );
   const canMap = viewState === "results" && mappableItems.length > 0;
+  // Leaving results (or losing every mapped pin) drops back to the list so the
+  // map never lingers over a discover/loading/empty/error surface.
   useEffect(() => {
     if (!canMap && mapMode) setMapMode(false);
   }, [canMap, mapMode]);
 
+  // Category chips are facet-gated: only categories with live inventory show.
+  // Fails open while facets load; the active category is always kept visible.
   const { globalFacets, scopedFacets, loading: facetsLoading } =
     useInventoryFacets(criteria.category, criteria.marketCountry);
   const shownCategories = useMemo(() => {
@@ -242,6 +267,7 @@ export default function SearchScreen() {
     );
   }, [globalFacets, criteria.category]);
 
+  // Facet-gated "Type" chips for the active category (cars / real-estate).
   const engineList = useMemo(
     () => visibleEngines(criteria.category, scopedFacets),
     [criteria.category, scopedFacets]
@@ -253,6 +279,8 @@ export default function SearchScreen() {
   );
   const showIndustrialChips =
     !facetsLoading && !!visibleIndTypes && visibleIndTypes.length > 1;
+  // If facets reveal the committed engine/sub-type no longer has inventory,
+  // normalize criteria once and re-query (single fetch, not two updates).
   useEffect(() => {
     if (facetsLoading) return;
     const patch: Partial<SearchCriteria> = {};
@@ -282,6 +310,8 @@ export default function SearchScreen() {
     facetsLoading,
   ]);
 
+  // Live text input value (the only field that is debounced rather than
+  // committed immediately). Price / year drafts live inside the FilterSheet.
   const [draftQuery, setDraftQuery] = useState("");
   const [searchEngaged, setSearchEngaged] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -322,6 +352,9 @@ export default function SearchScreen() {
     }
   }, []);
 
+  // Live typing: update the input immediately, debounce autocomplete (250ms) and
+  // the committed search (350ms). The results list stays mounted throughout, so
+  // each keystroke refreshes results in place with no flicker or remount.
   const handleQueryChange = useCallback((text: string) => {
     setDraftQuery(text);
     setBrandValue(null);
@@ -337,6 +370,9 @@ export default function SearchScreen() {
   const commitQueryNow = useCallback((q: string) => {
     if (commitTimer.current) clearTimeout(commitTimer.current);
     setShowSuggestions(false);
+    // Deliberate searches only (submit / suggestion tap) feed the "recent
+    // searches" chips — the debounced while-typing commits would record
+    // half-typed words.
     recordQuery(q);
     update({ q, brand: null, model: null });
   }, [recordQuery, update]);
@@ -350,6 +386,9 @@ export default function SearchScreen() {
     update({ q: "", brand: null, model: null });
   }, [update]);
 
+  // Browse cars by brand: car titles are English "Brand Model Year", so the
+  // brand's English term (or `q` override, e.g. Mercedes) is a reliable title
+  // match. Forces category=car and commits immediately.
   const browseBrand = useCallback(
     (brand: CarBrand, model: string | null) => {
       const display = model
@@ -360,6 +399,10 @@ export default function SearchScreen() {
       setShowFilters(false);
       setShowSuggestions(false);
       setCarPickerOpen(false);
+      // Structured brand/model (not free-text q) so a later category switch or
+      // picker-clear removes the car intent cleanly, and T003/T004 facet-gating
+      // can read it. The backend matches brand/model via ilike on the English
+      // title — the same match q would do — so results are unchanged.
       update({
         ...CLEAR_ATTRS,
         q: "",
@@ -371,6 +414,9 @@ export default function SearchScreen() {
     [update]
   );
 
+  // Re-run a saved / deep-linked search arriving via navigation params.
+  // Uses the shared search-contract parser so rich criteria (brand, market
+  // country, material, near-me, …) round-trip — not only the legacy six fields.
   const appliedSig = useRef<string>("");
   useEffect(() => {
     if (!hasIncomingSearchNavParams(params)) return;
@@ -382,6 +428,7 @@ export default function SearchScreen() {
     setDraftQuery(next.q);
     setBrandValue(null);
     commit(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
 
   const handleSuggestionTap = useCallback((s: string) => {
@@ -405,18 +452,33 @@ export default function SearchScreen() {
     [requireAuth, cacheFeedItem],
   );
 
+  // Saved searches re-apply via Saved tab → searchCriteriaToNavParams (not a
+  // Discover melt helper). Do not reintroduce applySaved on this host.
+
   const selectCategory = useCallback((cat: FilterCategory) => {
+    // A brand browse shows its term in the search box; clear that display too so
+    // the car term can't leak into the new category and empty its results.
     if (brandValue) setDraftQuery("");
     setBrandValue(null);
     update({ ...CLEAR_ATTRS, category: cat });
   }, [brandValue, update]);
 
+  // Discover section cards MUST NOT filter this tab in place (that melted
+  // catalogues into shared Search criteria). They router.push SECTION_ROUTE
+  // inside SearchDiscover — do not reintroduce a Discover→host melt bridge
+  // (onBrowseBrand / onApplySaved / onOpenListing / onSearchQuery removed
+  // Wave8 Tranche B; FilterSheet + CarPicker still use browseBrand).
+
+  // Discover "Explore on map" → ENTER Maps mini-app §7 (/section/maps).
+  // Never hardcode RE. Never melt Discover into shared Search criteria (MOB-07).
+  // Per-section ?map=1 portals remain intentional duplication (Owner law).
   const exploreOnMap = () => {
     if (brandValue) setDraftQuery("");
     setBrandValue(null);
     router.push("/section/maps");
   };
 
+  // Engine chip → committed criteria; sale (تمليك) clears rent-only filters.
   const selectEngine = (key: string) => {
     const engine = engineByKey(criteria.category, key);
     const patch: Partial<SearchCriteria> = { engineKey: key };
@@ -478,11 +540,13 @@ export default function SearchScreen() {
     engineByKey(criteria.category, criteria.engineKey)?.params.offer_type !==
       "sale";
 
+  // Quick brand chip inside the sheet (closes the sheet via browseBrand).
   const browseBrandChip = useCallback(
     (b: CarBrand) => browseBrand(b, null),
     [browseBrand]
   );
 
+  // "Clear all" inside the sheet: drop every filter but keep the text query.
   const clearAllFilters = useCallback(() => {
     setBrandValue(null);
     update({ ...CLEAR_ATTRS, ...CLEAR_FILTERS });
@@ -526,16 +590,19 @@ export default function SearchScreen() {
     showSuggestions,
     searchEngaged,
     recentQueries,
-    viewState,
   });
 
   const locationLabel = criteria.location
     ? labelForValue(criteria.location, isRTL) || criteria.location
     : "";
 
+  // The single overlay shown above the permanently-mounted results list. Null
+  // means "show the list". Derived purely from the hook's view-state.
   let overlay: React.ReactNode = null;
   if (viewState === "discover") {
-    overlay = <SearchDiscover onExploreMap={exploreOnMap} />;
+    overlay = (
+      <SearchDiscover onExploreMap={exploreOnMap} />
+    );
   } else if (viewState === "loading") {
     overlay = (
       <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
@@ -593,6 +660,7 @@ export default function SearchScreen() {
         style={[
           styles.header,
           {
+            // Discover: short chrome only — section filters live inside mini-apps.
             paddingTop: topPad + (viewState === "discover" ? 6 : 12),
             paddingBottom: viewState === "discover" ? 8 : 12,
             backgroundColor: colors.background,
@@ -663,6 +731,7 @@ export default function SearchScreen() {
           </Pressable>
         )}
 
+        {/* Filters belong to an active browse / section — never on Discover. */}
         {viewState !== "discover" ? (
           <Pressable
             onPress={() => setShowFilters((v) => !v)}
@@ -712,6 +781,9 @@ export default function SearchScreen() {
         />
       ) : null}
 
+      {/* Catalogue chrome belongs to active Search browse — not Discover.
+          Discover already routes sections via SECTION_ROUTE mini-apps; showing
+          CategoryTabs/engines here would melt Discover into shared criteria. */}
       {viewState !== "discover" ? (
         <>
           <CategoryTabs
@@ -719,6 +791,12 @@ export default function SearchScreen() {
             onChange={selectCategory}
             visible={shownCategories}
           />
+          {/* Country + currency — the SAME compact control every section mini-app
+              leads with, and unconditional here for a reason: this row used to be
+              21 spread country chips gated behind `showRentalTerms`, so anyone
+              browsing cars, materials, facilities, or real-estate FOR SALE in
+              global search had no way to change market at all. One control, one
+              place, always reachable (owner 2026-07-27). */}
           <View style={[styles.marketRow, { flexDirection: rowDir }]}>
             <MarketCountryButton
               selected={criteria.marketCountry}
@@ -728,6 +806,11 @@ export default function SearchScreen() {
               }}
             />
           </View>
+          {/* In-place sub-filters for car / real-estate (new/used, property type,
+              financing, …), surfaced under the tabs instead of buried in the filter
+              sheet. Empty for every other section, so this row only appears where it
+              applies. No rent/lease chip — that data does not exist (see
+              constants/engines.ts). */}
           {!facetsLoading && engineList.length > 1 && !showIndustrialChips && (
             <EngineChips
               engines={engineList}
@@ -783,54 +866,58 @@ export default function SearchScreen() {
             </View>
           ) : null}
           {showRentalTerms ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.hScroll}
-              contentContainerStyle={[
-                styles.originRow,
-                { flexDirection: rowDir },
-              ]}
-            >
-              {rentalTerms.map((r) => {
-                const active = criteria.rentalTerm === r.value;
-                return (
-                  <Pressable
-                    key={r.value}
-                    onPress={() => {
-                      playSound("tap");
-                      selectRentalTerm(r.value);
-                    }}
-                    style={[
-                      styles.originChip,
-                      {
-                        backgroundColor: active
-                          ? colors.primary
-                          : colors.secondary,
-                      },
-                    ]}
-                    testID={`search-rental-${r.value}`}
-                  >
-                    <AppText
+            <>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.hScroll}
+                contentContainerStyle={[
+                  styles.originRow,
+                  { flexDirection: rowDir },
+                ]}
+              >
+                {rentalTerms.map((r) => {
+                  const active = criteria.rentalTerm === r.value;
+                  return (
+                    <Pressable
+                      key={r.value}
+                      onPress={() => {
+                        playSound("tap");
+                        selectRentalTerm(r.value);
+                      }}
                       style={[
-                        styles.originChipText,
+                        styles.originChip,
                         {
-                          color: active
-                            ? colors.primaryForeground
-                            : colors.mutedForeground,
+                          backgroundColor: active
+                            ? colors.primary
+                            : colors.secondary,
                         },
                       ]}
+                      testID={`search-rental-${r.value}`}
                     >
-                      {isRTL ? r.ar : r.en}
-                    </AppText>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+                      <AppText
+                        style={[
+                          styles.originChipText,
+                          {
+                            color: active
+                              ? colors.primaryForeground
+                              : colors.mutedForeground,
+                          },
+                        ]}
+                      >
+                        {isRTL ? r.ar : r.en}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </>
           ) : null}
         </>
       ) : null}
 
+      {/* Orientation line: how many results the current criteria produced.
+          "24+" while more pages exist, exact once the tail is loaded. */}
       {viewState === "results" && items.length > 0 && (
         <AppText
           style={[
@@ -873,6 +960,8 @@ export default function SearchScreen() {
               backgroundColor: colors.card,
               borderColor: colors.border,
               borderRadius: colors.radius,
+              // Mirror the filter button: inset from the trailing edge so the
+              // dropdown never sits under the sliders control in LTR or RTL.
               ...(isRTL
                 ? { left: 76, right: 16 }
                 : { left: 16, right: 76 }),
@@ -905,6 +994,7 @@ export default function SearchScreen() {
               >
                 {s}
               </AppText>
+
             </Pressable>
           ))}
         </View>
@@ -931,6 +1021,8 @@ export default function SearchScreen() {
             onOpenListing={handleCardPress}
             onOpenListingId={(id) =>
               router.push(
+                // From a real-estate map, land the guest on the booking widget if
+                // the listing is a furnished/daily rental (harmless no-op otherwise).
                 criteria.category === "real_estate"
                   ? `/listing/${id}?focus=booking`
                   : `/listing/${id}`,
@@ -974,6 +1066,10 @@ export default function SearchScreen() {
           </View>
         ) : null}
 
+        {/* Discover-state map FAB: same Maps mini-app §7 as exploreOnMap /
+            discover-explore-map. Must NEVER commit shared Search with
+            category:"car" when criteria is "all" — that was the
+            «بيفتح قسم السيارات» force path (Phase Zero §9 / #59 P1). */}
         {viewState === "discover" && (
           <View
             style={[styles.mapToggleWrap, { bottom: insets.bottom + 80 }]}
