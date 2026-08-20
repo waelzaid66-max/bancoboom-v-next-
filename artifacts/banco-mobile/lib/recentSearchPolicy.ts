@@ -3,6 +3,7 @@ type RecentSearchVisibilityInput = {
   showSuggestions: boolean;
   searchEngaged: boolean;
   recentQueries: readonly string[];
+  viewState: string;
 };
 
 export default function shouldShowRecentSearches({
@@ -10,8 +11,10 @@ export default function shouldShowRecentSearches({
   showSuggestions,
   searchEngaged,
   recentQueries,
+  viewState,
 }: RecentSearchVisibilityInput): boolean {
   return (
+    viewState === "discover" &&
     searchEngaged &&
     recentQueries.length > 0 &&
     draftQuery.trim().length === 0 &&
