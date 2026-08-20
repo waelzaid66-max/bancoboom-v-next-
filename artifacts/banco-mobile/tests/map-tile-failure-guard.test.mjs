@@ -11,9 +11,11 @@ const guard = read("components/search/mapHtmlTileGuard.ts");
 const base = read("components/search/mapHtml.ts");
 const nativeHost = read("components/search/SearchResultsMap.tsx");
 const webHost = read("components/search/SearchResultsMap.web.tsx");
+const pkg = JSON.parse(read("package.json"));
 
 test("tile failure instrumentation is additive and leaves the canonical generator intact", () => {
   assert.match(guard, /buildMapHtml as buildBaseMapHtml/);
+  assert.match(guard, /export \{ feedItemsToMarkers \} from "\.\/mapHtml"/);
   assert.match(guard, /html\.replace\("<\/head>"/);
   assert.match(guard, /tile\.openstreetmap\.org/);
   assert.match(guard, /type: "tile_error"/);
@@ -56,6 +58,14 @@ test("native and web hosts consume the guarded bridge", () => {
     assert.match(src, /Map temporarily unavailable/);
     assert.match(src, /الخريطة غير متاحة مؤقتًا/);
   }
+});
+
+test("tile failure guard is wired into the aggregate mobile test chain", () => {
+  assert.equal(
+    pkg.scripts["test:map-tile-failure"],
+    "node --test tests/map-tile-failure-guard.test.mjs",
+  );
+  assert.match(pkg.scripts.test, /pnpm run test:map-tile-failure/);
 });
 
 test("tile failure does not disable cluster, draw-area or listing selection flows", () => {
