@@ -20,7 +20,8 @@ test("recent-search data remains owned by SessionContext and SearchScreen", () =
   assert.match(search, /recordQuery\(q\)/);
 });
 
-test("visibility policy is bounded to explicit search engagement", () => {
+test("visibility policy is bounded to explicit default-search engagement", () => {
+  assert.match(policy, /viewState === "discover"/);
   assert.match(policy, /searchEngaged/);
   assert.match(policy, /recentQueries\.length > 0/);
   assert.match(policy, /draftQuery\.trim\(\)\.length === 0/);
@@ -40,7 +41,7 @@ test("SearchScreen replays recents through the existing commitQueryNow authority
   assert.match(search, /from "@\/components\/search\/RecentSearchChips"/);
   assert.match(search, /from "@\/lib\/recentSearchPolicy"/);
   assert.match(search, /const \[searchEngaged, setSearchEngaged\] = useState\(false\)/);
-  assert.match(search, /shouldShowRecentSearches\(\{/);
+  assert.match(search, /shouldShowRecentSearches\(\{[\s\S]*viewState,/);
   assert.match(search, /setDraftQuery\(query\)/);
   assert.match(search, /commitQueryNow\(query\)/);
   assert.match(search, /<RecentSearchChips[\s\S]*queries=\{recentQueries\}[\s\S]*onSelect=\{handleRecentSearchTap\}/);
