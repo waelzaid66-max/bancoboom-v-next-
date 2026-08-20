@@ -27,7 +27,7 @@ import {
   feedItemsToMarkers,
   type MapBridgeMessage,
   type MapClusterMarker,
-} from "./mapHtml";
+} from "./mapHtmlTileGuard";
 import { MapOverlayChrome, type MapPreviewCardProps } from "./MapOverlayChrome";
 
 const CLUSTER_DEBOUNCE_MS = 300;
@@ -77,6 +77,7 @@ export function SearchResultsMap({
   const webRef = useRef<WebView>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const tileFailureShownRef = useRef(false);
   // Total in the visible viewport per the last server response (honest count);
   // null until the first response, when we fall back to the loaded-page count.
   const [serverTotal, setServerTotal] = useState<number | null>(null);
@@ -183,6 +184,7 @@ export function SearchResultsMap({
     setReady(false);
     setSelectedId(null);
     setServerTotal(null);
+    tileFailureShownRef.current = false;
     vpSeqRef.current++;
   }, [sig]);
 
@@ -326,6 +328,17 @@ export function SearchResultsMap({
         const msg = JSON.parse(event.nativeEvent.data) as MapBridgeMessage;
         if (msg.type === "ready" || msg.type === "error") {
           setReady(true);
+        } else if (msg.type === "tile_error") {
+          setReady(true);
+          if (!tileFailureShownRef.current) {
+            tileFailureShownRef.current = true;
+            Alert.alert(
+              isRTL ? "الخريطة غير متاحة مؤقتًا" : "Map temporarily unavailable",
+              isRTL
+                ? "تعذر تحميل صور الخريطة. يمكنك الاستمرار في استخدام النتائج والقوائم والمحاولة لاحقًا."
+                : "Map tiles could not be loaded. You can keep using the results and listings and try the map again later.",
+            );
+          }
         } else if (msg.type === "locate_error") {
           // Same honesty as FilterSheet near-me — never leave Android/iOS users
           // with a dead locate button after permission deny/timeout.
@@ -388,7 +401,7 @@ export function SearchResultsMap({
         // Ignore malformed bridge messages.
       }
     },
-    [scheduleFetchClusters, onOpenListingId, t],
+    [fetchClusters, isRTL, scheduleFetchClusters, onOpenListingId, t],
   );
 
   const selected = useMemo(
