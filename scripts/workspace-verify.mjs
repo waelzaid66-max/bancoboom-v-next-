@@ -7,10 +7,11 @@ import { fileURLToPath } from "node:url";
 // given in, and GitHub serves both. Requiring the suffix literally rejected a
 // legitimate clone made from the plain URL, which failed `prebuild` and left the
 // root `npm run build` gate unreachable on a fresh checkout.
-const ALLOWED_REMOTE_PATHS = [
-  "waelzaid66-max/bancoboomstor",
-  "waelzaid66-max/bancoboom-v-next-",
-];
+//
+// Recovery is complete enough that the production workspace must now resolve to
+// BANCO BOOM NEXT only. Historical repositories remain evidence/rollback sources,
+// never authoritative build/deploy origins.
+const ALLOWED_REMOTE_PATHS = ["waelzaid66-max/bancoboom-v-next-"];
 const EXPECTED_PACKAGE_MANAGER = "pnpm@11.9.0";
 const EXPECTED_PNPM_VERSION = EXPECTED_PACKAGE_MANAGER.split("@")[1];
 const REQUIRED_PATHS = [
