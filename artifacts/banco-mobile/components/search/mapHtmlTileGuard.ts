@@ -1,6 +1,7 @@
 import { buildMapHtml as buildBaseMapHtml } from "./mapHtml";
 import type { MapBridgeMessage as BaseMapBridgeMessage } from "./mapHtml";
 
+export { feedItemsToMarkers } from "./mapHtml";
 export type {
   MapClusterMarker,
   MapMarker,
