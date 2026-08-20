@@ -3,9 +3,13 @@ import { realpathSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// Stored WITHOUT the .git suffix: `git clone` keeps whichever form the URL was
+// given in, and GitHub serves both. Requiring the suffix literally rejected a
+// legitimate clone made from the plain URL, which failed `prebuild` and left the
+// root `npm run build` gate unreachable on a fresh checkout.
 const ALLOWED_REMOTE_PATHS = [
-  "waelzaid66-max/bancoboomstor.git",
-  "waelzaid66-max/bancoboom-v-next-.git",
+  "waelzaid66-max/bancoboomstor",
+  "waelzaid66-max/bancoboom-v-next-",
 ];
 const EXPECTED_PACKAGE_MANAGER = "pnpm@11.9.0";
 const EXPECTED_PNPM_VERSION = EXPECTED_PACKAGE_MANAGER.split("@")[1];
@@ -73,7 +77,8 @@ for (const requiredPath of REQUIRED_PATHS) {
 
 const origin = git("remote", "get-url", "origin")
   .replace(/\\/g, "/")
-  .replace(/\/$/, "");
+  .replace(/\/$/, "")
+  .replace(/\.git$/, "");
 if (!ALLOWED_REMOTE_PATHS.some((remotePath) => origin.endsWith(remotePath))) {
   fail(`origin must end with one of: ${ALLOWED_REMOTE_PATHS.join(", ")}`);
 }
