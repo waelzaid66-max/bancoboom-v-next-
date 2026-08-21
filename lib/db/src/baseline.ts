@@ -171,7 +171,12 @@ async function lockPublicTablesAgainstDdl(client: pg.Client): Promise<number> {
   const relations = rows.rows
     .map(({ relation_name }) => `${quoteIdentifier("public")}.${quoteIdentifier(relation_name)}`)
     .join(", ");
-  await client.query(`LOCK TABLE ${relations} IN ACCESS SHARE MODE`);
+
+  // ACCESS SHARE only blocks ACCESS EXCLUSIVE and still permits both ordinary
+  // and concurrent index creation. SHARE UPDATE EXCLUSIVE keeps normal DML
+  // available while blocking ALTER/DROP plus CREATE INDEX and CREATE INDEX
+  // CONCURRENTLY for the duration of the catalog comparison transaction.
+  await client.query(`LOCK TABLE ${relations} IN SHARE UPDATE EXCLUSIVE MODE`);
   return rows.rows.length;
 }
 
