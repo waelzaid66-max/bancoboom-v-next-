@@ -20,7 +20,8 @@
     "ops:live-cutover": "node scripts/ops-live-cutover-check.mjs",
     "confidence": "node scripts/production-confidence-check.mjs",
     "security:audit": "node scripts/dependency-security-gate.mjs",
-    "workspace:verify": "node scripts/workspace-verify.mjs"
+    "workspace:verify": "node scripts/workspace-verify.mjs",
+    "release:verify": "node scripts/release-sot-gate.mjs"
   },
   "private": true,
   "devDependencies": {
