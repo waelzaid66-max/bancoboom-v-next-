@@ -1,6 +1,6 @@
 # BANCO — Deployment Source of Truth (SoT)
 
-**Generated:** 2026-07-30 (restituted) · **Reconciled:** 2026-08-09
+**Generated:** 2026-07-30 (restituted) · **Reconciled:** 2026-08-21
 **Authority:** Lead DevOps + Monorepo Architect
 **Rule:** Verified paths only. No invented services.
 
@@ -8,13 +8,15 @@
 
 | Field | Value |
 |-------|--------|
-| **ONLY deploy SoT repository** | `https://github.com/waelzaid66-max/bancoboomstor` |
+| **ONLY deploy SoT repository** | `https://github.com/waelzaid66-max/bancoboom-v-next-` |
+| **Canonical branch** | `canonical/vnext-assembly` — deploy only an exact approved immutable release SHA, never a moving branch tip |
+| **Production release authority** | `release/production/COOLIFY_RUNBOOK.md` |
 | **Mobile package / bundle** | `com.bancooom.app` |
 | **App scheme** | `bancooom` |
 | **App display name** | `BANCO` |
 | **Coolify compose file** | `docker-compose.coolify.yml` |
-| **Coolify click checklist** | **`COOLIFY_DEPLOY_NOW.md`** (start here) |
-| **OPS go-live checklist** | **`OPS_GO_LIVE_CHECKLIST.md`** (tick boxes after merge) |
+| **Coolify click checklist** | **`COOLIFY_DEPLOY_NOW.md`** |
+| **OPS go-live checklist** | **`OPS_GO_LIVE_CHECKLIST.md`** |
 | **Production inventory (harmony)** | **`reports/production-verification/57-PRODUCTION-INVENTORY-HARMONY.md`** |
 | **OpenAPI codegen harmony** | **`reports/production-verification/58-OPENAPI-CODEGEN-HARMONY.md`** |
 | **Mobile full-product audit (no fixes)** | **`reports/production-verification/59-MOBILE-FULL-PRODUCT-AUDIT.md`** |
@@ -22,7 +24,7 @@
 | **Package manager** | `pnpm@11.9.0` |
 | **Node (Docker)** | **24** |
 
-> **Pre-consolidation repos (`banco-with-wael`, `bancoo`, `bancoboom`, …) are NOT Coolify SoT.**
+> **Historical/pre-consolidation repos (`bancoboomstor`, `banco-with-wael`, `bancoo`, `bancoboom`, …) are NOT Coolify SoT.**
 > Do not enter them in Coolify. Do not ship store builds from their package ids.
 
 ---
@@ -34,7 +36,7 @@
 | Prior mistake | Agent environment was bound to `bancoo`; certification was briefly delivered there |
 | Correct local SoT commit (pre-restitution add-ons) | `442e68a` on `cursor/production-gap-certification-5cf0` |
 | Mobile identity on SoT | **`com.bancooom.app`** (verified) |
-| This document | Reconciled against **`bancoboomstor`** after repository consolidation |
+| Historical consolidation stage | This document was previously reconciled against **`bancoboomstor`** on 2026-08-09; that repository is preserved as provenance only and is no longer deploy authority |
 
 See also: `reports/production-verification/53-SOT-RECOVERY-AND-MOBILE-RESTITUTION.md`
 
@@ -110,9 +112,9 @@ service order below.
 | Field | Value |
 |-------|--------|
 | Resource type | **Docker Compose** |
-| Repository URL | `https://github.com/waelzaid66-max/bancoboomstor` |
+| Repository URL | `https://github.com/waelzaid66-max/bancoboom-v-next-` |
 | Compose path | `docker-compose.coolify.yml` |
-| Branch | `main` (after merge) or the restitution PR branch until merged |
+| Branch | `canonical/vnext-assembly`, with deployment pinned to the exact approved immutable release SHA |
 | Build | Per-service Dockerfiles under `deploy/coolify/` |
 | Reverse proxy | Coolify Traefik |
 
@@ -189,7 +191,7 @@ Runtime: `PORT` · `NODE_ENV` · `CLERK_SECRET_KEY` · `BANCO_WEBSITE_HOST_PORT`
 
 ## FIRST DEPLOYMENT CHECKLIST
 
-□ Coolify → Docker Compose → repo **`waelzaid66-max/bancoboomstor`** → file **`docker-compose.coolify.yml`**
+□ Coolify → Docker Compose → repo **`waelzaid66-max/bancoboom-v-next-`** → branch **`canonical/vnext-assembly`** pinned to the exact approved immutable release SHA → file **`docker-compose.coolify.yml`**
 □ Set `POSTGRES_PASSWORD` `CLERK_SECRET_KEY` `SESSION_SECRET` `PAYMENT_CONFIG_ENCRYPTION_KEY`
 □ Set S3: `OBJECT_STORAGE_PROVIDER=s3` + `AWS_*` / `S3_BUCKET` / object paths
 □ Set build-time `NEXT_PUBLIC_*` / `VITE_*` / public URLs
@@ -211,4 +213,4 @@ run `baseline` once
 □ EAS bake `EXPO_PUBLIC_*` for `com.bancooom.app`
 □ Final smoke
 
-**End of SoT.** Deploy only from this file + `docker-compose.coolify.yml` on **`bancoboomstor`**.
+**End of SoT.** Production deployment authority is `release/production/COOLIFY_RUNBOOK.md`; deploy only from `waelzaid66-max/bancoboom-v-next-` at an approved immutable SHA of `canonical/vnext-assembly` using `docker-compose.coolify.yml`.
