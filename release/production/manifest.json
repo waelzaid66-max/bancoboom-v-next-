@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "product": "BANCO BOOM NEXT",
+  "repository": "waelzaid66-max/bancoboom-v-next-",
+  "canonicalBranch": "canonical/vnext-assembly",
+  "assemblyBaseSha": "3951c72906918bb0b5c1e7f8fcc11c862eb8989d",
+  "packageManager": "pnpm@11.9.0",
+  "node": "24",
+  "mobile": {
+    "package": "artifacts/banco-mobile",
+    "bundleId": "com.bancooom.app",
+    "delivery": "EAS",
+    "config": ["artifacts/banco-mobile/app.config.ts", "artifacts/banco-mobile/eas.json"]
+  },
+  "coolify": {
+    "resourceType": "Docker Compose",
+    "composeFile": "docker-compose.coolify.yml",
+    "sourceRepository": "waelzaid66-max/bancoboom-v-next-",
+    "sourceBranch": "canonical/vnext-assembly",
+    "deployByImmutableSha": true,
+    "services": [
+      {"name":"postgres","source":"postgres:16","role":"database"},
+      {"name":"migrate","dockerfile":"deploy/coolify/Dockerfile.api","target":"builder","role":"one-off committed migrations"},
+      {"name":"api","package":"artifacts/api-server","dockerfile":"deploy/coolify/Dockerfile.api","health":"/api/readyz"},
+      {"name":"banco-website","package":"artifacts/banco-website","dockerfile":"deploy/coolify/Dockerfile.banco-website","health":"/api/healthz"},
+      {"name":"banco-web","package":"artifacts/banco-web","dockerfile":"deploy/coolify/Dockerfile.banco-web","profile":"legacy-banco-web","health":"/api/healthz"},
+      {"name":"web","packages":["artifacts/landing","artifacts/dealer-os","artifacts/admin-os"],"dockerfile":"deploy/coolify/Dockerfile.web","health":"/nginx-health"}
+    ],
+    "startupOrder": ["postgres", "migrate", "api", "banco-website", "web"]
+  },
+  "workspacePackages": {
+    "artifacts": ["api-server", "banco-mobile", "banco-web", "banco-website", "landing", "dealer-os", "admin-os", "mockup-sandbox"],
+    "libraries": "lib/* and lib/integrations/*",
+    "scripts": "scripts"
+  },
+  "releaseGates": [
+    "pnpm install --frozen-lockfile",
+    "pnpm run workspace:verify",
+    "pnpm run security:audit",
+    "pnpm run typecheck",
+    "pnpm run build",
+    "pnpm run confidence",
+    "pnpm run release:verify",
+    "PostgreSQL migrate/replay/snapshot-upgrade proof",
+    "Docker image builds from exact SHA",
+    "Coolify staging from exact SHA",
+    "live Clerk/storage/email/push/Maps/Paymob sandbox proof",
+    "Android and iOS physical-device journeys",
+    "backup/restore and rollback rehearsal"
+  ],
+  "forbiddenProductionOrigins": [
+    "waelzaid66-max/bancoboomstor",
+    "bancoboomstor",
+    "banco-with-wael",
+    "waelzaid66-max/bancoo"
+  ],
+  "productionStatus": "NO-GO until all exact-SHA runtime gates pass"
+}
