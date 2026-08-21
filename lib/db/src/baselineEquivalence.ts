@@ -1,18 +1,25 @@
 import fs from "node:fs";
 
-import type pg from "pg";
+import type { Client } from "pg";
 
 type SnapshotColumn = {
   name: string;
   type: string;
   notNull: boolean;
   primaryKey?: boolean;
+  default?: unknown;
+  generated?: { as: string; type: string };
+};
+
+type SnapshotIndex = {
+  name: string;
+  isUnique?: boolean;
 };
 
 type SnapshotTable = {
   name: string;
   columns: Record<string, SnapshotColumn>;
-  indexes?: Record<string, { name: string }>;
+  indexes?: Record<string, SnapshotIndex>;
   foreignKeys?: Record<string, { name: string }>;
   compositePrimaryKeys?: Record<string, { name: string }>;
   uniqueConstraints?: Record<string, { name: string }>;
@@ -35,16 +42,47 @@ type ActualColumn = {
   column_name: string;
   data_type: string;
   not_null: boolean;
+  default_expr: string | null;
+  generated_kind: string;
 };
 
 function normalizedType(type: string): string {
   const compact = type.trim().toLowerCase().replace(/,\s+/g, ",").replace(/\s+/g, " ");
   if (compact === "timestamp") return "timestamp without time zone";
+  if (/^timestamp\(\d+\)$/.test(compact)) return `${compact} without time zone`;
   if (compact === "timestamptz") return "timestamp with time zone";
   if (compact === "serial") return "integer";
   if (compact === "bigserial") return "bigint";
+  if (compact === "varchar") return "character varying";
   if (compact.startsWith("varchar(")) return compact.replace(/^varchar/, "character varying");
   return compact;
+}
+
+function stripOuterParens(value: string): string {
+  let current = value.trim();
+  while (current.startsWith("(") && current.endsWith(")")) {
+    const inner = current.slice(1, -1).trim();
+    let depth = 0;
+    let balanced = true;
+    for (const char of inner) {
+      if (char === "(") depth += 1;
+      if (char === ")") depth -= 1;
+      if (depth < 0) {
+        balanced = false;
+        break;
+      }
+    }
+    if (!balanced || depth !== 0) break;
+    current = inner;
+  }
+  return current;
+}
+
+function normalizedDefault(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  let text = stripOuterParens(String(value).trim());
+  text = text.replace(/::(?:"?[a-zA-Z0-9_]+"?\.)?"?[a-zA-Z0-9_ ]+"?(?:\[\])?$/u, "");
+  return stripOuterParens(text).replace(/\s+/g, " ");
 }
 
 function sorted(values: Iterable<string>): string[] {
@@ -64,7 +102,7 @@ function assertSameSet(label: string, expected: Iterable<string>, actual: Iterab
 }
 
 export async function assertBaselineSnapshotEquivalent(
-  client: pg.Client,
+  client: Client,
   snapshotPath: string,
 ): Promise<void> {
   const snapshot = JSON.parse(fs.readFileSync(snapshotPath, "utf8")) as DrizzleSnapshot;
@@ -86,10 +124,13 @@ export async function assertBaselineSnapshotEquivalent(
     SELECT c.relname AS table_name,
            a.attname AS column_name,
            format_type(a.atttypid, a.atttypmod) AS data_type,
-           a.attnotnull AS not_null
+           a.attnotnull AS not_null,
+           pg_get_expr(d.adbin, d.adrelid) AS default_expr,
+           a.attgenerated AS generated_kind
       FROM pg_attribute a
       JOIN pg_class c ON c.oid = a.attrelid
       JOIN pg_namespace n ON n.oid = c.relnamespace
+      LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
      WHERE n.nspname = 'public'
        AND c.relkind = 'r'
        AND a.attnum > 0
@@ -117,18 +158,48 @@ export async function assertBaselineSnapshotEquivalent(
           `[baseline] schema equivalence failed: ${key} nullability expected=${column.notNull ? "NOT NULL" : "NULL"} actual=${actual.not_null ? "NOT NULL" : "NULL"}`,
         );
       }
+
+      const expectedGenerated = Boolean(column.generated);
+      const actualGenerated = actual.generated_kind === "s";
+      if (expectedGenerated !== actualGenerated) {
+        throw new Error(
+          `[baseline] schema equivalence failed: ${key} generated expected=${expectedGenerated} actual=${actualGenerated}`,
+        );
+      }
+
+      if (!expectedGenerated) {
+        const expectedDefault = normalizedDefault(column.default);
+        const actualDefault = normalizedDefault(actual.default_expr);
+        if (expectedDefault !== actualDefault) {
+          throw new Error(
+            `[baseline] schema equivalence failed: ${key} default expected=${expectedDefault ?? "<none>"} actual=${actualDefault ?? "<none>"}`,
+          );
+        }
+      }
     }
   }
   assertSameSet("public column set", expectedColumnKeys, actualColumns.keys());
 
-  const indexRows = await client.query<{ indexname: string }>(`
-    SELECT indexname FROM pg_indexes WHERE schemaname = 'public'
+  const indexRows = await client.query<{ indexname: string; is_unique: boolean }>(`
+    SELECT index_class.relname AS indexname,
+           index_meta.indisunique AS is_unique
+      FROM pg_index index_meta
+      JOIN pg_class index_class ON index_class.oid = index_meta.indexrelid
+      JOIN pg_class table_class ON table_class.oid = index_meta.indrelid
+      JOIN pg_namespace n ON n.oid = table_class.relnamespace
+     WHERE n.nspname = 'public'
   `);
-  const actualIndexes = new Set(indexRows.rows.map((row) => row.indexname));
+  const actualIndexes = new Map(indexRows.rows.map((row) => [row.indexname, row]));
   for (const table of expectedTables) {
     for (const index of Object.values(table.indexes ?? {})) {
-      if (!actualIndexes.has(index.name)) {
+      const actual = actualIndexes.get(index.name);
+      if (!actual) {
         throw new Error(`[baseline] schema equivalence failed: missing index ${index.name}`);
+      }
+      if (actual.is_unique !== Boolean(index.isUnique)) {
+        throw new Error(
+          `[baseline] schema equivalence failed: index ${index.name} uniqueness expected=${Boolean(index.isUnique)} actual=${actual.is_unique}`,
+        );
       }
     }
   }
