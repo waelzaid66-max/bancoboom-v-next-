@@ -88,7 +88,7 @@ const RENDER_CRITICAL = [
     symbol: "SearchResultsMap",
     suite: "tests/render/SearchResultsMap.web.render.test.tsx",
     staticGuard: "tests/map-chrome-guard.test.mjs",
-    claim: "the web map host consumes draw-area messages and reports only its honestly clipped result set",
+    claim: "the web map host consumes draw-area and tile-failure messages while preserving its honestly clipped result set",
   },
   {
     source: "components/search/maps/MapsHubApp.tsx",

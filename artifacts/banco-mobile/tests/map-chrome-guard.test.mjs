@@ -139,6 +139,31 @@ test("the locate button meets the platform touch-target floor", () => {
   );
 });
 
+test("tile failures cross the bridge once and are visible on native and web", () => {
+  assert.match(mapHtml, /\| \{ type: "tile_error" \}/);
+  assert.match(mapHtml, /tileLayer\.on\("tileerror"/);
+  assert.match(mapHtml, /if \(tileFailureReported\) return;/);
+  assert.match(mapHtml, /post\(\{ type: "tile_error" \}\)/);
+
+  for (const [name, src] of [
+    ["SearchResultsMap.tsx", nativeHost],
+    ["SearchResultsMap.web.tsx", webHost],
+  ]) {
+    assert.match(src, /msg\.type === "tile_error"/, `${name} ignores tile failure`);
+    assert.match(
+      src,
+      /tileFailureShownRef/,
+      `${name} may spam one alert for every failed tile`,
+    );
+    assert.match(src, /search\.mapUnavailableTitle/);
+    assert.match(src, /search\.mapUnavailableBody/);
+  }
+
+  const i18n = read("constants/i18n.ts");
+  assert.equal((i18n.match(/mapUnavailableTitle:/g) ?? []).length, 2);
+  assert.equal((i18n.match(/mapUnavailableBody:/g) ?? []).length, 2);
+});
+
 test("the page draws the area; the host decides what is inside it", () => {
   // One implementation of point-in-polygon, in the file that has tests. If the
   // page ever grew its own, the two would drift and the map would disagree

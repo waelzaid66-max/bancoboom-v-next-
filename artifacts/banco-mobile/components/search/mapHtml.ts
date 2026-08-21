@@ -60,6 +60,8 @@ export interface MapViewportBounds {
 export type MapBridgeMessage =
   | { type: "ready" }
   | { type: "error" }
+  /** The configured OSM layer could not load at least one map tile. */
+  | { type: "tile_error" }
   | { type: "select"; id: string }
   | { type: "viewport"; bounds: MapViewportBounds; zoom: number }
   /** Locate-me failed (permission deny / timeout / unavailable) — host shows Alert. */
@@ -362,13 +364,20 @@ export function buildMapHtml(
     var map = L.map("map", { zoomControl: false, attributionControl: true })
       .setView([${lat}, ${lng}], ${zoom});
     L.control.zoom({ position: "topright" }).addTo(map);
-    L.tileLayer("${OSM_TILES}", {
+    var tileFailureReported = false;
+    var tileLayer = L.tileLayer("${OSM_TILES}", {
       maxZoom: 19,
       // ODbL requires crediting the contributors, with a link to the copyright
       // page — not the project name alone. rel=noopener because the page runs
       // inside a WebView/iframe host.
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'
-    }).addTo(map);
+    });
+    tileLayer.on("tileerror", function () {
+      if (tileFailureReported) return;
+      tileFailureReported = true;
+      post({ type: "tile_error" });
+    });
+    tileLayer.addTo(map);
 ${nearScript}
     // "Locate me" control — centres the map on the device GPS and drops a
     // you-are-here dot (fcd7d1c; wiped by 93b650b; restored surgically).

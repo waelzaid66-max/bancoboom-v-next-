@@ -7,6 +7,7 @@
  */
 import React from "react";
 import { act, render, waitFor } from "@testing-library/react-native";
+import { Alert } from "react-native";
 import type { FeedItem } from "@workspace/api-client-react";
 
 import { SearchResultsMap } from "@/components/search/SearchResultsMap.web";
@@ -17,6 +18,7 @@ const mockBuildMapHtml = jest.fn(
   (..._mockArgs: unknown[]) => "<html>map</html>",
 );
 const mockSetClusters = jest.fn();
+const mockAlert = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
 const mockIframeWindow = { BANCO_MAP: { setClusters: mockSetClusters } };
 let mockOverlayProps: Record<string, unknown> = {};
 let mockMessageHandler: ((event: MessageEvent) => void) | null = null;
@@ -166,6 +168,7 @@ describe("SearchResultsMap web host", () => {
     mockGetMapClusters.mockReset();
     mockBuildMapHtml.mockClear();
     mockSetClusters.mockReset();
+    mockAlert.mockClear();
     mockOverlayProps = {};
     mockMessageHandler = null;
 
@@ -205,6 +208,32 @@ describe("SearchResultsMap web host", () => {
     );
     expect(mockOverlayProps.count).toBe(1);
     expect(mockMessageHandler).not.toBeNull();
+  });
+
+  it("surfaces a trusted tile failure once without blocking listing results", () => {
+    const view = mountMap();
+
+    act(() => {
+      mockMessageHandler?.({
+        data: JSON.stringify({ type: "tile_error" }),
+        source: {},
+      } as MessageEvent);
+      mockMessageHandler?.({
+        data: JSON.stringify({ type: "tile_error" }),
+        source: mockIframeWindow,
+      } as unknown as MessageEvent);
+      mockMessageHandler?.({
+        data: JSON.stringify({ type: "tile_error" }),
+        source: mockIframeWindow,
+      } as unknown as MessageEvent);
+    });
+
+    expect(mockAlert).toHaveBeenCalledTimes(1);
+    expect(mockAlert).toHaveBeenCalledWith(
+      "search.mapUnavailableTitle",
+      "search.mapUnavailableBody",
+    );
+    expect(view.getByTestId("mock-map-overlay")).toBeTruthy();
   });
 
   it("consumes a drawn area, queries its box, and exposes an honest clipped count", async () => {

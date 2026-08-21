@@ -84,6 +84,7 @@ export function SearchResultsMap({
     exact: boolean;
   } | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const tileFailureShownRef = useRef(false);
 
   const markers = useMemo(() => feedItemsToMarkers(items), [items]);
   const sig = useMemo(
@@ -281,7 +282,15 @@ export function SearchResultsMap({
       if (event.source !== iframeRef.current?.contentWindow) return;
       try {
         const msg = JSON.parse(String(event.data)) as MapBridgeMessage;
-        if (msg.type === "viewport") {
+        if (msg.type === "tile_error") {
+          if (!tileFailureShownRef.current) {
+            tileFailureShownRef.current = true;
+            Alert.alert(
+              t("search.mapUnavailableTitle"),
+              t("search.mapUnavailableBody"),
+            );
+          }
+        } else if (msg.type === "viewport") {
           const vp = { ...msg.bounds, zoom: msg.zoom };
           lastViewportRef.current = vp;
           scheduleFetchClusters(vp);

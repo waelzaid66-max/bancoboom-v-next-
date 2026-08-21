@@ -14,14 +14,17 @@ import { createRequire } from "node:module";
 
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = join(APP_ROOT, "node_modules", ".cache", "i18n-usage-test");
+const workspaceRequire = createRequire(
+  pathToFileURL(join(APP_ROOT, "package.json")),
+);
 
 function compileI18n() {
   rmSync(OUT_DIR, { recursive: true, force: true });
   mkdirSync(OUT_DIR, { recursive: true });
   const res = spawnSync(
-    process.platform === "win32" ? "npx.cmd" : "npx",
+    process.execPath,
     [
-      "tsc",
+      workspaceRequire.resolve("typescript/bin/tsc"),
       join("constants", "i18n.ts"),
       "--outDir",
       OUT_DIR,
@@ -31,11 +34,10 @@ function compileI18n() {
       "es2020",
       "--skipLibCheck",
     ],
-    { cwd: APP_ROOT, encoding: "utf8", shell: process.platform === "win32" },
+    { cwd: APP_ROOT, encoding: "utf8" },
   );
   assert.equal(res.status, 0, `i18n.ts failed to compile:\n${res.stdout}\n${res.stderr}`);
-  const require_ = createRequire(pathToFileURL(join(APP_ROOT, "package.json")));
-  const mod = require_(join(OUT_DIR, "i18n.js"));
+  const mod = workspaceRequire(join(OUT_DIR, "i18n.js"));
   const en = mod.translations?.en ?? mod.en;
   assert.ok(en, "compiled i18n exposes no en tree");
   return en;

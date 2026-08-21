@@ -557,6 +557,9 @@ const en = {
     /** A cluster inside the shape may hold listings outside it, so the number
      *  is a floor, never a total. Zooming in resolves it into an exact one. */
     mapAreaCountAtLeast: "{count}+ in this area · zoom in for the exact count",
+    mapUnavailableTitle: "Map temporarily unavailable",
+    mapUnavailableBody:
+      "Map tiles couldn't load. You can keep using the results and listings, then reopen the map to try again.",
     locateFailedTitle: "Couldn't find your location",
     locateDeniedBody:
       "Allow location access so Locate me can centre the map. You can enable it in Settings.",
@@ -2962,6 +2965,9 @@ const ar: typeof en = {
     mapDrawClear: "امسح المنطقة",
     mapAreaCount: "{count} في المنطقة دي",
     mapAreaCountAtLeast: "{count}+ في المنطقة دي · قرّب للعدد الدقيق",
+    mapUnavailableTitle: "الخريطة غير متاحة مؤقتًا",
+    mapUnavailableBody:
+      "تعذّر تحميل صور الخريطة. تقدر تكمّل في النتائج والإعلانات، وبعدها افتح الخريطة تاني للمحاولة.",
     locateFailedTitle: "تعذّر تحديد موقعك",
     locateDeniedBody:
       "اسمح بالوصول للموقع عشان زر موقعي يوسّط الخريطة. تقدر تفعّله من الإعدادات.",
