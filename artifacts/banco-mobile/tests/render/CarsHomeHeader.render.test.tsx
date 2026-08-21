@@ -180,6 +180,7 @@ describe("CarsHomeHeader", () => {
       "cars-home-header",
       "cars-boom-brand",
       "cars-hero",
+      "cars-unified-dock",
       "section-search-open",
       "cars-header-map",
       "section-save-search",
@@ -218,6 +219,7 @@ describe("CarsHomeHeader", () => {
 
     expect(view.queryByTestId("cars-category-strip")).toBeNull();
     expect(view.queryByTestId("cars-stats-strip")).toBeNull();
+    expect(view.getByTestId("cars-unified-dock")).toBeTruthy();
     expect(view.getByTestId("section-search-open")).toBeTruthy();
     expect(view.getByTestId("section-filter-toggle")).toBeTruthy();
     expect(view.getByTestId("cars-header-map")).toBeTruthy();
@@ -240,6 +242,7 @@ describe("CarsHomeHeader", () => {
       opacity: 0,
       marginBottom: 0,
     });
+    expect(view.getByTestId("cars-unified-dock")).toBeTruthy();
     expect(view.getByTestId("section-search-open")).toBeTruthy();
     expect(view.getByTestId("section-filter-toggle")).toBeTruthy();
     expect(view.getByTestId("cars-category-strip")).toBeTruthy();
