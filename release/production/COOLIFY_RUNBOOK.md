@@ -41,7 +41,7 @@ Provider-dependent values must be configured when their feature is enabled: Paym
 5. Start `postgres`; require its healthcheck to pass.
 6. Determine whether the database is fresh or an existing pre-journal database.
 7. Fresh database: run `docker compose --profile migrate run --rm migrate` directly.
-8. Existing pre-journal database: prove schema equivalence to the release migration state before any one-time baseline, then run migrate.
+8. Existing pre-journal database: enter an explicit DB-adoption maintenance window before any baseline. Stop API/application traffic and every migration/deploy/schema writer that can target this database; use the dedicated release/adoption DB credential/session; verify immediately before baseline that no other target-DB session capable of DDL is active; keep that quiescent state continuously through baseline plus the immediately following migrate. Then prove schema equivalence to the approved adoption cutoff, run the one-time baseline, and run normal migrate before reopening writers. The baseline transaction's advisory/table locks are defense-in-depth only and are not a schema-wide mutex against arbitrary concurrent DDL.
 9. Start `api`; require `/api/readyz` to return HTTP 200.
 10. Start `banco-website` and `web`. Start `banco-web` only if the explicit legacy profile is required.
 11. Verify reverse-proxy routes, CORS, Clerk proxy behaviour, object storage, email/push and public URLs.
@@ -57,6 +57,7 @@ Provider-dependent values must be configured when their feature is enabled: Paym
 - CI run IDs and job logs
 - Docker image digests
 - Migration journal/state
+- DB-adoption maintenance-window evidence when baseline is required: writer shutdown, session check, baseline result and migrate result before writer restart
 - Coolify deployment ID
 - Provider test evidence
 - Android/iOS build identifiers
@@ -65,6 +66,6 @@ Provider-dependent values must be configured when their feature is enabled: Paym
 
 ## Stop conditions
 
-Stop deployment immediately if any operator-facing source points to `bancoboomstor` or another historical repository, if CI did not execute real steps, if migrations are ambiguous, or if the deployed image SHA cannot be proven.
+Stop deployment immediately if any operator-facing source points to `bancoboomstor` or another historical repository, if CI did not execute real steps, if migrations are ambiguous, if a pre-journal baseline is required but DDL quiescence cannot be proven and held through baseline+migrate, or if the deployed image SHA cannot be proven.
 
 Run `npm run build`.
