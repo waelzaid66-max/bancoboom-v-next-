@@ -112,7 +112,7 @@ test("CAR host migration must reuse the existing three runtime strips, not inven
     "car-origin-strip",
   ]) {
     assert.equal(
-      countLiteral(host, id),
+      countLiteral(host, `testID="${id}"`),
       1,
       `${id} must have one source definition and one runtime seat per rendered section`,
     );
