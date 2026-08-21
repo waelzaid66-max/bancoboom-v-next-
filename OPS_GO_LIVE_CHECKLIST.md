@@ -1,10 +1,11 @@
 # OPS GO-LIVE CHECKLIST — BANCO (post-merge)
 
-**Repo (ONLY):** `https://github.com/waelzaid66-max/bancoboomstor`
-**Branch:** `main`  
+**Repo (ONLY):** `https://github.com/waelzaid66-max/bancoboom-v-next-`
+**Branch:** `canonical/vnext-assembly`, pinned to the exact approved immutable release SHA  
 **Compose:** `docker-compose.coolify.yml`  
 **Mobile package:** `com.bancooom.app`  
-**First Coolify file:** [`COOLIFY_DEPLOY_NOW.md`](./COOLIFY_DEPLOY_NOW.md)
+**Production release authority:** [`release/production/COOLIFY_RUNBOOK.md`](./release/production/COOLIFY_RUNBOOK.md)  
+**Detailed Coolify clicks:** [`COOLIFY_DEPLOY_NOW.md`](./COOLIFY_DEPLOY_NOW.md)
 
 Do these steps **in order**. Do not invent secrets. Tick only what you actually completed.
 
@@ -13,8 +14,8 @@ Do these steps **in order**. Do not invent secrets. Tick only what you actually 
 ## A. Coolify resource
 
 - [ ] New Resource → **Docker Compose** (not Dockerfile / Nixpacks / Static)
-- [ ] Git repo = **`waelzaid66-max/bancoboomstor`**
-- [ ] Branch = **`main`**
+- [ ] Git repo = **`waelzaid66-max/bancoboom-v-next-`**
+- [ ] Branch = **`canonical/vnext-assembly`**, pinned to the exact approved immutable release SHA
 - [ ] Compose path = **`docker-compose.coolify.yml`**
 - [ ] Apex domain mapped to service **`web`** port **`80`**
 
@@ -147,7 +148,7 @@ Edit then redeploy `web`:
 
 - [ ] `deploy/coolify/well-known/apple-app-site-association` — replace `REPLACE_APPLE_TEAM_ID`
 - [ ] `deploy/coolify/well-known/assetlinks.json` — replace `REPLACE_PLAY_APP_SIGNING_SHA256`
-- [ ] Commit on `main` (or Coolify volume override) + redeploy `web`
+- [ ] Commit through a reviewed branch targeting `canonical/vnext-assembly`, certify the resulting exact SHA, then redeploy `web`
 
 ---
 
