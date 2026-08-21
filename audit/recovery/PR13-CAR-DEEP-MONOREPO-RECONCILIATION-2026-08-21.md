@@ -1,181 +1,83 @@
 # PR #13 — CAR B-OOM Deep Monorepo Reconciliation — 2026-08-21
 
-**Status:** CURRENT PATCH AUTHORITY / PRODUCT WRITE STILL BOUNDED / DO NOT MERGE YET  
+**Status:** CURRENT CORRECTION CANDIDATE / DRAFT / DO NOT MERGE YET  
 **Repository:** `waelzaid66-max/bancoboom-v-next-`  
 **Canonical authority:** `canonical/vnext-assembly@4f2c81cc553938e808a98adb84d00ecfc76732c5`  
-**PR:** `#13` / `fix/car-header-unified-dock-v2-20260821`  
-**Purpose:** reconcile the owner's current CAR screenshot/layout directive with the full VNX/Claude/manager lineage and CURRENT monorepo contracts before the next Product patch.
+**PR:** `#13` / `fix/car-header-unified-dock-v2-20260821`
 
-## 1. Authority rule
+## Executed correction
 
-The owner's current CAR directive is the newest explicit Product requirement for this surface: the broken vertically stacked CAR browse chrome must become one coherent native hero/header/dock, reclaim real viewport space, remove overlap/overflow/duplication, and preserve every control, counter, label, filter, callback and data flow.
+Current CAR correction candidate: `9c0ddb14dbef453efabf4fb01862bb3a5b70ade0`.
 
-That newer visual/structural instruction does **not** cancel the older safety invariants. It changes where the CAR chrome is presented, not who owns search state, filter semantics, category isolation, Maps architecture, API criteria or persistence.
+This commit was built on the current PR head tree and changes only the `SectionSearchApp.tsx` blob relative to that head. It restores the host-owned CAR axis implementation that had already been inspected functionally, while keeping every other PR file at the current tree state.
 
-The controlling authority is therefore the union of:
+The candidate now:
+- removes runtime use/import of the parallel `CarBrowseAxes` presentation implementation;
+- defines/reuses `primaryAxisStrip`, `engineAxisStrip`, and `carBrandOriginStrip` inside `SectionSearchApp`;
+- seats those controls once inside `carControlsSlot` and passes them through `controlsSlot={carControlsSlot}`;
+- keeps `SectionSearchApp` as the sole criteria/state/callback authority;
+- restores the dormant Real Estate non-pill property-type chips fallback;
+- preserves `section-results-count` in CAR list and map result modes;
+- keeps the header Map/List path and `SearchResultsMap` capability while suppressing only duplicate CAR floating map chrome;
+- preserves `FilterSheet`, `LocationPicker`, `CarPicker`, `MarketCountryPicker`, Saved Search calls, `MiniAppBottomNav`, section hard-lock and existing route/map-latch behavior.
 
-1. current owner directive + screenshot;
-2. CURRENT canonical code;
-3. reconciled manager reports 94–102 and PR #11 recovery ledgers;
-4. accepted VNX/Claude implementation history where CURRENT source still preserves the same invariant;
-5. exact executable/runtime evidence.
+## Monorepo protection
 
-No single old prompt, report, branch, screenshot or test count is sufficient by itself.
+This is a CAR presentation/layout correction only. The following remain out of scope and must not be changed by this PR:
+- API contracts and services;
+- DB/schema/migrations/baseline adoption;
+- listing moderation authority;
+- Messenger;
+- Clerk/accounts/KYC;
+- Maps provider/engine/routes;
+- Saved Search identity/reconciliation;
+- Docker/Coolify/EAS/release authority;
+- Property, Materials, Facilities and Stay behavior except restoring the unrelated RE renderer that CAR work had accidentally removed.
 
-## 2. Monorepo invariants that the CAR patch must preserve
+`SearchResultsSurface.listHeader` remains forbidden for actionable CAR controls because loading/error/empty overlays can cover that region.
 
-### Section/search authority
+The shared mobile `package.json` is a monorepo integration surface. Later assembly must union test additions from CAR, Maps and Discover lanes instead of overwriting one branch wholesale.
 
-`SectionSearchApp` remains the sole owner of:
-- `SearchCriteria` and section hard-lock;
-- `useSearchMiniApp` update/commit/applyPatch behavior;
-- market persistence;
-- sort/listing/engine/origin/brand selection semantics;
-- Saved Search snapshot/identity call sites;
-- FilterSheet state and callbacks;
-- route intents (`?map=1`, engine/property-type deep links);
-- results/map/list orchestration.
+## Current diff truth
 
-The CAR header/dock may receive layout nodes and callbacks, but must not become a second criteria/state authority.
+Compared with canonical, PR #13 remains broad because earlier CAR work already changed `CarsHomeHeader`, guards, render tests and audit files. The new correction itself is narrower in file scope, but the `SectionSearchApp.tsx` blob still contains comment/format churn inherited from the previously inspected staging implementation. That churn is not a runtime feature deletion, but it prevents declaring this a clean production splice without executable and final-diff proof.
 
-### Empty/loading/error safety
+`CarBrowseAxes.tsx` remains present as an added file for now but is no longer imported/rendered by the host. Do not delete it as cleanup until exact consumer verification and merge preparation; no folder deletion/move is authorized.
 
-The accepted failure trap is proven: `SearchResultsSurface` may cover `ListHeaderComponent` with opaque loading/error/empty overlays. Therefore actionable CAR controls must remain outside the result list/listHeader region.
+## Exact-head verification status
 
-The new dock may collapse with the pinned hero, but it must remain in the pinned host flow. Do not move CAR browse controls into `SearchResultsSurface.listHeader`.
+GitHub Actions run `32524440329` on `9c0ddb14...` completed red, but every inspected job reports `steps=null` and `logs_url=null`. Therefore the commands are not proven to have executed and the root cause remains `UNPROVEN`; the red color is neither Product PASS nor Product FAIL.
 
-### Maps authority
-
-Preserve the accepted Mobile Leaflet/OSM/WebView family and the three intentional entry classes:
-- `/section/maps` all-world hub;
-- per-section `?map=1` producer;
-- local category-locked `SearchResultsMap` overlay.
-
-PR #13 changes layout only. It must not alter map provider, cluster/draw/near criteria, route authority, or MapsHub state. The surviving CAR map affordance may toggle Map/List locally; removing only a duplicate floating CAR map button is allowed if the map capability remains reachable exactly once.
-
-### Saved Search / domain isolation
-
-CAR layout work must not touch Saved Search identity/reconciliation defects or Discover placement. Preserve the existing save callback and full CAR criteria snapshot. SS-LIN-01..04 belong to separate bounded work.
-
-### API / listings / Messenger / Accounts / Release
-
-No API, DB, migration, listing moderation, media lifecycle, Messenger, Clerk/account, EAS, Docker/Coolify or release behavior belongs in this CAR patch. Those lanes have independent confirmed blockers and owners.
-
-## 3. Historical CAR lineage — what is still useful
-
-Claude/VNX history is evidence, not copy authority.
-
-Useful preserved facts:
-- the real hero plate collapse defect was fixed by reclaiming actual height, not opacity-only hiding;
-- CAR filters were intentionally organized as three single-line horizontal strips rather than a wrapping block;
-- market/sort, listing/engine, brand/origin remained reachable and were not deleted;
-- visual continuity used one dark surface rather than detached cards;
-- no invented counters; categories/stats are data-driven;
-- category glyphs are SVG-based;
-- current host must keep exactly one seat for each interactive axis.
-
-Historical line numbers, component split and old `continuesBelow` placement are not mandatory implementation shapes after the owner's newer dock instruction.
-
-## 4. Current PR #13 architecture — accepted parts
-
-Keep these parts unless executable evidence disproves them:
-- `CarsHomeHeader` remains pinned and receives `carScrollY`;
-- hero and extra browse context reclaim real height during collapse;
-- Search / Map-List / Save / Filters remain reachable when extras collapse;
-- `controlsSlot` is a layout seam inside the pinned CAR dock, not a data/state seam;
-- CAR has no results `listHeader`;
-- `SectionSearchApp` still owns callbacks/state;
-- old external CAR seats are excluded to prevent live duplication;
-- `SearchResultsMap`, FilterSheet, pickers and MiniAppBottomNav remain mounted;
-- CAR section contract remains `listingMode: "pill"`, `engines: "chips"`;
-- SVG category strip and honest live stats remain.
-
-## 5. Current PR #13 defects / overreach — must be corrected before merge
-
-### CAR-P13-01 — unnecessary control-system reimplementation
-
-`CarBrowseAxes.tsx` recreates the existing market/sort/listing/engine/brand/origin runtime controls in a new ~400-line presentation system. State authority remains in `SectionSearchApp`, so this is not a second data store, but it still creates unnecessary semantic/accessibility/test/style drift.
-
-The current splice contract from coordination is narrower: move/reuse the existing CAR control nodes/semantics into `controlsSlot`, with exactly one runtime seat for each critical testID. Do not invent a second CAR control language merely to dock the same functions.
-
-**Required correction:** use `controlsSlot` as a layout relocation boundary for the existing CAR axes; retain `SectionSearchApp` callbacks and established axis-shape contract. No new business semantics.
-
-### CAR-P13-02 — unrelated Real Estate capability deletion
-
-The dormant `showReTypeStrip` renderer lost its non-pill/chips fallback during the CAR splice. Even though the current gate is false, this is a non-CAR source capability deletion and violates isolation.
-
-**Required correction:** restore the canonical fallback behavior/testIDs without changing its current gate or RE product behavior.
-
-### CAR-P13-03 — CAR results counter suppression in Map mode
-
-`section-results-count` is currently suppressed under `isCarSection && mapMode`.
-
-The owner directive explicitly forbids removal of counters/text. Map mode may compact or reposition it, not delete it.
-
-**Required correction:** preserve the counter in CAR list and map result modes unless a later explicit owner decision changes the contract.
-
-## 6. Exact next Product patch contract
-
-One surgical patch only:
-
-1. `SectionSearchApp.tsx`
-   - remove runtime dependency on the replacement `CarBrowseAxes` implementation;
-   - construct `carControlsSlot` from the existing CAR axis nodes/semantics and callbacks;
-   - keep the three established horizontal compartments: primary market/sort/listing, engines/condition, brand/origin;
-   - keep exactly one runtime seat for each existing CAR control/testID;
-   - restore Real Estate chips fallback from canonical;
-   - preserve `section-results-count` in CAR map mode;
-   - do not change any non-CAR handler/state/API path.
-
-2. `CarsHomeHeader.tsx`
-   - retain the existing layout-only `controlsSlot`/collapse architecture unless the splice exposes a measured geometry defect;
-   - no new state authority and no listHeader migration.
-
-3. Tests
-   - RED/GREEN zero-loss guard must prove one-seat ownership, RE fallback preservation, results-counter preservation, map/list capability, FilterSheet/pickers/nav presence, and no replacement control system;
-   - mounted render coverage must prove dock contents remain outside result overlays and Search/Map/Save/Filter remain reachable at full collapse.
-
-Do not delete the old helper file merely to make the diff look smaller until final diff/consumer verification proves it is unused. No folder move/deletion.
-
-## 7. Verification matrix before merge
-
-Source/static/render evidence is necessary but not sufficient.
-
-Required exact-head evidence:
-- focused CAR zero-loss + hero honesty + CarsHomeHeader render + SectionSearchApp render + section mini-app guard;
-- mobile TypeScript check and Expo bundle/export;
-- root monorepo `npm run build` / equivalent authoritative workspace gate without skipping unrelated workspace failures;
-- diff against canonical proving no non-CAR behavior deletion;
-- 320/360/390/430 width pressure;
+Required before merge:
+- CAR zero-loss guard;
+- CAR hero honesty guard;
+- `CarsHomeHeader` render tests;
+- `SectionSearchApp` render tests;
+- section mini-app guard;
+- mobile TypeScript check;
+- Expo web export/bundle;
+- authoritative root monorepo `npm run build`;
+- final diff adjudication against canonical for non-CAR behavior preservation;
+- mounted 320/360/390/430 width pressure;
 - Arabic/English, RTL/LTR;
 - loading/empty/error/results/map states;
-- keyboard/search open/close;
-- safe-area and font-scale pressure;
-- Android elevation/z-order and iOS safe-area behavior;
-- real scroll collapse proving vertical workspace is reclaimed and results begin immediately after the dock;
-- no duplicate category row, market/sort seat, map affordance or filter axis.
+- keyboard/search open-close;
+- safe-area/font-scale;
+- Android elevation/z-order and iOS safe-area;
+- real scroll collapse proving the dock gives height back to results and creates no overlap.
 
-Hosted GitHub red with absent execution steps remains `ROOT CAUSE UNPROVEN`; do not label code PASS/FAIL from color alone. Replit remains preview-only and must not be a source authority.
+## Parallel lane authority
 
-## 8. Parallel-lane coordination
+- PR #9 — Release/Deploy integration authority.
+- PR #12 — DB baseline-adoption gate; production-like execution remains frozen.
+- PR #14 — Listings moderation gate.
+- PR #15 — Maps bootstrap fail-closed lane.
+- PR #16 — Discover polish lane.
 
-- PR #9 remains Release/Deploy integration authority; PR #13 must not touch it.
-- PR #12 remains DB baseline-adoption Gate 1; no production-like baseline execution.
-- PR #14 remains Listings moderation RED lane; no CAR overlap.
-- PR #15 Maps bootstrap fail-closed is a separate bounded accepted-map-family correctness lane; PR #13 must not duplicate it.
-- PR #16 Discover visual polish is unrelated to the CAR defect and should remain isolated/draft until its own owner-law/current-runtime acceptance is established.
-
-## 9. Manager self-correction
-
-Earlier PR #13 work drifted into repeated implementation/report churn before the full monorepo lineage was reconciled. The correct correction is not a restart and not a rollback to old screenshots. It is a smaller patch surface built from current authority:
-
-`new owner CAR layout requirement + old safety invariants + current state ownership + exact one-seat relocation + executable proof`.
-
-No further CAR Product expansion is authorized beyond CAR-P13-01..03 until those are green and the mounted native layout is verified.
+No cross-lane source transplant or wholesale branch merge is authorized from CAR.
 
 ## Verdict
 
-**PR #13 stays DRAFT / NO MERGE.**  
-The owner's unified CAR dock target is valid and newer than the older visual placement, but it must be implemented as a bounded layout relocation over the existing monorepo contracts, not as a parallel control system or a collateral rewrite.
+`9c0ddb14...` is the current CAR correction candidate. PR #13 remains **DRAFT / NO MERGE** until exact-head executable evidence and final monorepo diff review close.
 
 Run npm run build
