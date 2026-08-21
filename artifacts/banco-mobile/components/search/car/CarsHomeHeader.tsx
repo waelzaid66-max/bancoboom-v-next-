@@ -108,7 +108,7 @@ type Props = {
   /**
    * Parent-owned CAR axes rendered physically INSIDE the unified dock.
    * Ownership does not move: the parent still owns criteria, handlers and testIDs;
-   * this is only a layout portal via normal React children (not a Portal API).
+   * this is only a layout child, never duplicate filter state.
    */
   controlsSlot?: React.ReactNode;
   continuesBelow?: boolean;
@@ -220,7 +220,7 @@ export function CarsHomeHeader({
    * Category/stats/parent axes are browse context, not the primary sticky action.
    * They collapse as one bounded block after the first 28px of scroll, while
    * search/map/save/filter stay reachable. Height really goes to zero — opacity
-   * alone would leave the exact dead vertical space this repair is eliminating.
+   * alone would leave dead vertical space and reproduce the original defect.
    */
   const dockExtrasCollapse = useAnimatedStyle(() => {
     const p = scrollY
@@ -675,24 +675,27 @@ const styles = StyleSheet.create({
   dockExtras: {
     overflow: "hidden",
     flexGrow: 0,
+    minHeight: 0,
   },
   controlsSlot: {
     flexGrow: 0,
     minHeight: 0,
+    maxWidth: "100%",
   },
   searchRow: {
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     paddingHorizontal: PAD_H,
+    minWidth: 0,
   },
   searchPill: {
     flex: 1,
     minWidth: 0,
     height: SEARCH_H,
     borderRadius: SEARCH_R,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     alignItems: "center",
-    gap: 8,
+    gap: 7,
     backgroundColor: SURFACE,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: HAIRLINE,
@@ -712,21 +715,25 @@ const styles = StyleSheet.create({
   },
   searchPlaceholder: {
     fontSize: 15,
+    flexShrink: 1,
   },
   pillDivider: {
     width: StyleSheet.hairlineWidth,
     height: 22,
     backgroundColor: HAIRLINE,
+    flexShrink: 0,
   },
   pillIcon: {
-    width: 26,
+    width: 24,
     height: 32,
     flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
   },
   marketSlot: {
-    flexShrink: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: 116,
   },
   filterButton: {
     width: TAP,
@@ -761,6 +768,7 @@ const styles = StyleSheet.create({
   },
   catScroll: {
     flexGrow: 0,
+    maxHeight: 66,
   },
   catContent: {
     paddingHorizontal: 14,
@@ -795,7 +803,8 @@ const styles = StyleSheet.create({
   },
   statScroll: {
     flexGrow: 0,
-    marginTop: 5,
+    marginTop: 4,
+    maxHeight: 30,
   },
   statStrip: {
     minHeight: 25,
