@@ -21,6 +21,14 @@ function countLiteral(src, needle) {
   return src.split(needle).length - 1;
 }
 
+function between(src, start, end) {
+  const from = src.indexOf(start);
+  assert.ok(from >= 0, `missing ${start}`);
+  const to = src.indexOf(end, from + start.length);
+  assert.ok(to > from, `missing ${end} after ${start}`);
+  return src.slice(from, to);
+}
+
 test("CAR dock keeps every browse capability mounted exactly where the unified header can reach it", () => {
   const host = codeOnly(section);
 
@@ -42,31 +50,55 @@ test("CAR dock keeps every browse capability mounted exactly where the unified h
   assert.match(
     host,
     /!isRealEstateSection\s*&&\s*!isMaterialsSection\s*&&\s*!isCarSection\s*\?\s*\(/,
-    "historical primary/engine sibling chrome must exclude CAR after migration",
-  );
-  assert.match(
-    host,
-    /showCarBrandStrip\s*&&\s*!isCarSection/,
-    "historical brand/origin sibling chrome must be unreachable for CAR",
+    "historical generic primary/engine seat must remain non-CAR only after migration",
   );
 });
 
-test("CAR host migration must move the existing three runtime strips, not invent a second control system", () => {
+test("CAR host migration must reuse the existing three runtime strips, not invent a second control system", () => {
   const host = codeOnly(section);
-  const slot = host.match(
-    /const\s+carControlsSlot\s*=\s*isCarSection\s*\?\s*\([\s\S]*?\)\s*:\s*null;/,
-  )?.[0] ?? "";
 
-  assert.ok(slot, "CAR host must define one parent-owned carControlsSlot");
   assert.doesNotMatch(
     host,
     /import\s+\{\s*CarBrowseAxes\s*\}/,
     "CAR migration must not replace existing host controls with a second CarBrowseAxes implementation",
   );
   assert.doesNotMatch(
-    slot,
+    host,
     /<CarBrowseAxes\b/,
-    "controlsSlot must contain the existing runtime strips, not a recreated control component",
+    "CAR migration must not render the recreated CarBrowseAxes control system",
+  );
+
+  const primary = between(host, "const primaryAxisStrip = (", "const engineAxisStrip = (");
+  const engine = between(host, "const engineAxisStrip = (", "const carBrandOriginStrip = (");
+  const brandOrigin = between(host, "const carBrandOriginStrip = (", "const carControlsSlot =");
+  const slot = between(host, "const carControlsSlot =", "const listHeader =");
+
+  assert.match(primary, /testID="section-primary-strip"/);
+  assert.match(primary, /<MarketCountryButton\b/);
+  assert.match(primary, /testID="section-sort-cycle"/);
+  assert.match(primary, /axisShape\(chrome,\s*"listingMode"\)/);
+  assert.match(primary, /testID="section-listing-mode"/);
+
+  assert.match(engine, /testID="section-engine-strip"/);
+  assert.match(engine, /axisShape\(chrome,\s*"engines"\)/);
+  assert.match(engine, /Haptics\.selectionAsync\(\)/);
+
+  assert.match(brandOrigin, /testID="car-brand-origin-strip"/);
+  assert.match(brandOrigin, /testID="car-brand-strip"/);
+  assert.match(brandOrigin, /testID="car-brand-btn"/);
+  assert.match(brandOrigin, /testID="car-origin-strip"/);
+  assert.match(brandOrigin, /setCarPickerOpen\(true\)/);
+  assert.match(brandOrigin, /selectOrigin\(o\)/);
+  assert.match(brandOrigin, /Haptics\.selectionAsync\(\)/);
+
+  for (const node of ["primaryAxisStrip", "engineAxisStrip", "carBrandOriginStrip"]) {
+    assert.ok(slot.includes(`{${node}}`), `${node} must be seated inside carControlsSlot`);
+  }
+
+  assert.match(
+    host,
+    /!isRealEstateSection\s*&&\s*!isMaterialsSection\s*&&\s*!isCarSection\s*\?\s*\([\s\S]*?\{primaryAxisStrip\}[\s\S]*?\{engineAxisStrip\}/,
+    "non-CAR generic sections must reuse the same original primary/engine nodes instead of receiving copies",
   );
 
   for (const id of [
@@ -79,18 +111,12 @@ test("CAR host migration must move the existing three runtime strips, not invent
     "car-brand-btn",
     "car-origin-strip",
   ]) {
-    assert.ok(slot.includes(id), `${id} must be physically moved into carControlsSlot`);
     assert.equal(
       countLiteral(host, id),
       1,
-      `${id} must keep exactly one static runtime seat after the CAR migration`,
+      `${id} must have one source definition and one runtime seat per rendered section`,
     );
   }
-
-  assert.match(slot, /<MarketCountryButton\b/, "the existing market/currency control must move into the slot");
-  assert.match(slot, /axisShape\(chrome,\s*"listingMode"\)/, "listing-mode rendering must keep the existing sectionChrome contract");
-  assert.match(slot, /axisShape\(chrome,\s*"engines"\)/, "engine rendering must keep the existing sectionChrome contract");
-  assert.match(slot, /Haptics\.selectionAsync\(\)/, "moved controls must retain existing haptic behavior");
 });
 
 test("CAR host migration cannot erase dormant non-CAR property chrome", () => {
