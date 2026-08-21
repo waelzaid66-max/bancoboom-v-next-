@@ -71,7 +71,7 @@ test("CAR host migration must reuse the existing three runtime strips, not inven
   const primary = between(host, "const primaryAxisStrip = (", "const engineAxisStrip = (");
   const engine = between(host, "const engineAxisStrip = (", "const carBrandOriginStrip = (");
   const brandOrigin = between(host, "const carBrandOriginStrip = (", "const carControlsSlot =");
-  const slot = between(host, "const carControlsSlot =", "const listHeader =");
+  const slot = between(host, "const carControlsSlot =", "let overlay: React.ReactNode = null;");
 
   assert.match(primary, /testID="section-primary-strip"/);
   assert.match(primary, /<MarketCountryButton\b/);
