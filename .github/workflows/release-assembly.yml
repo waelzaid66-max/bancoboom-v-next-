@@ -1,0 +1,57 @@
+name: Release Assembly Gate
+
+on:
+  push:
+    branches: [canonical/vnext-assembly]
+    paths:
+      - "release/production/**"
+      - "docker-compose.coolify.yml"
+      - "deploy/coolify/**"
+      - "COOLIFY_DEPLOY_NOW.md"
+      - "OPS_GO_LIVE_CHECKLIST.md"
+      - "docs/DEPLOYMENT_SOURCE_OF_TRUTH.md"
+      - "docs/DEPLOY_COOLIFY.md"
+      - "scripts/release-sot-gate.mjs"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  pull_request:
+    paths:
+      - "release/production/**"
+      - "docker-compose.coolify.yml"
+      - "deploy/coolify/**"
+      - "COOLIFY_DEPLOY_NOW.md"
+      - "OPS_GO_LIVE_CHECKLIST.md"
+      - "docs/DEPLOYMENT_SOURCE_OF_TRUTH.md"
+      - "docs/DEPLOY_COOLIFY.md"
+      - "scripts/release-sot-gate.mjs"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: release-assembly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify immutable production assembly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Frozen install
+        run: pnpm install --frozen-lockfile
+      - name: Verify workspace identity
+        run: pnpm run workspace:verify
+      - name: Verify release source of truth
+        run: pnpm run release:verify
+      - name: Verify dependency security
+        run: pnpm run security:audit
+      - name: Verify release scripts formatting
+        run: pnpm exec prettier --check release/production scripts/release-sot-gate.mjs
