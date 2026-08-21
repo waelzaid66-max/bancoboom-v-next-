@@ -3,7 +3,7 @@
   "product": "BANCO BOOM NEXT",
   "repository": "waelzaid66-max/bancoboom-v-next-",
   "canonicalBranch": "canonical/vnext-assembly",
-  "assemblyBaseSha": "3951c72906918bb0b5c1e7f8fcc11c862eb8989d",
+  "assemblyBaseSha": "4f2c81cc553938e808a98adb84d00ecfc76732c5",
   "packageManager": "pnpm@11.9.0",
   "node": "24",
   "mobile": {
