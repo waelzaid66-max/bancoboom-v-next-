@@ -49,6 +49,7 @@ const HERO_PLATE = require("../../../assets/images/section-hero/car.png");
 
 const VOID = SECTION_NEUTRAL.void;
 const SECONDARY = SECTION_NEUTRAL.secondary;
+const SURFACE = SECTION_NEUTRAL.surface;
 const ACCENT = sectionAccent("car");
 const ACCENT_BRIGHT = "#FF3A40";
 const SNOW = SECTION_NEUTRAL.snow;
@@ -567,7 +568,7 @@ const styles = StyleSheet.create({
     borderRadius: TAP / 2,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(24,24,24,0.84)",
+    backgroundColor: SECONDARY,
     overflow: "hidden",
   },
   bellDot: {
@@ -633,9 +634,9 @@ const styles = StyleSheet.create({
     zIndex: 20,
     paddingTop: 8,
     paddingBottom: 8,
-    backgroundColor: "rgba(9,9,9,0.93)",
+    backgroundColor: VOID,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.08)",
+    borderTopColor: HAIRLINE,
   },
   searchRow: {
     alignItems: "center",
@@ -650,7 +651,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     alignItems: "center",
     gap: 8,
-    backgroundColor: "rgba(24,24,24,0.94)",
+    backgroundColor: SURFACE,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: HAIRLINE,
   },
@@ -735,9 +736,9 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(26,26,26,0.92)",
+    backgroundColor: SURFACE,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: HAIRLINE,
   },
   catTileActive: {
     backgroundColor: ACCENT,
