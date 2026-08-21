@@ -20,7 +20,7 @@ import {
   ImportResultSchema,
   UpdateLeadResultSchema,
 } from "../validators/schemas";
-import { z, ZodError } from "zod";
+import { ZodError } from "zod";
 
 export async function dealerStatsHandler(req: Request, res: Response) {
   try {
@@ -41,6 +41,8 @@ export async function dealerListingsHandler(req: Request, res: Response) {
     return res.json(successResponse(validated, { cursor: result.cursor, has_next: result.has_next }));
   } catch (err) {
     if (err instanceof ZodError) return res.status(400).json(errorResponse("INVALID_DATA", err.errors[0]?.message ?? "Invalid query"));
+    const error = err as { code?: string; message?: string };
+    if (error.code === "INVALID_DATA") return res.status(400).json(errorResponse("INVALID_DATA", error.message ?? "Invalid query"));
     console.error("[Dealer listings]", err);
     return res.status(500).json(errorResponse("INTERNAL_ERROR", "Failed to load listings"));
   }

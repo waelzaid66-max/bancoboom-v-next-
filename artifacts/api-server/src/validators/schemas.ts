@@ -1340,7 +1340,7 @@ export const SaveListingSchema = z.object({
 });
 
 export const DealerListingsQuerySchema = z.object({
-  cursor: z.string().optional(),
+  cursor: z.string().max(1024).optional(),
   limit: z.coerce.number().min(1).max(100).default(20),
   status: z.enum(["active", "sold", "archived"]).optional(),
   sort: z
