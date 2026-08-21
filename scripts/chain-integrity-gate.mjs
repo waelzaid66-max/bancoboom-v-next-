@@ -2122,6 +2122,19 @@ const CHECKS = [
       ),
     why: "Primary CI must execute the production dependency security gate",
   },
+  ...[
+    ["core", ".github/workflows/ci.yml"],
+    ["website", ".github/workflows/ci-website.yml"],
+    ["docker", ".github/workflows/ci-website-docker.yml"],
+  ].map(([name, file]) => ({
+    id: `P-canonical-push-ci-${name}`,
+    file,
+    test: (s) =>
+      /push:\s*\n\s+branches:\s*\[main,\s*canonical\/vnext-assembly\]/.test(
+        s,
+      ),
+    why: "Every canonical production-candidate push must create executable CI evidence without a zero-diff PR or manual dispatch",
+  })),
   {
     id: "P-deploy-verify-exact-ref",
     file: ".github/workflows/deploy.yml",

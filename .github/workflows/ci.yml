@@ -8,9 +8,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, canonical/vnext-assembly]
   pull_request:
-  # Canonical assembly uses explicit dispatch until it is promoted to main.
+  # Manual exact-ref verification remains available for recovery refs.
   workflow_dispatch:
 
 concurrency:

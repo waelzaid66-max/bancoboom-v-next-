@@ -2,7 +2,7 @@ name: CI Website Docker
 
 on:
   push:
-    branches: [main]
+    branches: [main, canonical/vnext-assembly]
     paths:
       - "artifacts/banco-web/**"
       - "artifacts/banco-website/**"
