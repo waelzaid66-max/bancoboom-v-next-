@@ -2,13 +2,13 @@
  * Renderer proof for the strongest historical Cars header.
  *
  * Commit 310028d fixed a fake collapse: the hero and its plate had to return
- * their real height to the results surface, not merely fade. The static guard
- * protects the arithmetic in source; this suite mounts the current component,
- * drives the shared scroll value, and proves the rendered geometry changes
- * while the buyer's controls remain reachable.
+ * their real height to the results surface, not merely fade. The current dock
+ * contract extends that rule to browse-context controls: category/stats/parent
+ * axes must return real height while search/map/save/filter stay reachable.
  */
 import React from "react";
 import { fireEvent, render } from "@testing-library/react-native";
+import { View } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
 
 import {
@@ -181,6 +181,7 @@ describe("CarsHomeHeader", () => {
       "cars-boom-brand",
       "cars-hero",
       "cars-unified-dock",
+      "cars-dock-extras",
       "section-search-open",
       "cars-header-map",
       "section-save-search",
@@ -225,27 +226,51 @@ describe("CarsHomeHeader", () => {
     expect(view.getByTestId("cars-header-map")).toBeTruthy();
   });
 
-  it("reclaims the real hero height at the historical collapse threshold", () => {
+  it("renders parent-owned CAR axes inside the one dock without taking ownership", () => {
+    const controlsSlot = <View testID="parent-car-axes" />;
+    const view = render(header({ controlsSlot }));
+
+    expect(view.getByTestId("cars-controls-slot")).toBeTruthy();
+    expect(view.getByTestId("parent-car-axes")).toBeTruthy();
+    expect(view.getByTestId("cars-unified-dock")).toContainElement(
+      view.getByTestId("parent-car-axes"),
+    );
+  });
+
+  it("reclaims hero and browse-context height while primary dock actions stay reachable", () => {
     const scrollY = { value: 0 } as SharedValue<number>;
-    const view = render(header({ scrollY }));
+    const controlsSlot = <View testID="parent-car-axes" />;
+    const view = render(header({ scrollY, controlsSlot }));
 
     expect(view.getByTestId("cars-hero")).toHaveStyle({
       height: 244,
       opacity: 1,
       marginBottom: 12,
     });
+    expect(view.getByTestId("cars-dock-extras")).toHaveStyle({
+      opacity: 1,
+      maxHeight: 280,
+      marginTop: 7,
+    });
+
     scrollY.value = 96;
-    view.rerender(header({ scrollY }));
+    view.rerender(header({ scrollY, controlsSlot }));
 
     expect(view.getByTestId("cars-hero")).toHaveStyle({
       height: 0,
       opacity: 0,
       marginBottom: 0,
     });
-    expect(view.getByTestId("cars-unified-dock")).toBeTruthy();
+    expect(view.getByTestId("cars-dock-extras")).toHaveStyle({
+      opacity: 0,
+      maxHeight: 0,
+      marginTop: 0,
+    });
+    expect(view.getByTestId("cars-controls-slot")).toBeTruthy();
     expect(view.getByTestId("section-search-open")).toBeTruthy();
     expect(view.getByTestId("section-filter-toggle")).toBeTruthy();
-    expect(view.getByTestId("cars-category-strip")).toBeTruthy();
+    expect(view.getByTestId("cars-header-map")).toBeTruthy();
+    expect(view.getByTestId("section-save-search")).toBeTruthy();
   });
 
   it("uses the logical back direction in Arabic", () => {
