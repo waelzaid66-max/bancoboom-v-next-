@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { sql, eq, inArray } from "drizzle-orm";
+import { sql, inArray } from "drizzle-orm";
 import { db, createUser, deleteUsers, randomUUID } from "../__tests__/helpers";
 import { priceObservations, listings, listingAttributes } from "@workspace/db/schema";
 import {

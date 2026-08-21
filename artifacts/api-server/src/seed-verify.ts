@@ -10,7 +10,7 @@
 
 import { db } from "@workspace/db";
 import { listings, users, locations, brands } from "@workspace/db/schema";
-import { eq, count, sql } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 
 async function verify() {
   const [totalRow] = await db

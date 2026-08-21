@@ -1,11 +1,17 @@
 import { describe, it, expect, afterAll, beforeAll } from "vitest";
 import { inArray, isNotNull } from "drizzle-orm";
-import { createListing, getSeoListing } from "./ListingService";
+import { createListing, getDealerListings, getSeoListing } from "./ListingService";
 import { searchListings } from "./SearchService";
 import { getFeed } from "./FeedService";
 import { CreateListingSchema } from "../validators/schemas";
 import { db, deleteUsers, uniq, randomUUID } from "../__tests__/helpers";
-import { users, listings, locations } from "@workspace/db/schema";
+import {
+  users,
+  listings,
+  locations,
+  interactions,
+  leadHistory,
+} from "@workspace/db/schema";
 
 /**
  * Full listing-journey integration test. Unlike the other suites (which seed
@@ -217,5 +223,154 @@ describe("listing journey: create → feed + search + SEO", () => {
     // so the re-rank slice can't drop it; see the sell case above).
     const feed = await getFeed({ category: "car", isRequest: true, limit: 150 });
     expect(feed.items.map((i) => i.id)).toContain(id);
+  });
+});
+
+describe("dealer listing management: stable sort and cursor pagination", () => {
+  it("honours every declared sort and paginates ties without gaps or duplicates", async () => {
+    const sellerId = randomUUID();
+    uids.push(sellerId);
+    await db.insert(users).values({
+      id: sellerId,
+      clerkId: uniq("dealer-sort"),
+      name: "Dealer Sort Journey",
+      role: "dealer",
+    });
+
+    const records = [
+      {
+        id: randomUUID(),
+        title: "Dealer sort oldest",
+        price: 300,
+        views: 50,
+        leads: 1,
+        createdAt: new Date("2031-01-01T10:00:00.000Z"),
+      },
+      {
+        id: randomUUID(),
+        title: "Dealer sort middle",
+        price: 100,
+        views: 10,
+        leads: 3,
+        createdAt: new Date("2031-01-02T10:00:00.000Z"),
+      },
+      {
+        id: randomUUID(),
+        title: "Dealer sort newest",
+        price: 200,
+        views: 50,
+        leads: 2,
+        createdAt: new Date("2031-01-03T10:00:00.000Z"),
+      },
+    ];
+
+    await db.insert(listings).values(
+      records.map((record) => ({
+        id: record.id,
+        userId: sellerId,
+        title: record.title,
+        category: "car" as const,
+        basePriceCash: String(record.price),
+        location: "Cairo",
+        status: "active" as const,
+        createdAt: record.createdAt,
+      })),
+    );
+    await db.insert(interactions).values(
+      records.map((record) => ({
+        listingId: record.id,
+        views: record.views,
+        clicks: record.views + 1,
+      })),
+    );
+    await db.insert(leadHistory).values(
+      records.flatMap((record) =>
+        Array.from({ length: record.leads }, () => ({
+          listingId: record.id,
+          sellerId,
+          actionType: "chat" as const,
+        })),
+      ),
+    );
+
+    const sorts = ["created_at", "price", "views", "leads"] as const;
+    const orders = ["asc", "desc"] as const;
+    type Sort = (typeof sorts)[number];
+    type Order = (typeof orders)[number];
+
+    const expectedIds = (sort: Sort, order: Order) =>
+      [...records]
+        .sort((left, right) => {
+          const leftValue =
+            sort === "created_at" ? left.createdAt.getTime() : left[sort];
+          const rightValue =
+            sort === "created_at" ? right.createdAt.getTime() : right[sort];
+          const valueComparison = leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
+          const idComparison = left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+          return (order === "asc" ? 1 : -1) * (valueComparison || idComparison);
+        })
+        .map((record) => record.id);
+
+    const collectPages = async (sort: Sort, order: Order) => {
+      const ids: string[] = [];
+      let cursor: string | undefined;
+      for (let pageNumber = 0; pageNumber < 3; pageNumber += 1) {
+        const page = await getDealerListings(sellerId, {
+          sort,
+          order,
+          limit: 2,
+          cursor,
+        });
+        ids.push(...page.items.map((item) => item.id));
+        cursor = page.cursor;
+        if (!page.has_next) break;
+      }
+      return ids;
+    };
+
+    for (const sort of sorts) {
+      for (const order of orders) {
+        const fullPage = await getDealerListings(sellerId, {
+          sort,
+          order,
+          limit: 10,
+        });
+        expect(fullPage.items.map((item) => item.id)).toEqual(
+          expectedIds(sort, order),
+        );
+
+        const pagedIds = await collectPages(sort, order);
+        expect(pagedIds).toEqual(expectedIds(sort, order));
+        expect(new Set(pagedIds).size).toBe(records.length);
+      }
+    }
+
+    const pricePage = await getDealerListings(sellerId, {
+      sort: "price",
+      order: "desc",
+      limit: 2,
+    });
+    expect(pricePage.cursor).toBeTruthy();
+    await expect(
+      getDealerListings(sellerId, {
+        sort: "views",
+        order: "desc",
+        cursor: pricePage.cursor,
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_DATA" });
+    await expect(
+      getDealerListings(sellerId, { cursor: "not-a-cursor" }),
+    ).rejects.toMatchObject({ code: "INVALID_DATA" });
+
+    const legacyPage = await getDealerListings(sellerId, {
+      sort: "created_at",
+      order: "desc",
+      cursor: "2031-01-02T12:00:00.000Z",
+      limit: 10,
+    });
+    expect(legacyPage.items.map((item) => item.id)).toEqual([
+      records[1].id,
+      records[0].id,
+    ]);
   });
 });

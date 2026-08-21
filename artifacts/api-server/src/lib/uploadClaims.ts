@@ -4,7 +4,6 @@ import { uploadClaims } from "@workspace/db/schema";
 import { getObjectStorageService } from "./objectStorageProvider";
 import { UploadOwnershipError } from "./objectStorage";
 import {
-  UPLOADS_SERVING_PREFIX,
   immutableObjectPathForUpload,
   parseServingWildcard,
   servingUrlForObjectPath,

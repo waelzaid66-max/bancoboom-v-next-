@@ -479,11 +479,6 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function randFloat(min: number, max: number, decimals = 0) {
-  const factor = Math.pow(10, decimals);
-  return Math.round((Math.random() * (max - min) + min) * factor) / factor;
-}
-
 /* ── B2B layer: supply-chain graph + company profiles + RFQs ── */
 
 type IndType = "factory" | "warehouse" | "machine" | "production_line" | "land" | "raw_material";
@@ -652,7 +647,7 @@ async function seedB2B(dealerIds: string[]) {
     },
   ];
   for (const p of profileData) {
-    const { userId, ...rest } = p;
+    const { userId: _userId, ...rest } = p;
     await db
       .insert(companyProfiles)
       .values(p)

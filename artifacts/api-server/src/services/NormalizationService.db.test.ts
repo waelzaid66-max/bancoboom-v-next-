@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { normalizeListing, detectPriceOutlier } from "./NormalizationService";
 import { db, createUser, deleteUsers, uniq, randomUUID } from "../__tests__/helpers";
 import { brands, models, listings, listingAttributes } from "@workspace/db/schema";

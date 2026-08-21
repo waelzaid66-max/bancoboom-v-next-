@@ -7,11 +7,12 @@ import {
   users,
   userSocialLinks,
   interactions,
+  leadHistory,
   locations,
 } from "@workspace/db/schema";
 import { eq, and, desc, asc, sql, count, or, isNull, lte } from "drizzle-orm";
 import { normalizePaymentOptions, computeOffers } from "./PaymentService";
-import { normalizeListing, detectDuplicate, computeTrustScore, validateMedia } from "./NormalizationService";
+import { normalizeListing } from "./NormalizationService";
 import { checkListingRate, auditListingFlag } from "./AbuseService";
 import { notifyNewMatch, notifyPriceDrop, notifyFollowersOfNewListing } from "./AlertService";
 import { recomputeDealerQuality } from "./QualityService";
@@ -35,12 +36,8 @@ import {
 import { logger } from "../lib/logger";
 import {
   assertMediaWithinPolicy,
-  assertImagesWithinSizeLimit,
-  assertVideosWithinSizeLimit,
 } from "./mediaSizeGuard";
 import { normalizeListingCurrency, enforceListingCurrencySpec } from "../lib/supportedCurrencies";
-import type { CreateListingSchema } from "../validators/schemas";
-import type { z } from "zod";
 
 export {
   assertMediaWithinPolicy,
@@ -167,8 +164,6 @@ async function promotePreparedListingMediaBestEffort(
     }),
   );
 }
-
-type CreateListingInput = z.infer<typeof import("../validators/schemas").CreateListingSchema>;
 
 /* ── Attribute Validation ──────────────────────────────── */
 
@@ -950,15 +945,135 @@ export async function getSitemapListings(
 
 /* ── Dealer Listing Management ─────────────────────────── */
 
+type DealerListingSort = "created_at" | "price" | "views" | "leads";
+type DealerListingOrder = "asc" | "desc";
+type DealerListingsOptions = {
+  cursor?: string;
+  limit?: number;
+  status?: "active" | "sold" | "archived";
+  sort?: DealerListingSort;
+  order?: DealerListingOrder;
+};
+
+type DealerListingsCursor = {
+  v: 1;
+  sort: DealerListingSort;
+  order: DealerListingOrder;
+  value: string | number;
+  id: string;
+};
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function invalidDealerListingsCursor(): never {
+  throw Object.assign(new Error("Invalid pagination cursor"), {
+    code: "INVALID_DATA",
+  });
+}
+
+function encodeDealerListingsCursor(cursor: DealerListingsCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodeDealerListingsCursor(
+  encoded: string,
+  sort: DealerListingSort,
+  order: DealerListingOrder,
+): DealerListingsCursor | { legacyCreatedAt: Date } {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+  } catch {
+    const legacyCreatedAt = new Date(encoded);
+    if (sort === "created_at" && !Number.isNaN(legacyCreatedAt.getTime())) {
+      return { legacyCreatedAt };
+    }
+    return invalidDealerListingsCursor();
+  }
+
+  if (
+    typeof decoded !== "object" ||
+    decoded === null ||
+    !("v" in decoded) ||
+    decoded.v !== 1 ||
+    !("sort" in decoded) ||
+    decoded.sort !== sort ||
+    !("order" in decoded) ||
+    decoded.order !== order ||
+    !("id" in decoded) ||
+    typeof decoded.id !== "string" ||
+    !UUID_PATTERN.test(decoded.id) ||
+    !("value" in decoded)
+  ) {
+    return invalidDealerListingsCursor();
+  }
+
+  const value = decoded.value;
+  const hasValidValue =
+    (sort === "created_at" &&
+      typeof value === "string" &&
+      !Number.isNaN(new Date(value).getTime())) ||
+    (sort === "price" &&
+      typeof value === "string" &&
+      /^-?\d+(?:\.\d+)?$/.test(value)) ||
+    ((sort === "views" || sort === "leads") &&
+      typeof value === "number" &&
+      Number.isSafeInteger(value) &&
+      value >= 0);
+
+  if (!hasValidValue) return invalidDealerListingsCursor();
+  return decoded as DealerListingsCursor;
+}
+
 export async function getDealerListings(
   dbUserId: string,
-  options: { cursor?: string; limit?: number; status?: string; sort?: string; order?: string }
+  options: DealerListingsOptions,
 ) {
   const { cursor, limit = 20, status, sort = "created_at", order = "desc" } = options;
 
+  const dealerLeadCounts = db
+    .select({
+      listingId: leadHistory.listingId,
+      count: count().as("lead_count"),
+    })
+    .from(leadHistory)
+    .where(eq(leadHistory.sellerId, dbUserId))
+    .groupBy(leadHistory.listingId)
+    .as("dealer_lead_counts");
+
+  const createdAtExpression = sql<Date>`COALESCE(${listings.createdAt}, to_timestamp(0))`;
+  const viewsExpression = sql<number>`COALESCE(${interactions.views}, 0)`;
+  const leadsExpression = sql<number>`COALESCE(${dealerLeadCounts.count}, 0)`;
+  const sortExpression =
+    sort === "price"
+      ? listings.basePriceCash
+      : sort === "views"
+        ? viewsExpression
+        : sort === "leads"
+          ? leadsExpression
+          : createdAtExpression;
+
   const conditions = [eq(listings.userId, dbUserId)];
-  if (status) conditions.push(eq(listings.status, status as "active" | "sold" | "archived"));
-  if (cursor) conditions.push(sql`${listings.createdAt} < ${new Date(cursor)}`);
+  if (status) conditions.push(eq(listings.status, status));
+  if (cursor) {
+    const decodedCursor = decodeDealerListingsCursor(cursor, sort, order);
+    if ("legacyCreatedAt" in decodedCursor) {
+      conditions.push(
+        order === "asc"
+          ? sql`${createdAtExpression} > ${decodedCursor.legacyCreatedAt}`
+          : sql`${createdAtExpression} < ${decodedCursor.legacyCreatedAt}`,
+      );
+    } else {
+      const cursorValue =
+        sort === "created_at" ? new Date(decodedCursor.value as string) : decodedCursor.value;
+      conditions.push(
+        order === "asc"
+          ? sql`(${sortExpression} > ${cursorValue} OR (${sortExpression} = ${cursorValue} AND ${listings.id} > ${decodedCursor.id}))`
+          : sql`(${sortExpression} < ${cursorValue} OR (${sortExpression} = ${cursorValue} AND ${listings.id} < ${decodedCursor.id}))`,
+      );
+    }
+  }
 
   const rows = await db
     .select({
@@ -971,26 +1086,40 @@ export async function getDealerListings(
       created_at: listings.createdAt,
       views: interactions.views,
       clicks: interactions.clicks,
+      leads: leadsExpression,
     })
     .from(listings)
     .leftJoin(interactions, eq(interactions.listingId, listings.id))
+    .leftJoin(dealerLeadCounts, eq(dealerLeadCounts.listingId, listings.id))
     .where(and(...conditions))
-    .orderBy(order === "asc" ? sql`${listings.createdAt} ASC` : desc(listings.createdAt))
+    .orderBy(
+      order === "asc" ? asc(sortExpression) : desc(sortExpression),
+      order === "asc" ? asc(listings.id) : desc(listings.id),
+    )
     .limit(limit + 1);
 
   const hasNext = rows.length > limit;
   const page = rows.slice(0, limit);
-  const nextCursor = hasNext && page.length > 0 ? page[page.length - 1].created_at?.toISOString() : undefined;
-
-  // Count leads per listing
-  const { leadHistory } = await import("@workspace/db/schema");
-  const leadCounts = await db
-    .select({ listing_id: leadHistory.listingId, cnt: count() })
-    .from(leadHistory)
-    .where(eq(leadHistory.sellerId, dbUserId))
-    .groupBy(leadHistory.listingId);
-
-  const leadMap = new Map(leadCounts.map((l) => [l.listing_id, Number(l.cnt)]));
+  const last = page.at(-1);
+  const cursorValue = last
+    ? sort === "price"
+      ? last.base_price_cash
+      : sort === "views"
+        ? last.views ?? 0
+        : sort === "leads"
+          ? Number(last.leads)
+          : (last.created_at ?? new Date(0)).toISOString()
+    : undefined;
+  const nextCursor =
+    hasNext && last && cursorValue !== undefined
+      ? encodeDealerListingsCursor({
+          v: 1,
+          sort,
+          order,
+          value: cursorValue,
+          id: last.id,
+        })
+      : undefined;
 
   function fmt(v: string) {
     const n = Number(v);
@@ -1011,7 +1140,7 @@ export async function getDealerListings(
       created_at: r.created_at?.toISOString(),
       views: r.views ?? 0,
       clicks: r.clicks ?? 0,
-      leads: leadMap.get(r.id) ?? 0,
+      leads: Number(r.leads),
     })),
     cursor: nextCursor,
     has_next: hasNext,
@@ -1028,7 +1157,7 @@ export async function getDealerListings(
  */
 export async function getMyManagedListings(
   clerkId: string,
-  options: { cursor?: string; limit?: number; status?: string; sort?: string; order?: string }
+  options: DealerListingsOptions,
 ) {
   const { users } = await import("@workspace/db/schema");
   const [user] = await db

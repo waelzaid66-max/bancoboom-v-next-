@@ -48,7 +48,7 @@ export async function prune(): Promise<void> {
         .delete(dedupKeys)
         .where(sql`${dedupKeys.seenAt} < now() - make_interval(secs => ${secs}::double precision)`);
     }
-  } catch (err) {
+  } catch {
     // Best-effort housekeeping — never throw into the caller.
   }
 }
