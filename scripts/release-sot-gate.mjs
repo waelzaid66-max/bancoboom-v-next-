@@ -49,13 +49,15 @@ for (const relativePath of requiredPaths) {
   }
 }
 
+// Only files that an operator can reasonably use as CURRENT deployment authority
+// belong here. Historical audit/recovery/legacy planning documents are preserved
+// as provenance and intentionally excluded from this gate.
 const operatorFiles = [
   "docker-compose.coolify.yml",
   "COOLIFY_DEPLOY_NOW.md",
   "OPS_GO_LIVE_CHECKLIST.md",
   "docs/DEPLOYMENT_SOURCE_OF_TRUTH.md",
   "docs/DEPLOY_COOLIFY.md",
-  "docs/DEPLOYMENT_PLAN.md",
   "release/production/README.md",
   "release/production/COOLIFY_RUNBOOK.md",
 ];
