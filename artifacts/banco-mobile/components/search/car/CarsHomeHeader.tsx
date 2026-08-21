@@ -1,18 +1,17 @@
 /**
  * B-oom Car — unified native browse header.
  *
- * The hero is the master canvas. Search, map, save, filters, vehicle categories,
- * live stats and the parent-owned CAR browse axes can all live in ONE bounded
- * dock. The parent keeps criteria ownership; this component owns layout only.
- * That split is deliberate: no duplicated state, no duplicated filter seat.
- *
- * No inventory figure is invented here. Categories and stats render only what
- * the parent supplies, and every existing testID/callback remains stable.
+ * The hero is the master canvas. Search, map/list, save, filters, vehicle
+ * categories, live stats and parent-owned CAR browse axes live inside one
+ * bounded native surface. Criteria and handlers remain parent-owned.
  */
-import { Feather, Ionicons } from "@/components/icons";
 import { AppText } from "@/components/AppText";
 import { AppTextInput as TextInput } from "@/components/AppTextInput";
-import { VehicleGlyph, type VehicleGlyphName } from "@/components/search/car/VehicleGlyph";
+import { Feather, Ionicons } from "@/components/icons";
+import {
+  VehicleGlyph,
+  type VehicleGlyphName,
+} from "@/components/search/car/VehicleGlyph";
 import { useI18n } from "@/context/LanguageContext";
 import { SECTION_NEUTRAL, sectionAccent } from "@/lib/sectionTheme";
 import { Image } from "expo-image";
@@ -66,7 +65,7 @@ const TAP = 48;
 const SEARCH_H = 52;
 const SEARCH_R = 26;
 const DOCK_OVERLAP = 96;
-const DOCK_EXTRAS_MAX_HEIGHT = 280;
+const DOCK_EXTRAS_MAX_HEIGHT = 300;
 
 export const CAR_CATEGORIES: { key: VehicleGlyphName; i18nKey: string }[] = [
   { key: "cars", i18nKey: "search.discover.section.carTypeCars" },
@@ -105,12 +104,12 @@ type Props = {
   stats: CarHeroStat[];
   notificationCount?: number;
   marketSlot?: React.ReactNode;
-  /**
-   * Parent-owned CAR axes rendered physically INSIDE the unified dock.
-   * Ownership does not move: the parent still owns criteria, handlers and testIDs;
-   * this is only a layout child, never duplicate filter state.
-   */
   controlsSlot?: React.ReactNode;
+  /** Force the identity/hero/browse context into its compact native state. */
+  compact?: boolean;
+  /** Changes the map hit into a clear list-return affordance. */
+  mapActive?: boolean;
+  /** Kept for compatibility with earlier hosts; new Cars host closes itself. */
   continuesBelow?: boolean;
   slot?: "all" | "pinned" | "scroll";
   scrollY?: SharedValue<number>;
@@ -140,6 +139,8 @@ export function CarsHomeHeader({
   notificationCount = 0,
   marketSlot,
   controlsSlot,
+  compact = false,
+  mapActive = false,
   continuesBelow = false,
   slot = "all",
   scrollY,
@@ -166,83 +167,93 @@ export function CarsHomeHeader({
   const showScroll = slot === "all" || slot === "scroll";
 
   const topCollapse = useAnimatedStyle(() => {
-    const p = scrollY
-      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
-      : 0;
+    const p = compact
+      ? 1
+      : scrollY
+        ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
+        : 0;
     return {
       height: HEADER_EXPANDED + (HEADER_COLLAPSED - HEADER_EXPANDED) * p,
     };
-  });
+  }, [compact]);
 
   const logoCollapse = useAnimatedStyle(() => {
-    const p = scrollY
-      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
-      : 0;
+    const p = compact
+      ? 1
+      : scrollY
+        ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
+        : 0;
     return { transform: [{ scale: 1 + (LOGO_SCALE_MIN - 1) * p }] };
-  });
+  }, [compact]);
 
   const poweredCollapse = useAnimatedStyle(() => {
-    const opacity = scrollY
-      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL * 0.6], [1, 0], Extrapolation.CLAMP)
-      : 1;
+    const opacity = compact
+      ? 0
+      : scrollY
+        ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL * 0.6], [1, 0], Extrapolation.CLAMP)
+        : 1;
     return { opacity };
-  });
+  }, [compact]);
 
   const heroCollapse = useAnimatedStyle(() => {
-    const p = scrollY
-      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [1, 0], Extrapolation.CLAMP)
-      : 1;
+    const p = compact
+      ? 0
+      : scrollY
+        ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [1, 0], Extrapolation.CLAMP)
+        : 1;
     return {
       opacity: p,
       height: HERO_MIN_HEIGHT * p,
       marginBottom: 12 * p,
     };
-  });
+  }, [compact]);
 
   const plateExpanded = HEADER_EXPANDED + HERO_MIN_HEIGHT;
   const plateCollapse = useAnimatedStyle(() => {
-    const p = scrollY
-      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
-      : 0;
+    const p = compact
+      ? 1
+      : scrollY
+        ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
+        : 0;
     return {
       height: plateExpanded + (HEADER_COLLAPSED - plateExpanded) * p,
     };
-  });
+  }, [compact]);
 
   const dockCollapse = useAnimatedStyle(() => {
-    const marginTop = scrollY
-      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [-DOCK_OVERLAP, 0], Extrapolation.CLAMP)
-      : -DOCK_OVERLAP;
+    const marginTop = compact
+      ? 0
+      : scrollY
+        ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [-DOCK_OVERLAP, 0], Extrapolation.CLAMP)
+        : -DOCK_OVERLAP;
     return { marginTop };
-  });
+  }, [compact]);
 
-  /**
-   * Category/stats/parent axes are browse context, not the primary sticky action.
-   * They collapse as one bounded block after the first 28px of scroll, while
-   * search/map/save/filter stay reachable. Height really goes to zero — opacity
-   * alone would leave dead vertical space and reproduce the original defect.
-   */
   const dockExtrasCollapse = useAnimatedStyle(() => {
-    const p = scrollY
-      ? interpolate(scrollY.value, [28, COLLAPSE_SCROLL], [1, 0], Extrapolation.CLAMP)
-      : 1;
+    const p = compact
+      ? 0
+      : scrollY
+        ? interpolate(scrollY.value, [28, COLLAPSE_SCROLL], [1, 0], Extrapolation.CLAMP)
+        : 1;
     return {
       opacity: p,
       maxHeight: DOCK_EXTRAS_MAX_HEIGHT * p,
       marginTop: 7 * p,
     };
-  });
+  }, [compact]);
 
   const liftCollapse = useAnimatedStyle(() => {
-    const p = scrollY
-      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
-      : 0;
+    const p = compact
+      ? 1
+      : scrollY
+        ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
+        : 0;
     return {
       shadowOpacity: 0.16 + 0.28 * p,
       shadowRadius: 8 + 10 * p,
       elevation: 3 + 8 * p,
     };
-  });
+  }, [compact]);
 
   return (
     <Animated.View
@@ -268,10 +279,10 @@ export function CarsHomeHeader({
             <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
               <Defs>
                 <LinearGradient id="carPlateFoot" x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0" stopColor={VOID} stopOpacity="0.88" />
-                  <Stop offset="0.23" stopColor={VOID} stopOpacity="0.10" />
+                  <Stop offset="0" stopColor={VOID} stopOpacity="0.90" />
+                  <Stop offset="0.24" stopColor={VOID} stopOpacity="0.10" />
                   <Stop offset="0.72" stopColor={VOID} stopOpacity="0.08" />
-                  <Stop offset="1" stopColor={VOID} stopOpacity="0.92" />
+                  <Stop offset="1" stopColor={VOID} stopOpacity="0.95" />
                 </LinearGradient>
               </Defs>
               <Rect x="0" y="0" width="100%" height="100%" fill="url(#carPlateFoot)" />
@@ -312,12 +323,7 @@ export function CarsHomeHeader({
               </AppText>
             </Animated.View>
             <Animated.View style={[styles.poweredRow, { flexDirection: rowDir }, poweredCollapse]}>
-              <AppText
-                style={styles.poweredLabel}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.8}
-              >
+              <AppText style={styles.poweredLabel} numberOfLines={1}>
                 {t("booking.poweredBy")}
               </AppText>
               <Image
@@ -363,10 +369,10 @@ export function CarsHomeHeader({
                 <LinearGradient id="carHeroGround" x1="0" y1="0" x2="0" y2="1">
                   <Stop offset="0" stopColor={SECONDARY} stopOpacity="0.35" />
                   <Stop offset="0.65" stopColor={VOID} stopOpacity="0.15" />
-                  <Stop offset="1" stopColor={VOID} stopOpacity="0.65" />
+                  <Stop offset="1" stopColor={VOID} stopOpacity="0.68" />
                 </LinearGradient>
                 <RadialGradient id="carHeroKey" cx="50%" cy="50%" r="50%">
-                  <Stop offset="0" stopColor={ACCENT} stopOpacity="0.24" />
+                  <Stop offset="0" stopColor={ACCENT} stopOpacity="0.25" />
                   <Stop offset="1" stopColor={ACCENT} stopOpacity="0" />
                 </RadialGradient>
               </Defs>
@@ -426,13 +432,20 @@ export function CarsHomeHeader({
               <View style={styles.pillDivider} />
               <Pressable
                 onPress={onOpenMap}
-                style={styles.pillIcon}
+                style={[styles.pillIcon, mapActive ? styles.pillIconActive : null]}
                 hitSlop={6}
                 testID="cars-header-map"
                 accessibilityRole="button"
-                accessibilityLabel={t("search.discover.section.deskMap")}
+                accessibilityLabel={
+                  mapActive ? t("search.viewList") : t("search.discover.section.deskMap")
+                }
+                accessibilityState={{ selected: mapActive }}
               >
-                <Ionicons name="map" size={18} color={STEEL} />
+                <Ionicons
+                  name={mapActive ? "list" : "map"}
+                  size={18}
+                  color={mapActive ? ACCENT : STEEL}
+                />
               </Pressable>
               <Pressable
                 onPress={onSaveSearch}
@@ -476,6 +489,7 @@ export function CarsHomeHeader({
           <Animated.View
             style={[styles.dockExtras, dockExtrasCollapse]}
             testID="cars-dock-extras"
+            pointerEvents={compact ? "none" : "auto"}
           >
             {categories.length > 0 ? (
               <ScrollView
@@ -560,6 +574,7 @@ const styles = StyleSheet.create({
   pinnedShell: {
     borderBottomLeftRadius: BOTTOM_RADIUS,
     borderBottomRightRadius: BOTTOM_RADIUS,
+    overflow: "visible",
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 4 },
   },
@@ -602,7 +617,9 @@ const styles = StyleSheet.create({
     borderRadius: TAP / 2,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: SECONDARY,
+    backgroundColor: "rgba(24,24,27,0.88)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: HAIRLINE,
     overflow: "hidden",
   },
   bellDot: {
@@ -667,8 +684,8 @@ const styles = StyleSheet.create({
     position: "relative",
     zIndex: 20,
     paddingTop: 8,
-    paddingBottom: 8,
-    backgroundColor: VOID,
+    paddingBottom: 9,
+    backgroundColor: "rgba(9,9,9,0.985)",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: HAIRLINE,
   },
@@ -681,6 +698,10 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     minHeight: 0,
     maxWidth: "100%",
+    marginTop: 4,
+    paddingTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: HAIRLINE,
   },
   searchRow: {
     alignItems: "center",
@@ -696,7 +717,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     alignItems: "center",
     gap: 7,
-    backgroundColor: SURFACE,
+    backgroundColor: "rgba(27,27,31,0.96)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: HAIRLINE,
   },
@@ -724,11 +745,15 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   pillIcon: {
-    width: 24,
-    height: 32,
+    width: 26,
+    height: 34,
+    borderRadius: 17,
     flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
+  },
+  pillIconActive: {
+    backgroundColor: `${ACCENT}22`,
   },
   marketSlot: {
     flexShrink: 1,
@@ -743,6 +768,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: ACCENT,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.20)",
     shadowColor: ACCENT,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.38,
@@ -768,7 +795,7 @@ const styles = StyleSheet.create({
   },
   catScroll: {
     flexGrow: 0,
-    maxHeight: 66,
+    maxHeight: 67,
   },
   catContent: {
     paddingHorizontal: 14,
