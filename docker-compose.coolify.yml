@@ -1,13 +1,13 @@
 # BANCO — Coolify Docker Compose resource (docker-compose.coolify.yml)
 #
-# ★ START HERE: /COOLIFY_DEPLOY_NOW.md  (foolproof Coolify clicks + name map)
-# SoT repo: waelzaid66-max/bancoboomstor  ·  NEVER a pre-consolidation clone
+# ★ START HERE: /release/production/COOLIFY_RUNBOOK.md  (production authority; detailed clicks in /COOLIFY_DEPLOY_NOW.md)
+# SoT repo: waelzaid66-max/bancoboom-v-next-  ·  NEVER a historical/pre-consolidation clone
 #
 # This is the DEFINITIVE compose file for Coolify Docker Compose deployments on
 # Hostinger VPS. Point Coolify at this path: docker-compose.coolify.yml
 #
 # Quick start on Coolify:
-#   1. New Resource → Docker Compose → repo bancoboomstor
+#   1. New Resource → Docker Compose → repo bancoboom-v-next-
 #      compose file path = docker-compose.coolify.yml
 #   2. Set required env vars (see COOLIFY_DEPLOY_NOW.md) BEFORE first Deploy
 #   3. Map apex domain to service `web` port 80 (recommended single-origin)
