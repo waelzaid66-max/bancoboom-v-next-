@@ -40,6 +40,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Refuse stale release PRs
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          git fetch --no-tags origin canonical/vnext-assembly
+          behind="$(git rev-list --count HEAD..origin/canonical/vnext-assembly)"
+          if [ "$behind" -ne 0 ]; then
+            echo "RELEASE_BRANCH_STALE: head is behind canonical/vnext-assembly by $behind commit(s)"
+            exit 1
+          fi
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
