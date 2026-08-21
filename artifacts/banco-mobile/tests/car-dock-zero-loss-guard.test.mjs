@@ -48,6 +48,44 @@ test("CAR dock keeps every browse capability mounted exactly where the unified h
   );
 });
 
+test("CAR host migration cannot erase dormant non-CAR property chrome", () => {
+  const host = codeOnly(section);
+  const reTypeBlock = host.match(
+    /\{showReTypeStrip\s*\?\s*\([\s\S]*?\)\s*:\s*null\}/,
+  )?.[0] ?? "";
+
+  assert.ok(reTypeBlock, "SectionSearchApp must retain the property-type renderer contract");
+  assert.match(
+    reTypeBlock,
+    /axisShape\(chrome,\s*"propertyType"\)\s*===\s*"pill"/,
+    "property-type pill renderer must remain available",
+  );
+  assert.match(
+    reTypeBlock,
+    /:\s*\(\s*<ScrollView[\s\S]*?testID="re-type-strip"/,
+    "property-type chips fallback must remain available even while its current gate is disabled",
+  );
+  assert.match(
+    reTypeBlock,
+    /testID=\{`re-type-\$\{tab\.value\}`\}/,
+    "property-type chip callbacks/test IDs must not be deleted by a CAR-only migration",
+  );
+});
+
+test("CAR results count label is preserved in list and map result modes", () => {
+  const host = codeOnly(section);
+  const countBlock = host.match(
+    /\{viewState\s*===\s*"results"[\s\S]*?testID="section-results-count"[\s\S]*?<\/AppText>\s*\)\}/,
+  )?.[0] ?? "";
+
+  assert.ok(countBlock, "results count label must remain mounted for result states");
+  assert.doesNotMatch(
+    countBlock,
+    /!\s*\(\s*isCarSection\s*&&\s*mapMode\s*\)/,
+    "CAR map mode may compact/reposition chrome but must not suppress the existing results count label",
+  );
+});
+
 test("CAR unified header retains identity, search, map/list, save, filters, categories, stats, notifications and profile", () => {
   assert.ok(header.includes("\"cars-home-header\""), "CarsHomeHeader must preserve cars-home-header identity");
 
