@@ -1,283 +1,365 @@
-import fs from "node:fs";
-
 import type { Client } from "pg";
 
-type SnapshotColumn = {
-  name: string;
-  type: string;
-  notNull: boolean;
-  primaryKey?: boolean;
-  default?: unknown;
-  generated?: { as: string; type: string };
-};
+type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 
-type SnapshotIndex = {
-  name: string;
-  isUnique?: boolean;
-};
-
-type SnapshotTable = {
-  name: string;
-  columns: Record<string, SnapshotColumn>;
-  indexes?: Record<string, SnapshotIndex>;
-  foreignKeys?: Record<string, { name: string }>;
-  compositePrimaryKeys?: Record<string, { name: string }>;
-  uniqueConstraints?: Record<string, { name: string }>;
-  checkConstraints?: Record<string, { name: string }>;
-};
-
-type SnapshotEnum = {
-  name: string;
-  schema: string;
-  values: string[];
-};
-
-type DrizzleSnapshot = {
-  tables: Record<string, SnapshotTable>;
-  enums: Record<string, SnapshotEnum>;
-};
-
-type ActualColumn = {
-  table_name: string;
-  column_name: string;
-  data_type: string;
-  not_null: boolean;
-  default_expr: string | null;
-  generated_kind: string;
-};
-
-function normalizedType(type: string): string {
-  const compact = type.trim().toLowerCase().replace(/,\s+/g, ",").replace(/\s+/g, " ");
-  if (compact === "timestamp") return "timestamp without time zone";
-  if (/^timestamp\(\d+\)$/.test(compact)) return `${compact} without time zone`;
-  if (compact === "timestamptz") return "timestamp with time zone";
-  if (compact === "serial") return "integer";
-  if (compact === "bigserial") return "bigint";
-  if (compact === "varchar") return "character varying";
-  if (compact.startsWith("varchar(")) return compact.replace(/^varchar/, "character varying");
-  return compact;
+function quoteIdentifier(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
 }
 
-function stripOuterParens(value: string): string {
-  let current = value.trim();
-  while (current.startsWith("(") && current.endsWith(")")) {
-    const inner = current.slice(1, -1).trim();
-    let depth = 0;
-    let balanced = true;
-    for (const char of inner) {
-      if (char === "(") depth += 1;
-      if (char === ")") depth -= 1;
-      if (depth < 0) {
-        balanced = false;
-        break;
-      }
-    }
-    if (!balanced || depth !== 0) break;
-    current = inner;
-  }
-  return current;
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function normalizedDefault(value: unknown): string | null {
-  if (value === undefined || value === null) return null;
-  let text = stripOuterParens(String(value).trim());
-  text = text.replace(/::(?:"?[a-zA-Z0-9_]+"?\.)?"?[a-zA-Z0-9_ ]+"?(?:\[\])?$/u, "");
-  return stripOuterParens(text).replace(/\s+/g, " ");
-}
+function normalizeDefinition(value: string | null, localSchema: string): string | null {
+  if (value === null) return null;
 
-function sorted(values: Iterable<string>): string[] {
-  return [...values].sort((a, b) => a.localeCompare(b));
-}
-
-function assertSameSet(label: string, expected: Iterable<string>, actual: Iterable<string>): void {
-  const left = sorted(expected);
-  const right = sorted(actual);
-  if (left.length !== right.length || left.some((value, index) => value !== right[index])) {
-    const expectedOnly = left.filter((value) => !right.includes(value));
-    const actualOnly = right.filter((value) => !left.includes(value));
-    throw new Error(
-      `[baseline] schema equivalence failed for ${label}; missing=[${expectedOnly.join(", ")}], unexpected=[${actualOnly.join(", ")}]`,
+  let normalized = value;
+  for (const schema of new Set([localSchema, "public"])) {
+    normalized = normalized.replaceAll(`${quoteIdentifier(schema)}.`, "");
+    normalized = normalized.replace(
+      new RegExp(`\\b${escapeRegExp(schema)}\\.`, "g"),
+      "",
     );
   }
+
+  return normalized.replace(/\s+/g, " ").trim();
 }
 
-export async function assertBaselineSnapshotEquivalent(
-  client: Client,
-  snapshotPath: string,
-): Promise<void> {
-  const snapshot = JSON.parse(fs.readFileSync(snapshotPath, "utf8")) as DrizzleSnapshot;
-  const expectedTables = Object.values(snapshot.tables);
+function canonicalizeRows<T extends Record<string, unknown>>(
+  rows: T[],
+  localSchema: string,
+  definitionKeys: string[] = [],
+): JsonValue[] {
+  return rows.map((row) => {
+    const next: Record<string, JsonValue> = {};
+    for (const [key, rawValue] of Object.entries(row)) {
+      if (definitionKeys.includes(key)) {
+        next[key] = normalizeDefinition(rawValue === null ? null : String(rawValue), localSchema);
+      } else if (Array.isArray(rawValue)) {
+        next[key] = [...rawValue].map((value) => String(value)).sort();
+      } else if (
+        rawValue === null ||
+        typeof rawValue === "boolean" ||
+        typeof rawValue === "number" ||
+        typeof rawValue === "string"
+      ) {
+        next[key] = rawValue;
+      } else {
+        next[key] = String(rawValue);
+      }
+    }
+    return next;
+  });
+}
 
-  const tableRows = await client.query<{ table_name: string }>(`
-    SELECT table_name
-      FROM information_schema.tables
-     WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-     ORDER BY table_name
-  `);
-  assertSameSet(
-    "public table set",
-    expectedTables.map((table) => table.name),
-    tableRows.rows.map((row) => row.table_name),
+function firstDifference(
+  expected: JsonValue,
+  actual: JsonValue,
+  path = "$",
+): string | null {
+  if (Object.is(expected, actual)) return null;
+
+  if (Array.isArray(expected) || Array.isArray(actual)) {
+    if (!Array.isArray(expected) || !Array.isArray(actual)) {
+      return `${path}: expected ${JSON.stringify(expected)}; actual ${JSON.stringify(actual)}`;
+    }
+    if (expected.length !== actual.length) {
+      return `${path}.length: expected ${expected.length}; actual ${actual.length}`;
+    }
+    for (let index = 0; index < expected.length; index += 1) {
+      const difference = firstDifference(expected[index], actual[index], `${path}[${index}]`);
+      if (difference) return difference;
+    }
+    return null;
+  }
+
+  if (
+    expected !== null &&
+    actual !== null &&
+    typeof expected === "object" &&
+    typeof actual === "object"
+  ) {
+    const expectedObject = expected as Record<string, JsonValue>;
+    const actualObject = actual as Record<string, JsonValue>;
+    const expectedKeys = Object.keys(expectedObject).sort();
+    const actualKeys = Object.keys(actualObject).sort();
+    const keyDifference = firstDifference(expectedKeys, actualKeys, `${path}.__keys`);
+    if (keyDifference) return keyDifference;
+
+    for (const key of expectedKeys) {
+      const difference = firstDifference(
+        expectedObject[key],
+        actualObject[key],
+        `${path}.${key}`,
+      );
+      if (difference) return difference;
+    }
+    return null;
+  }
+
+  return `${path}: expected ${JSON.stringify(expected)}; actual ${JSON.stringify(actual)}`;
+}
+
+async function setInspectionSearchPath(client: Client, schema: string): Promise<void> {
+  const searchPath =
+    schema === "public"
+      ? `${quoteIdentifier("public")}, pg_catalog`
+      : `${quoteIdentifier(schema)}, ${quoteIdentifier("public")}, pg_catalog`;
+  await client.query("SELECT set_config('search_path', $1, true)", [searchPath]);
+}
+
+async function captureSchema(client: Client, schema: string): Promise<JsonValue> {
+  await setInspectionSearchPath(client, schema);
+
+  const relations = await client.query<{
+    relation_name: string;
+    relation_kind: string;
+    row_security: boolean;
+    force_row_security: boolean;
+    relation_options: string[] | null;
+    view_definition: string | null;
+    partition_key: string | null;
+  }>(
+    `SELECT c.relname AS relation_name,
+            c.relkind::text AS relation_kind,
+            c.relrowsecurity AS row_security,
+            c.relforcerowsecurity AS force_row_security,
+            c.reloptions AS relation_options,
+            CASE WHEN c.relkind IN ('v', 'm') THEN pg_get_viewdef(c.oid, true) END AS view_definition,
+            CASE WHEN c.relkind = 'p' THEN pg_get_partkeydef(c.oid) END AS partition_key
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1
+        AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+      ORDER BY c.relname`,
+    [schema],
   );
 
-  const columnRows = await client.query<ActualColumn>(`
-    SELECT c.relname AS table_name,
-           a.attname AS column_name,
-           format_type(a.atttypid, a.atttypmod) AS data_type,
-           a.attnotnull AS not_null,
-           pg_get_expr(d.adbin, d.adrelid) AS default_expr,
-           a.attgenerated AS generated_kind
-      FROM pg_attribute a
-      JOIN pg_class c ON c.oid = a.attrelid
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-     WHERE n.nspname = 'public'
-       AND c.relkind = 'r'
-       AND a.attnum > 0
-       AND NOT a.attisdropped
-     ORDER BY c.relname, a.attnum
-  `);
+  const columns = await client.query<{
+    relation_name: string;
+    ordinal: number;
+    column_name: string;
+    data_type: string;
+    not_null: boolean;
+    identity_kind: string;
+    generated_kind: string;
+    default_or_generated_expression: string | null;
+    collation_schema: string | null;
+    collation_name: string | null;
+    storage_kind: string;
+    compression_kind: string;
+    statistics_target: number;
+  }>(
+    `SELECT c.relname AS relation_name,
+            a.attnum AS ordinal,
+            a.attname AS column_name,
+            format_type(a.atttypid, a.atttypmod) AS data_type,
+            a.attnotnull AS not_null,
+            a.attidentity::text AS identity_kind,
+            a.attgenerated::text AS generated_kind,
+            pg_get_expr(d.adbin, d.adrelid, true) AS default_or_generated_expression,
+            cn.nspname AS collation_schema,
+            coll.collname AS collation_name,
+            a.attstorage::text AS storage_kind,
+            a.attcompression::text AS compression_kind,
+            a.attstattarget AS statistics_target
+       FROM pg_attribute a
+       JOIN pg_class c ON c.oid = a.attrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+       LEFT JOIN pg_collation coll ON coll.oid = a.attcollation AND a.attcollation <> 0
+       LEFT JOIN pg_namespace cn ON cn.oid = coll.collnamespace
+      WHERE n.nspname = $1
+        AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+        AND a.attnum > 0
+        AND NOT a.attisdropped
+      ORDER BY c.relname, a.attnum`,
+    [schema],
+  );
 
-  const actualColumns = new Map<string, ActualColumn>();
-  for (const row of columnRows.rows) actualColumns.set(`${row.table_name}.${row.column_name}`, row);
-
-  const expectedColumnKeys: string[] = [];
-  for (const table of expectedTables) {
-    for (const column of Object.values(table.columns)) {
-      const key = `${table.name}.${column.name}`;
-      expectedColumnKeys.push(key);
-      const actual = actualColumns.get(key);
-      if (!actual) throw new Error(`[baseline] schema equivalence failed: missing column ${key}`);
-      if (normalizedType(actual.data_type) !== normalizedType(column.type)) {
-        throw new Error(
-          `[baseline] schema equivalence failed: ${key} type expected=${column.type} actual=${actual.data_type}`,
-        );
-      }
-      if (actual.not_null !== Boolean(column.notNull)) {
-        throw new Error(
-          `[baseline] schema equivalence failed: ${key} nullability expected=${column.notNull ? "NOT NULL" : "NULL"} actual=${actual.not_null ? "NOT NULL" : "NULL"}`,
-        );
-      }
-
-      const expectedGenerated = Boolean(column.generated);
-      const actualGenerated = actual.generated_kind === "s";
-      if (expectedGenerated !== actualGenerated) {
-        throw new Error(
-          `[baseline] schema equivalence failed: ${key} generated expected=${expectedGenerated} actual=${actualGenerated}`,
-        );
-      }
-
-      if (!expectedGenerated) {
-        const expectedDefault = normalizedDefault(column.default);
-        const actualDefault = normalizedDefault(actual.default_expr);
-        if (expectedDefault !== actualDefault) {
-          throw new Error(
-            `[baseline] schema equivalence failed: ${key} default expected=${expectedDefault ?? "<none>"} actual=${actualDefault ?? "<none>"}`,
-          );
-        }
-      }
-    }
-  }
-  assertSameSet("public column set", expectedColumnKeys, actualColumns.keys());
-
-  const indexRows = await client.query<{ indexname: string; is_unique: boolean }>(`
-    SELECT index_class.relname AS indexname,
-           index_meta.indisunique AS is_unique
-      FROM pg_index index_meta
-      JOIN pg_class index_class ON index_class.oid = index_meta.indexrelid
-      JOIN pg_class table_class ON table_class.oid = index_meta.indrelid
-      JOIN pg_namespace n ON n.oid = table_class.relnamespace
-     WHERE n.nspname = 'public'
-  `);
-  const actualIndexes = new Map(indexRows.rows.map((row) => [row.indexname, row]));
-  for (const table of expectedTables) {
-    for (const index of Object.values(table.indexes ?? {})) {
-      const actual = actualIndexes.get(index.name);
-      if (!actual) {
-        throw new Error(`[baseline] schema equivalence failed: missing index ${index.name}`);
-      }
-      if (actual.is_unique !== Boolean(index.isUnique)) {
-        throw new Error(
-          `[baseline] schema equivalence failed: index ${index.name} uniqueness expected=${Boolean(index.isUnique)} actual=${actual.is_unique}`,
-        );
-      }
-    }
-  }
-
-  const constraintRows = await client.query<{
-    table_name: string;
+  const constraints = await client.query<{
+    relation_name: string;
     constraint_name: string;
     constraint_type: string;
-  }>(`
-    SELECT table_name, constraint_name, constraint_type
-      FROM information_schema.table_constraints
-     WHERE table_schema = 'public'
-  `);
-  const constraints = new Map(
-    constraintRows.rows.map((row) => [`${row.constraint_type}:${row.constraint_name}`, row]),
+    definition: string;
+    deferrable: boolean;
+    initially_deferred: boolean;
+    validated: boolean;
+    no_inherit: boolean;
+  }>(
+    `SELECT c.relname AS relation_name,
+            con.conname AS constraint_name,
+            con.contype::text AS constraint_type,
+            pg_get_constraintdef(con.oid, true) AS definition,
+            con.condeferrable AS deferrable,
+            con.condeferred AS initially_deferred,
+            con.convalidated AS validated,
+            con.connoinherit AS no_inherit
+       FROM pg_constraint con
+       JOIN pg_class c ON c.oid = con.conrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1
+      ORDER BY c.relname, con.conname`,
+    [schema],
   );
 
-  for (const table of expectedTables) {
-    for (const fk of Object.values(table.foreignKeys ?? {})) {
-      if (!constraints.has(`FOREIGN KEY:${fk.name}`)) {
-        throw new Error(`[baseline] schema equivalence failed: missing foreign key ${fk.name}`);
-      }
-    }
-    for (const unique of Object.values(table.uniqueConstraints ?? {})) {
-      if (!constraints.has(`UNIQUE:${unique.name}`)) {
-        throw new Error(`[baseline] schema equivalence failed: missing unique constraint ${unique.name}`);
-      }
-    }
-    for (const check of Object.values(table.checkConstraints ?? {})) {
-      if (!constraints.has(`CHECK:${check.name}`)) {
-        throw new Error(`[baseline] schema equivalence failed: missing check constraint ${check.name}`);
-      }
-    }
+  const indexes = await client.query<{
+    relation_name: string;
+    index_name: string;
+    definition: string;
+    unique_index: boolean;
+    primary_index: boolean;
+    valid_index: boolean;
+    ready_index: boolean;
+    live_index: boolean;
+    clustered_index: boolean;
+    replica_identity_index: boolean;
+    relation_options: string[] | null;
+  }>(
+    `SELECT table_rel.relname AS relation_name,
+            index_rel.relname AS index_name,
+            pg_get_indexdef(index_rel.oid, 0, true) AS definition,
+            idx.indisunique AS unique_index,
+            idx.indisprimary AS primary_index,
+            idx.indisvalid AS valid_index,
+            idx.indisready AS ready_index,
+            idx.indislive AS live_index,
+            idx.indisclustered AS clustered_index,
+            idx.indisreplident AS replica_identity_index,
+            index_rel.reloptions AS relation_options
+       FROM pg_index idx
+       JOIN pg_class index_rel ON index_rel.oid = idx.indexrelid
+       JOIN pg_class table_rel ON table_rel.oid = idx.indrelid
+       JOIN pg_namespace n ON n.oid = table_rel.relnamespace
+      WHERE n.nspname = $1
+      ORDER BY table_rel.relname, index_rel.relname`,
+    [schema],
+  );
 
-    const expectsPrimaryKey =
-      Object.values(table.columns).some((column) => Boolean(column.primaryKey)) ||
-      Object.keys(table.compositePrimaryKeys ?? {}).length > 0;
-    if (expectsPrimaryKey) {
-      const hasPk = constraintRows.rows.some(
-        (row) => row.table_name === table.name && row.constraint_type === "PRIMARY KEY",
-      );
-      if (!hasPk) {
-        throw new Error(`[baseline] schema equivalence failed: missing primary key on ${table.name}`);
-      }
-    }
-  }
+  const triggers = await client.query<{
+    relation_name: string;
+    trigger_name: string;
+    enabled_state: string;
+    definition: string;
+  }>(
+    `SELECT c.relname AS relation_name,
+            t.tgname AS trigger_name,
+            t.tgenabled::text AS enabled_state,
+            pg_get_triggerdef(t.oid, true) AS definition
+       FROM pg_trigger t
+       JOIN pg_class c ON c.oid = t.tgrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1
+        AND NOT t.tgisinternal
+      ORDER BY c.relname, t.tgname`,
+    [schema],
+  );
 
-  const enumRows = await client.query<{
+  const policies = await client.query<{
+    relation_name: string;
+    policy_name: string;
+    permissive: string;
+    roles: string[];
+    command: string;
+    using_expression: string | null;
+    check_expression: string | null;
+  }>(
+    `SELECT tablename AS relation_name,
+            policyname AS policy_name,
+            permissive,
+            roles,
+            cmd AS command,
+            qual AS using_expression,
+            with_check AS check_expression
+       FROM pg_policies
+      WHERE schemaname = $1
+      ORDER BY tablename, policyname`,
+    [schema],
+  );
+
+  const enums = await client.query<{
     enum_name: string;
     enum_label: string;
     enum_order: number;
-  }>(`
-    SELECT t.typname AS enum_name,
-           e.enumlabel AS enum_label,
-           e.enumsortorder AS enum_order
-      FROM pg_type t
-      JOIN pg_enum e ON e.enumtypid = t.oid
-      JOIN pg_namespace n ON n.oid = t.typnamespace
-     WHERE n.nspname = 'public'
-     ORDER BY t.typname, e.enumsortorder
-  `);
-
-  const actualEnums = new Map<string, string[]>();
-  for (const row of enumRows.rows) {
-    const values = actualEnums.get(row.enum_name) ?? [];
-    values.push(row.enum_label);
-    actualEnums.set(row.enum_name, values);
-  }
-  const expectedEnums = new Map(
-    Object.values(snapshot.enums).map((entry) => [entry.name, entry.values]),
+  }>(
+    `SELECT t.typname AS enum_name,
+            e.enumlabel AS enum_label,
+            e.enumsortorder::float8 AS enum_order
+       FROM pg_type t
+       JOIN pg_enum e ON e.enumtypid = t.oid
+       JOIN pg_namespace n ON n.oid = t.typnamespace
+      WHERE n.nspname = $1
+      ORDER BY t.typname, e.enumsortorder`,
+    [schema],
   );
-  assertSameSet("public enum set", expectedEnums.keys(), actualEnums.keys());
-  for (const [name, values] of expectedEnums) {
-    const actual = actualEnums.get(name) ?? [];
-    if (values.length !== actual.length || values.some((value, index) => value !== actual[index])) {
-      throw new Error(
-        `[baseline] schema equivalence failed: enum ${name} expected=[${values.join(",")}] actual=[${actual.join(",")}]`,
-      );
-    }
+
+  const sequences = await client.query<{
+    sequence_name: string;
+    data_type: string;
+    start_value: string;
+    minimum_value: string;
+    maximum_value: string;
+    increment_by: string;
+    cycle: boolean;
+    cache_size: string;
+    owned_relation: string | null;
+    owned_column: string | null;
+  }>(
+    `SELECT sequence_rel.relname AS sequence_name,
+            format_type(sequence_data.seqtypid, NULL) AS data_type,
+            sequence_data.seqstart::text AS start_value,
+            sequence_data.seqmin::text AS minimum_value,
+            sequence_data.seqmax::text AS maximum_value,
+            sequence_data.seqincrement::text AS increment_by,
+            sequence_data.seqcycle AS cycle,
+            sequence_data.seqcache::text AS cache_size,
+            owned_rel.relname AS owned_relation,
+            owned_att.attname AS owned_column
+       FROM pg_class sequence_rel
+       JOIN pg_namespace n ON n.oid = sequence_rel.relnamespace
+       JOIN pg_sequence sequence_data ON sequence_data.seqrelid = sequence_rel.oid
+       LEFT JOIN pg_depend dep
+              ON dep.classid = 'pg_class'::regclass
+             AND dep.objid = sequence_rel.oid
+             AND dep.refclassid = 'pg_class'::regclass
+             AND dep.deptype IN ('a', 'i')
+       LEFT JOIN pg_class owned_rel ON owned_rel.oid = dep.refobjid
+       LEFT JOIN pg_attribute owned_att
+              ON owned_att.attrelid = dep.refobjid
+             AND owned_att.attnum = dep.refobjsubid
+      WHERE n.nspname = $1
+        AND sequence_rel.relkind = 'S'
+      ORDER BY sequence_rel.relname`,
+    [schema],
+  );
+
+  return {
+    relations: canonicalizeRows(relations.rows, schema, ["view_definition", "partition_key"]),
+    columns: canonicalizeRows(columns.rows, schema, ["data_type", "default_or_generated_expression"]),
+    constraints: canonicalizeRows(constraints.rows, schema, ["definition"]),
+    indexes: canonicalizeRows(indexes.rows, schema, ["definition"]),
+    triggers: canonicalizeRows(triggers.rows, schema, ["definition"]),
+    policies: canonicalizeRows(policies.rows, schema, ["using_expression", "check_expression"]),
+    enums: canonicalizeRows(enums.rows, schema),
+    sequences: canonicalizeRows(sequences.rows, schema, ["data_type"]),
+  };
+}
+
+export async function assertBaselineSchemasEquivalent(
+  client: Client,
+  expectedSchema: string,
+  actualSchema: string,
+): Promise<void> {
+  const expected = await captureSchema(client, expectedSchema);
+  const actual = await captureSchema(client, actualSchema);
+  const difference = firstDifference(expected, actual);
+  if (difference) {
+    throw new Error(`[baseline] schema equivalence failed at ${difference}`);
   }
 }
