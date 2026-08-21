@@ -7,7 +7,7 @@ This directory is the single operator-facing authority for the production releas
 - Repository: `waelzaid66-max/bancoboom-v-next-`
 - Canonical branch: `canonical/vnext-assembly`
 - Assembly branch: `release/production-assembly-20260821`
-- Assembly base SHA: `3951c72906918bb0b5c1e7f8fcc11c862eb8989d`
+- Assembly base SHA: `4f2c81cc553938e808a98adb84d00ecfc76732c5`
 - Package manager: `pnpm@11.9.0`
 - Docker/CI Node: `24`
 - Mobile bundle id: `com.bancooom.app`
