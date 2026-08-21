@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "../__tests__/helpers";

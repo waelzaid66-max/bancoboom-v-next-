@@ -102,7 +102,6 @@ function normalizeSocialValue(platform: SocialPlatform, raw: string): string {
     default: {
       const url = /^https?:\/\//i.test(value) ? value : `https://${value}`;
       try {
-        // eslint-disable-next-line no-new
         new URL(url);
       } catch {
         throw badRequest("Invalid URL");

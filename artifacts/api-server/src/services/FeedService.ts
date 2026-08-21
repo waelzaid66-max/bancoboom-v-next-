@@ -1,8 +1,7 @@
 import { db } from "@workspace/db";
-import { listings, ads, users, interactions, listingAttributes } from "@workspace/db/schema";
+import { listings, ads, users, listingAttributes } from "@workspace/db/schema";
 import { and, eq, desc, sql, inArray, type SQL } from "drizzle-orm";
-import { normalizePaymentOptions } from "./PaymentService";
-import { transformFeedItems, transformToFeedItem } from "./BffService";
+import { transformFeedItems } from "./BffService";
 import { enrichListings, buildAttributeConditions, type PaymentPlan, type IndustrialSubtype } from "./SearchService";
 import { adaptFeed } from "./AdaptiveFeedEngine";
 import { publicVisibilityConditions } from "../lib/feedVisibility";

@@ -2,7 +2,6 @@ import { db } from "@workspace/db";
 import {
   users,
   listings,
-  listingMedia,
   interactions,
   leadHistory,
   ads,

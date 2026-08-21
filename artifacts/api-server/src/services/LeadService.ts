@@ -591,13 +591,6 @@ export async function processLead(input: TrackLeadInput): Promise<void> {
     })();
 
     // Increment interaction counter
-    const column = {
-      whatsapp: interactions.whatsappClicks,
-      call: interactions.callClicks,
-      chat: interactions.clicks,
-      finance_request: interactions.financeRequests,
-    }[input.actionType];
-
     await db
       .insert(interactions)
       .values({

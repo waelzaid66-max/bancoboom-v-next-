@@ -3,7 +3,6 @@ import {
   importOrders,
   importOrderDocuments,
   listings,
-  users,
 } from "@workspace/db/schema";
 import { and, eq, desc } from "drizzle-orm";
 import { createNotification } from "./NotificationService";

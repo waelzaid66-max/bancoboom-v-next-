@@ -3,14 +3,13 @@ import {
   users,
   listings,
   leadHistory,
-  paymentOptions,
   financingRequests,
   financingIntermediaries,
   financingBranches,
   financingSeats,
   fiLifecycleEvents,
 } from "@workspace/db/schema";
-import { and, asc, desc, eq, ilike, inArray, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { writeAudit } from "./AbuseService";
 import { createNotification } from "./NotificationService";
 
