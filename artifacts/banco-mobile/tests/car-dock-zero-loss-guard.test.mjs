@@ -86,6 +86,29 @@ test("CAR results count label is preserved in list and map result modes", () => 
   );
 });
 
+test("CAR map consolidation removes only duplicate chrome, never map capability", () => {
+  const host = codeOnly(section);
+  const carHeader = host.match(
+    /isCarSection\s*\?\s*\([\s\S]*?<CarsHomeHeader[\s\S]*?\/>\s*\)\s*:/,
+  )?.[0] ?? "";
+
+  assert.match(
+    carHeader,
+    /onOpenMap=\{\(\)\s*=>\s*\{[\s\S]*?if\s*\(mapMode\s*&&\s*inResultsView\)[\s\S]*?setMapMode\(false\)[\s\S]*?openOrLatchMap/,
+    "the surviving CAR map control must open map and return to list",
+  );
+  assert.match(
+    host,
+    /\{showMapChrome\s*&&\s*!isCarSection\s*\?/,
+    "only the duplicate floating map chrome may be suppressed for CAR",
+  );
+  assert.match(
+    host,
+    /\{mapMode\s*&&\s*inResultsView\s*\?\s*\(\s*<SearchResultsMap/,
+    "CAR map results surface must remain mounted",
+  );
+});
+
 test("CAR unified header retains identity, search, map/list, save, filters, categories, stats, notifications and profile", () => {
   assert.ok(header.includes("\"cars-home-header\""), "CarsHomeHeader must preserve cars-home-header identity");
 
