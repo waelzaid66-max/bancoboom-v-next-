@@ -69,7 +69,11 @@ test("CAR unified header retains identity, search, map/list, save, filters, cate
   }
 
   assert.match(header, /<VehicleGlyph\b/, "vehicle categories must remain SVG glyph based");
-  assert.match(header, /maxHeight:\s*DOCK_EXTRAS_MAX_HEIGHT\s*\*\s*p/, "browse context must collapse by real height");
+  assert.match(
+    header,
+    /maxHeight:\s*DOCK_EXTRAS_MAX_HEIGHT\s*\*\s*p/,
+    "browse context must collapse by real height",
+  );
 });
 
 test("CAR browse axes preserve market, sort, offer, engines, brand and origin with haptics", () => {
@@ -78,21 +82,30 @@ test("CAR browse axes preserve market, sort, offer, engines, brand and origin wi
     "section-primary-strip",
     "section-sort-cycle",
     "section-listing-mode",
-    "section-listing-mode-all",
-    "section-listing-mode-sale",
-    "section-listing-mode-buy",
     "section-engine-strip",
     "car-brand-origin-strip",
     "car-brand-strip",
     "car-brand-btn",
     "car-origin-strip",
-    "car-origin-all",
-    "car-origin-local",
-    "car-origin-imported",
   ]) {
-    assert.ok(axes.includes(`testID=\"${id}\"`) || axes.includes(`testID={\`${id.replace(/-(all|sale|buy)$/, "-${mode}")}\`}`), `CarBrowseAxes must preserve ${id}`);
+    assert.ok(axes.includes(`testID=\"${id}\"`), `CarBrowseAxes must preserve ${id}`);
   }
 
+  assert.match(
+    axes,
+    /testID=\{`section-listing-mode-\$\{mode\}`\}/,
+    "all/sale/buy listing-mode segments must keep stable test IDs",
+  );
+  assert.match(
+    axes,
+    /testID=\{`engine-\$\{engine\.key\}`\}/,
+    "every engine chip must keep a stable test ID",
+  );
+  assert.match(
+    axes,
+    /testID=\{`car-origin-\$\{value\}`\}/,
+    "all/local/imported origin controls must keep stable test IDs",
+  );
   assert.match(axes, /<MarketCountryButton\b/, "country/currency selector must remain mounted");
   assert.match(axes, /Haptics\.selectionAsync\(\)/, "dock interactions must retain haptic feedback");
   assert.doesNotMatch(
@@ -109,5 +122,9 @@ test("CAR section-specific chrome contract is preserved while the listing-mode c
     "CAR screen must retain its own pill/chips chrome declaration",
   );
   assert.match(axes, /listingPill:/, "listing mode must remain a single compact pill surface");
-  assert.match(axes, /listingSegmentActive:/, "the pill must expose the selected state without hiding any option");
+  assert.match(
+    axes,
+    /listingSegmentActive:/,
+    "the pill must expose the selected state without hiding any option",
+  );
 });
