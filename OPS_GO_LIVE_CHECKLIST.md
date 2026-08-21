@@ -1,98 +1,110 @@
-# OPS GO-LIVE CHECKLIST — BANCO BOOM NEXT
+# OPS GO-LIVE CHECKLIST — BANCO (post-merge)
 
-**Repo (ONLY):** `https://github.com/waelzaid66-max/bancoboom-v-next-`  
-**Canonical branch:** `canonical/vnext-assembly`  
-**Final deploy ref:** exact approved immutable release SHA  
+**Repo (ONLY):** `https://github.com/waelzaid66-max/bancoboomstor`
+**Branch:** `main`  
 **Compose:** `docker-compose.coolify.yml`  
-**Production assembly:** `release/production/`  
 **Mobile package:** `com.bancooom.app`  
 **First Coolify file:** [`COOLIFY_DEPLOY_NOW.md`](./COOLIFY_DEPLOY_NOW.md)
 
-Do these steps **in order**. Tick only what was actually completed. A failed gate is a hard stop.
+Do these steps **in order**. Do not invent secrets. Tick only what you actually completed.
 
 ---
 
-## A. Release identity and Coolify source
+## A. Coolify resource
 
-- [ ] Candidate SHA frozen and recorded
-- [ ] `pnpm release:verify` exit 0
-- [ ] Repository manually verified as **`waelzaid66-max/bancoboom-v-next-`**
-- [ ] No historical repository selected in Coolify
-- [ ] Resource type = **Docker Compose**
+- [ ] New Resource → **Docker Compose** (not Dockerfile / Nixpacks / Static)
+- [ ] Git repo = **`waelzaid66-max/bancoboomstor`**
+- [ ] Branch = **`main`**
 - [ ] Compose path = **`docker-compose.coolify.yml`**
-- [ ] Source branch during assembly = **`canonical/vnext-assembly`**
-- [ ] Final deployment pinned to the exact approved SHA/image digest
-- [ ] Apex domain maps to service **`web`** port **`80`**
+- [ ] Apex domain mapped to service **`web`** port **`80`**
 
 ---
 
-## B. Source/build certification
+## B. Coolify environment (names only — fill real values in UI)
 
-- [ ] `pnpm install --frozen-lockfile` PASS
-- [ ] `pnpm run workspace:verify` PASS
-- [ ] `pnpm run security:audit` PASS with zero blocking advisories
-- [ ] `pnpm run typecheck` PASS
-- [ ] `pnpm run build` PASS
-- [ ] `pnpm run confidence` PASS
-- [ ] Exact-SHA GitHub Actions run reached real job steps and completed required jobs
-- [ ] Docker images built from the same exact SHA
-- [ ] Image digests recorded
+### Required (API will refuse to stay healthy without these)
 
----
+```
+POSTGRES_PASSWORD=
+CLERK_SECRET_KEY=
+SESSION_SECRET=
+PAYMENT_CONFIG_ENCRYPTION_KEY=
+OBJECT_STORAGE_PROVIDER=s3
+AWS_REGION=
+S3_BUCKET=
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+PUBLIC_OBJECT_SEARCH_PATHS=
+PRIVATE_OBJECT_DIR=
+```
 
-## C. Coolify environment
+### Build-time (set before first Deploy / rebuild after change)
 
-Configure values in Coolify only. Never commit values.
+```
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+VITE_CLERK_PUBLISHABLE_KEY=
+BANCO_WEB_URL=https://banco.today
+BANCO_WEBSITE_URL=https://banco.today
+```
 
-Required categories:
+### Strongly recommended
 
-- [ ] PostgreSQL credentials
-- [ ] Clerk/server auth
-- [ ] session secret
-- [ ] payment encryption key
-- [ ] S3/object storage credentials and paths
-- [ ] canonical site public URL and Clerk publishable key
-- [ ] SPA Clerk publishable key
-- [ ] provider settings for any enabled Paymob/email/push/maps capability
+```
+CORS_ALLOWED_ORIGINS=https://banco.today,https://www.banco.today
+PUBLIC_API_BASE_URL=https://banco.today
+PUBLIC_APP_URL=https://banco.today
+CLERK_PUBLISHABLE_KEY=
+GIT_SHA=
+```
 
-Authoritative variable-name inventory: `release/production/ENVIRONMENT_CONTRACT.md`.
+- [ ] All required vars filled in Coolify
+- [ ] Build-time Clerk keys filled
 
----
+### Controlled deployment order
 
-## D. Database and controlled service order
+- [ ] Approved exact release SHA and database restore point recorded
+- [ ] `postgres` started by itself and healthy:
 
-- [ ] Database backup/restore point captured before migration
-- [ ] `postgres` started alone and healthy
-- [ ] Database classified as fresh or existing pre-journal
-- [ ] Fresh DB runs committed migrations directly and is never baselined
-- [ ] Existing pre-journal DB has independent schema-equivalence proof before any one-time baseline
-- [ ] Committed migration job exits 0:
+```bash
+docker compose -f docker-compose.coolify.yml up -d postgres
+docker compose -f docker-compose.coolify.yml ps postgres
+```
+
+- [ ] Database path classified before any stamp:
+  - A fresh empty database runs the committed migrations directly and is never
+    baselined.
+  - For an existing pre-journal database, independently prove its live schema is
+    equivalent to the exact committed migration state for the release SHA, then
+    run `pnpm --filter @workspace/db run baseline` exactly once through the
+    profile-gated migrate container. A backup or non-empty database is not proof.
+- [ ] Committed migrations completed with exit 0:
 
 ```bash
 docker compose -f docker-compose.coolify.yml --profile migrate run --rm migrate
 ```
 
-- [ ] `api` starts only after migration success
-- [ ] `/api/readyz` returns HTTP 200 JSON
-- [ ] `banco-website` and `web` start only after API readiness
-- [ ] `banco-web` remains disabled unless the legacy profile is explicitly approved
+- [ ] `api` started only after migration success and `/api/readyz` is healthy:
+
+```bash
+docker compose -f docker-compose.coolify.yml up -d --build api
+curl -fsS http://127.0.0.1:${API_HOST_PORT:-8080}/api/readyz
+```
+
+- [ ] `banco-website` and `web` started after API readiness; the legacy
+  `banco-web` profile remains off unless explicitly approved:
+
+```bash
+docker compose -f docker-compose.coolify.yml up -d --build banco-website web
+```
+
+The one-time baseline command and the required equivalence boundary are in
+`lib/db/MIGRATIONS.md`; stop if the proof or migration fails.
 
 ---
 
-## E. Runtime/provider verification
+## C. Smoke (after committed migrations and controlled service start)
 
-- [ ] Clerk sign-in/session/account flows on production topology
-- [ ] Hostile `X-Forwarded-Host` / proxy behaviour checked through Traefik/Coolify
-- [ ] S3 upload/read/delete and private-object access control verified
-- [ ] Email delivery verified
-- [ ] Push/notification path verified
-- [ ] Maps provider/tile/bootstrap failure paths verified on real devices/web
-- [ ] Paymob sandbox HMAC, replay/idempotency, retry and reordering verified
-- [ ] Error alert route receives a controlled test event without secret leakage
-
----
-
-## F. Public smoke and DNS
+Manual curls:
 
 ```bash
 curl -fsS https://banco.today/nginx-health
@@ -101,54 +113,72 @@ curl -fsS https://banco.today/.well-known/assetlinks.json
 curl -fsSI https://banco.today/.well-known/apple-app-site-association
 ```
 
-- [ ] `/nginx-health` = ok
-- [ ] `/api/readyz` = JSON 200, never HTML fallback
-- [ ] Well-known endpoints return correct files
-- [ ] DNS points to Coolify/Traefik, not historical Replit/Horizons targets
-- [ ] `pnpm ops:live-cutover` exit 0
+Machine gate (preferred — fails closed on Replit/Horizons HTML):
+
+```bash
+# After Coolify is up but REPLACE_* may still be present:
+pnpm ops:live-cutover -- --allow-placeholders
+
+# After Team ID + Play SHA-256 filled + web redeployed:
+pnpm ops:live-cutover
+```
+
+Baseline of **current** public DNS (still wrong): `reports/production-verification/56-LIVE-CUTOVER-BASELINE.md`
+
+- [ ] `/nginx-health` → `ok`
+- [ ] `/api/readyz` → JSON 200 (not HTML)
+- [ ] well-known returns JSON (not Horizons/Replit HTML)
+- [ ] `pnpm ops:live-cutover` exit **0** (use `--allow-placeholders` only until store IDs filled)
 
 ---
 
-## G. Mobile physical-device release
+## D. DNS cutover
 
-EAS production build must target the same certified backend environment.
-
-- [ ] `EXPO_PUBLIC_*` production values baked
-- [ ] Android production build completed
-- [ ] iOS production build completed
-- [ ] Android physical-device journey: sign-in → search → listing → upload → chat → account
-- [ ] iOS physical-device journey: sign-in → search → listing → upload → chat → account
-- [ ] AR/EN verified
-- [ ] RTL/LTR verified
-- [ ] accessibility smoke verified
-- [ ] universal/app links verified with real store identifiers
+- [ ] `banco.today` A/AAAA (or CNAME) → Coolify / Traefik (remove Replit)
+- [ ] `www.banco.today` → Coolify or HTTPS redirect to apex (remove Horizons)
+- [ ] Optional: `banco.deals` / `banco.autos` only if they stay in associated domains
+- [ ] Wait DNS TTL; re-run smoke in §C (`pnpm ops:live-cutover`)
 
 ---
 
-## H. Recovery and rollback
+## E. Well-known store values (cannot invent)
 
-- [ ] Production DB backup identifier recorded
-- [ ] Restore executed successfully into isolated target
-- [ ] Previous approved SHA/image set recorded
-- [ ] Rollback rehearsal completed
-- [ ] Rollback does not require a historical repository
+Edit then redeploy `web`:
+
+- [ ] `deploy/coolify/well-known/apple-app-site-association` — replace `REPLACE_APPLE_TEAM_ID`
+- [ ] `deploy/coolify/well-known/assetlinks.json` — replace `REPLACE_PLAY_APP_SIGNING_SHA256`
+- [ ] Commit on `main` (or Coolify volume override) + redeploy `web`
 
 ---
 
-## I. Production GO record
+## F. EAS mobile (`com.bancooom.app`)
 
-Record one immutable evidence set:
+Dashboard → EAS project → Environment **production**:
 
-- [ ] Git SHA
-- [ ] CI run IDs
-- [ ] Docker image digests
-- [ ] migration journal/state
-- [ ] Coolify deployment ID
-- [ ] Android/iOS build identifiers
-- [ ] provider verification evidence
-- [ ] backup/restore evidence
-- [ ] rollback SHA and rehearsal result
+```
+EXPO_PUBLIC_DOMAIN=banco.today
+# OR EXPO_PUBLIC_API_BASE_URL=https://banco.today
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...
+EXPO_PUBLIC_PUBLIC_APP_URL=https://banco.today
+EXPO_PUBLIC_ROUTER_ORIGIN=https://banco.today
+```
 
-Only when every applicable item above is complete may the release be marked **Production Ready**.
+- [ ] Vars baked
+- [ ] `eas build --platform android --profile production`
+- [ ] `eas build --platform ios --profile production`
+- [ ] Device smoke: sign-in → feed → create listing → upload → chat → delete account
 
-Run `npm run build`.
+See `release/EAS_BUILD.md`.
+
+---
+
+## G. Definition of Live Production Ready
+
+All of A–F complete **and**:
+
+- [ ] No Replit / Horizons HTML on apex or `/api/readyz`
+- [ ] Clerk live keys consistent across API + web bake + EAS
+- [ ] S3 uploads work from device
+- [ ] Universal / App Links verify on device after real Team ID / SHA-256
+
+Until then the honest stamp remains: **Repository Ready · Live Production Not Certified**.

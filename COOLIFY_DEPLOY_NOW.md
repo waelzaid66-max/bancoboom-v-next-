@@ -1,33 +1,30 @@
-# COOLIFY DEPLOY NOW — BANCO BOOM NEXT
+# COOLIFY DEPLOY NOW — BANCO (foolproof)
 
-**Read this file first.** The authoritative production assembly is `release/production/`.
+**Read this file first.** It replaces hours of guessing.
 
 | Field | Exact value |
 |-------|-------------|
-| **ONLY GitHub repo** | `https://github.com/waelzaid66-max/bancoboom-v-next-` |
-| **Canonical branch** | `canonical/vnext-assembly` |
-| **Final deploy ref** | Exact approved immutable release SHA |
-| **Do NOT use** | `bancoboomstor`, `banco-with-wael`, `bancoo`, `bancoboom`, or any historical clone |
+| **ONLY GitHub repo** | `https://github.com/waelzaid66-max/bancoboomstor` |
+| **Do NOT use** | `banco-with-wael`, `bancoo`, `bancoboom`, or any pre-consolidation clone |
 | **Compose file path** | `docker-compose.coolify.yml` |
 | **Coolify resource type** | **Docker Compose** (not Dockerfile, not Nixpacks, not Static) |
-| **Release authority** | `release/production/manifest.json` + `release/production/COOLIFY_RUNBOOK.md` |
+| **Branch to deploy** | **`main`**, only after CI is green on the exact approved release SHA |
 | **Live cutover proof** | `pnpm ops:live-cutover` (must exit 0 before Live Production Ready) |
 | **Mobile** | Expo EAS (`com.bancooom.app`) — **not** a Coolify container |
 
 ---
 
-## 1. Create the Coolify resource
+## 1. Create the Coolify resource (exact clicks)
 
 1. Coolify → **New Resource** → **Docker Compose**
-2. Connect Git → select **`waelzaid66-max/bancoboom-v-next-`**
+2. Connect Git → select **`waelzaid66-max/bancoboomstor`**
 3. Compose path = **`docker-compose.coolify.yml`**
-4. Source branch = **`canonical/vnext-assembly`** while assembling; final production deployment must be pinned to the approved exact SHA/image digest
+4. Branch = **`main`**
 5. Save — **do not Deploy yet**
-6. Before any build, run `pnpm release:verify`; a failure is a hard stop
 
 ---
 
-## 2. Name map
+## 2. Name map (stop the confusion)
 
 | Compose **service** name | Docker **image** name | What it actually is | Public port |
 |--------------------------|------------------------|---------------------|-------------|
@@ -38,15 +35,18 @@
 | `banco-website` | `banco-website:latest` | Canonical Next marketing/consumer | **3001** host |
 | `web` | `banco-web-static:latest` | **Nginx** = landing + `/market/` + `/admin/` + SEO + `/.well-known/` + `/api/` proxy | **80** |
 
-`web` = nginx static front. `banco-web` = Next.js. They are different services.
+**Critical:** service `web` ≠ image name containing “web” in a vague sense.
+`web` = nginx static front. `banco-web` = Next.js. Different things.
 
 Ignore for Coolify: root `Dockerfile`, `deploy/aws/*`, `deploy/gcp/*`.
 
 ---
 
-## 3. Domain mapping
+## 3. Domain mapping — recommended first deploy (single origin)
 
-Map the apex to service **`web`** port **80** for the recommended single-origin layout.
+Map your apex (e.g. `banco.today`) to service **`web`** port **80**.
+
+That one origin gives you:
 
 | Path | Serves |
 |------|--------|
@@ -54,71 +54,149 @@ Map the apex to service **`web`** port **80** for the recommended single-origin 
 | `/market/` | Dealer OS |
 | `/admin/` | Admin OS |
 | `/api/` | Proxied to `api:8080` |
-| `/l/` `/listing/` `/sitemap.xml` `/robots.txt` | Proxied to API |
-| `/.well-known/` | AASA + assetlinks |
+| `/l/` `/listing/` `/sitemap.xml` `/robots.txt` | Proxied to API (share/SEO — not the SPA) |
+| `/.well-known/` | AASA + assetlinks (replace `REPLACE_*` later) |
 | `/nginx-health` | Liveness |
 
-The default Compose services do not wait for the manual migration profile. Do not use one-click/default Deploy before committed migrations have succeeded. `banco-web` remains profile-gated (`legacy-banco-web`).
+The ungated default Compose set is `postgres` + `api` + `banco-website` +
+`web`. **Do not use the one-click/default Deploy before committed migrations
+have succeeded**: `api` depends on Postgres health, not on the manual `migrate`
+profile. Follow the controlled order in §5. Frozen twin `banco-web` is
+**profile-gated** (`legacy-banco-web`) — do not enable unless you still need the
+old Next twin.
+
+Optional later (split origins):
+
+| Service | Example host |
+|---------|----------------|
+| `api` | `api.banco.today` |
+| `banco-website` | marketing host |
+| `banco-web` | only with `COMPOSE_PROFILES=legacy-banco-web` |
+
+Do **not** start by putting the apex on `banco-website` and `web` on a random static subdomain unless you already understand Traefik path routing — that caused past confusion.
 
 ---
 
-## 4. Environment variables
+## 4. Environment variables (set BEFORE first Deploy)
 
-Set required values in Coolify before the first build. Never commit values.
+### Hard-required (API will not stay up without these)
 
-Required API/storage inputs include:
+```
+POSTGRES_PASSWORD=<strong>
+CLERK_SECRET_KEY=sk_live_...
+SESSION_SECRET=<32+ random>
+PAYMENT_CONFIG_ENCRYPTION_KEY=<32+ hex>
+OBJECT_STORAGE_PROVIDER=s3
+AWS_REGION=<region>
+S3_BUCKET=<bucket>
+AWS_ACCESS_KEY_ID=<key>
+AWS_SECRET_ACCESS_KEY=<secret>
+PUBLIC_OBJECT_SEARCH_PATHS=<public prefix path>
+PRIVATE_OBJECT_DIR=<private prefix path>
+```
 
-`POSTGRES_PASSWORD` · `CLERK_SECRET_KEY` · `SESSION_SECRET` · `PAYMENT_CONFIG_ENCRYPTION_KEY` · `OBJECT_STORAGE_PROVIDER=s3` · `AWS_REGION` · `S3_BUCKET` · `AWS_ACCESS_KEY_ID` · `AWS_SECRET_ACCESS_KEY` · `PUBLIC_OBJECT_SEARCH_PATHS` · `PRIVATE_OBJECT_DIR`
+Notes:
 
-Required canonical-site/SPAs build inputs include:
+- Compose builds `DATABASE_URL` from `POSTGRES_*` — you do **not** need a separate `DATABASE_URL` for this Coolify compose.
+- Never set `OBJECT_STORAGE_PROVIDER=replit` on Coolify (API refuses start).
 
-`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` · `VITE_CLERK_PUBLISHABLE_KEY` · `BANCO_WEBSITE_URL`
+### Build-time (bake into JS — set before first build)
 
-See `release/production/ENVIRONMENT_CONTRACT.md` for the complete name-level contract.
+```
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...
+VITE_CLERK_PUBLISHABLE_KEY=pk_live_...   # same publishable key for Vite SPAs
+BANCO_WEBSITE_URL=https://<your-apex-or-marketing-host>
+VITE_WEB_URL=https://<your-apex>         # recommended — landing DomainRouter absolute hops
+# Only if COMPOSE_PROFILES includes legacy-banco-web:
+# BANCO_WEB_URL=https://<legacy-next-host>
+```
+
+Recommended for CORS / Paymob / proxy later:
+
+```
+CORS_ALLOWED_ORIGINS=https://banco.today,https://www.banco.today
+PUBLIC_API_BASE_URL=https://banco.today
+PUBLIC_APP_URL=https://banco.today
+TRUST_PROXY_HOPS=2
+```
+
+Full reference: `docs/DEPLOY_COOLIFY.md`.
 
 ---
 
-## 5. Build + migrate + start order
+## 5. Deploy + migrate order
 
-Pin Coolify's checkout to the exact approved release SHA and build without starting application traffic:
+### Build the exact release without starting it
+
+Fill env and pin Coolify's checkout to the exact approved release SHA. From the
+stack terminal/SSH, build the release images without starting the default
+services:
 
 ```bash
 docker compose -f docker-compose.coolify.yml build migrate api banco-website web
 ```
 
-Then:
+### Controlled service start
 
-1. Start only `postgres` and wait for `pg_isready`.
-2. Fresh database: run committed migrations directly.
-3. Existing pre-journal database: independently prove schema equivalence to the exact release migration state before any one-time baseline.
-4. Run:
+1. Start only `postgres` and wait until it is healthy (`pg_isready`).
+2. Run the manual committed migrations from that same exact-SHA checkout:
 
 ```bash
 docker compose -f docker-compose.coolify.yml --profile migrate run --rm migrate
 ```
 
-5. Start `api`; require `/api/readyz = 200`.
-6. Start `banco-website` and `web`; start `banco-web` only if explicitly required.
-7. Verify public routes and run live cutover smoke.
+A fresh empty database runs that command directly. For an existing pre-journal
+database, independently prove its live schema is equivalent to the exact
+committed migration state for the release SHA, then run
+`pnpm --filter @workspace/db run baseline` once before `migrate`; a non-empty
+database is not equivalence proof. Full policy:
+`lib/db/MIGRATIONS.md`.
+
+3. Start `api`, wait for **`/api/readyz`**, then start `banco-website` and `web`
+   (plus profile-gated `banco-web` only if explicitly required).
+4. Smoke after DNS points here:
+
+```bash
+curl -fsS https://<apex>/nginx-health
+curl -fsS https://<apex>/api/readyz
+curl -fsS https://<apex>/.well-known/assetlinks.json
+pnpm ops:live-cutover -- --base https://<apex> --www https://www.<apex> --allow-placeholders
+```
+
+See also `OPS_GO_LIVE_CHECKLIST.md` and `reports/production-verification/56-LIVE-CUTOVER-BASELINE.md`.
 
 ---
 
-## 6. Mobile
+## 6. Mobile (separate from Coolify)
 
-Package: **`com.bancooom.app`** · scheme **`bancooom`** · name **`BANCO`**.
+Package: **`com.bancooom.app`** · scheme **`bancooom`** · name **`BANCO`**
 
-Mobile is built and distributed through EAS, not Coolify. The mobile build must point to the same certified API release environment and must be verified on physical Android and iOS devices before Production GO.
+EAS dashboard must bake at least:
+
+- `EXPO_PUBLIC_DOMAIN` or `EXPO_PUBLIC_API_BASE_URL`
+- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `EXPO_PUBLIC_PUBLIC_APP_URL`
+- `EXPO_PUBLIC_ROUTER_ORIGIN`
+
+See `release/EAS_BUILD.md`.
 
 ---
 
-## 7. Authority
+## 7. If something “looks broken”
 
-- Single production assembly: `release/production/`
-- Machine-readable manifest: `release/production/manifest.json`
-- Coolify runbook: `release/production/COOLIFY_RUNBOOK.md`
-- Environment contract: `release/production/ENVIRONMENT_CONTRACT.md`
-- Source gate: `pnpm release:verify`
+| Symptom | Likely cause |
+|---------|----------------|
+| API never healthy | Missing required env / S3 / Clerk secret |
+| Next routes 503 auth | Missing `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` at **build** time |
+| Admin/dealer white error | Missing `VITE_CLERK_PUBLISHABLE_KEY` at **build** time |
+| Wrong site on apex | Apex mapped to `banco-website` instead of `web` |
+| Uploads fail | S3 env incomplete |
+| Deep links fail | DNS not on Coolify yet + `REPLACE_*` still in well-known |
 
-Historical deployment documentation remains provenance only when it conflicts with this release assembly.
+---
 
-Run `npm run build`.
+## 8. Authority
+
+- SoT doc: `docs/DEPLOYMENT_SOURCE_OF_TRUTH.md`
+- Current RC evidence: `audit/reports/RC1-VALIDATION-2026-08-09.md`
+- Pre-consolidation repositories are **not** Coolify SoT.
