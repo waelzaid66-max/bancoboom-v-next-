@@ -62,21 +62,31 @@ const operatorFiles = [
   "release/production/COOLIFY_RUNBOOK.md",
 ];
 
-const forbiddenPatterns = [
-  /waelzaid66-max\/bancoboomstor/gi,
-  /\brepo\s+[`'"]?bancoboomstor\b/gi,
-  /repository\s*(url)?\s*[:=|]\s*`?https:\/\/github\.com\/waelzaid66-max\/bancoboomstor/gi,
-  /ONLY deploy SoT repository[^\n]*bancoboomstor/gi,
+// Fail only when the historical repository is presented as an ACTIVE source.
+// Negative statements such as "do not deploy bancoboomstor" and historical
+// provenance are intentionally allowed. Broad raw-name matching caused correct
+// stop conditions to fail the gate.
+const forbiddenAuthorityPatterns = [
+  /ONLY\s+GitHub\s+repo[^\n]*bancoboomstor/gi,
+  /ONLY\s+deploy\s+SoT\s+repository[^\n]*bancoboomstor/gi,
+  /SoT\s+repo(?:\s+only)?[^\n]*bancoboomstor/gi,
+  /Git\s+repo\s*=\s*[^\n]*bancoboomstor/gi,
+  /Repository\s+URL\s*\|[^\n]*bancoboomstor/gi,
+  /Connect\s+Git[^\n]*bancoboomstor/gi,
+  /Select\s+the\s+[`'\"]?(?:waelzaid66-max\/)?bancoboomstor\b/gi,
+  /\brepo\s+[`'\"]?(?:waelzaid66-max\/)?bancoboomstor\b/gi,
 ];
 
 for (const relativePath of operatorFiles) {
   const fullPath = path.join(root, relativePath);
   if (!fs.existsSync(fullPath)) continue;
   const text = fs.readFileSync(fullPath, "utf8");
-  for (const pattern of forbiddenPatterns) {
+  for (const pattern of forbiddenAuthorityPatterns) {
     pattern.lastIndex = 0;
     if (pattern.test(text)) {
-      failures.push(`historical deploy source is still live in ${relativePath}: ${pattern}`);
+      failures.push(
+        `historical deploy source is still presented as live authority in ${relativePath}: ${pattern}`,
+      );
     }
   }
 }
