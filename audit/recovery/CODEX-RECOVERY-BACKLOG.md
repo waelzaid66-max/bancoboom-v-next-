@@ -39,7 +39,7 @@ without repository/branch/SHA/blob/path/test evidence remains `UNPROVEN`.
 | P0 | Four account journeys | source indicates four account families; exact policies need matrix | `ALREADY_PRESERVED` source, behavior `UNPROVEN` | Signup→delete matrix and live Clerk/KYC |
 | P1 | Publishing/listings/media | current hardening plus historical UI/routes | `UNPROVEN` until page inventory | Create/edit/publish/storage journeys |
 | P1 | Payments/financing | current source hardening | `ALREADY_PRESERVED` source | PostgreSQL, Paymob, FI/admin lifecycle |
-| P1 | Admin/Dealer/Web | current workspaces and historical reports | `UNPROVEN` completeness | Route/permission/production journey inventory |
+| P1 | Admin/Dealer/Web | current workspaces and historical reports; Dealer listing sort/cursor correction `8396b39` | Completeness remains `UNPROVEN`; the listing-management `created_at/price/views/leads` sort plus stable keyset cursor slice is `MODERNIZED/BUILD_TESTED` only | Committed PostgreSQL journey, immutable-SHA CI, then route/permission/production journey inventory |
 
 ## Unresolved Codex anchors
 
