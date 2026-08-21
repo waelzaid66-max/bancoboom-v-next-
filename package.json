@@ -18,6 +18,7 @@
     "ops:website-staging-smoke": "node scripts/website-staging-smoke.mjs",
     "ops:website-soft-launch-prep": "node scripts/website-soft-launch-prep-audit.mjs",
     "ops:live-cutover": "node scripts/ops-live-cutover-check.mjs",
+    "ops:deployment-sot-guard": "node scripts/deployment-sot-guard.mjs",
     "confidence": "node scripts/production-confidence-check.mjs",
     "security:audit": "node scripts/dependency-security-gate.mjs",
     "workspace:verify": "node scripts/workspace-verify.mjs"
