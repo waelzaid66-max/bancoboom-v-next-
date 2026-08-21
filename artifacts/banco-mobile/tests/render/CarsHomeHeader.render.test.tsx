@@ -286,7 +286,7 @@ describe("CarsHomeHeader", () => {
       marginTop: 0,
     });
     expect(view.getByTestId("icon-list")).toBeTruthy();
-    expect(view.getByTestId("cars-header-map")).toHaveAccessibilityState({
+    expect(view.getByTestId("cars-header-map").props.accessibilityState).toMatchObject({
       selected: true,
     });
     expect(view.getByTestId("section-search-open")).toBeTruthy();
