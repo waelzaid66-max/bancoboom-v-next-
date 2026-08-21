@@ -89,19 +89,6 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     const setLang = (l: Lang) => {
       setLangState(l);
       AsyncStorage.setItem(STORAGE_KEY, l).catch(() => {});
-      // TODO(lang-sync): also PATCH /v1/me with { language: l }.
-      //
-      // The server side is done and live: users.language exists, UpdateMeSchema
-      // accepts it, updateUserProfile persists it, and EmailService resolves the
-      // recipient's language from it. What is missing is only the generated
-      // client — `language` has to be added to the PATCH /v1/me request body in
-      // lib/api-spec/openapi.yaml and orval re-run, or `updateMe({ language })`
-      // will not type-check.
-      //
-      // Deliberately not called yet rather than shipped broken: until codegen
-      // runs, every email still resolves to Arabic exactly as it does today, so
-      // nothing regresses — the English templates simply stay unreachable from
-      // this app for one more step.
     };
 
     const t = (key: string, vars?: Record<string, string | number>) => {

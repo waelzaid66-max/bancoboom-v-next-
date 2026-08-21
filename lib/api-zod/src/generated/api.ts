@@ -143,11 +143,12 @@ export const GetMeResponse = zod.object({
 
 
 /**
- * @summary Update current user — phone and optional Banco Business upgrade
+ * @summary Update current user — language, phone, and optional Banco Business upgrade
  */
 export const UpdateMeBody = zod.object({
   "account_type": zod.enum(['individual', 'dealer', 'company', 'financial_institution']).optional().describe('Account type chosen at onboarding. Server is authoritative for the resulting role (individual\/dealer\/company\/financial_institution); a client can never request admin\/enterprise. A financial_institution must still pass verification before its financing features unlock.'),
   "phone": zod.string().nullish(),
+  "language": zod.enum(['ar', 'en']).optional().describe('Preferred language for server-written content such as email.'),
   "business": zod.object({
   "activity_type": zod.enum(['car_dealer', 'real_estate_developer', 'factory', 'supplier', 'financial_institution']),
   "business_name": zod.string(),

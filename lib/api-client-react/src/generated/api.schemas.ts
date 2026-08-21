@@ -2620,6 +2620,17 @@ export const UpdateMeBodyAccountType = {
   financial_institution: 'financial_institution',
 } as const;
 
+/**
+ * Preferred language for server-written content such as email.
+ */
+export type UpdateMeBodyLanguage = typeof UpdateMeBodyLanguage[keyof typeof UpdateMeBodyLanguage];
+
+
+export const UpdateMeBodyLanguage = {
+  ar: 'ar',
+  en: 'en',
+} as const;
+
 export type UpdateMeBodyBusinessActivityType = typeof UpdateMeBodyBusinessActivityType[keyof typeof UpdateMeBodyBusinessActivityType];
 
 
@@ -2673,6 +2684,8 @@ export type UpdateMeBody = {
   /** Account type chosen at onboarding. Server is authoritative for the resulting role (individual/dealer/company/financial_institution); a client can never request admin/enterprise. A financial_institution must still pass verification before its financing features unlock. */
   account_type?: UpdateMeBodyAccountType;
   phone?: string | null;
+  /** Preferred language for server-written content such as email. */
+  language?: UpdateMeBodyLanguage;
   /** When present, upgrades the account to a Banco Business (dealer) seller. */
   business?: UpdateMeBodyBusiness;
 };

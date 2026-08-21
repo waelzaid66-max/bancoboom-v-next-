@@ -943,7 +943,7 @@ export const getUpdateMeUrl = () => {
 }
 
 /**
- * @summary Update current user — phone and optional Banco Business upgrade
+ * @summary Update current user — language, phone, and optional Banco Business upgrade
  */
 export const updateMe = async (updateMeBody: UpdateMeBody, options?: RequestInit): Promise<UpdateMe200> => {
 
@@ -991,7 +991,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type UpdateMeMutationError = ErrorType<unknown>
 
     /**
- * @summary Update current user — phone and optional Banco Business upgrade
+ * @summary Update current user — language, phone, and optional Banco Business upgrade
  */
 export const useUpdateMe = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMe>>, TError,{data: BodyType<UpdateMeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}

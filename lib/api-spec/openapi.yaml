@@ -3923,7 +3923,7 @@ paths:
 
     patch:
       operationId: updateMe
-      summary: Update current user — phone and optional Banco Business upgrade
+      summary: Update current user — language, phone, and optional Banco Business upgrade
       tags: [me]
       security:
         - ClerkAuth: []
@@ -3941,6 +3941,10 @@ paths:
                 phone:
                   type: string
                   nullable: true
+                language:
+                  type: string
+                  enum: [ar, en]
+                  description: Preferred language for server-written content such as email.
                 business:
                   type: object
                   description: When present, upgrades the account to a Banco Business (dealer) seller.

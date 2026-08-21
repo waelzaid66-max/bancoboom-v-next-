@@ -24,6 +24,7 @@
     "test:section-guard": "node --test tests/section-miniapp-guard.test.mjs",
     "test:materials-core": "node --test tests/materials-core-guard.test.mjs",
     "test:i18n": "node --test tests/i18n-usage.test.mjs",
+    "test:language-sync": "node --test tests/language-sync-guard.test.mjs",
     "test:accounts": "node --test tests/accounts-clerk-journey.test.mjs",
     "test:notification-routing": "node --test tests/notification-routing.test.mjs",
     "test:create-market": "node --test tests/create-listing-market-guard.test.mjs",
@@ -42,7 +43,7 @@
     "test:section-neutrals": "node --test tests/section-neutrals-guard.test.mjs",
     "test:render-coverage": "node --test tests/render-coverage-guard.test.mjs",
     "test:render": "jest --runInBand",
-    "test": "pnpm run test:avatar-initial && pnpm run test:presence-privacy && pnpm run test:assistant-identity && pnpm run test:icons && pnpm run test:lib && pnpm run test:media-policy && pnpm run test:media-scale && pnpm run test:resilience && pnpm run test:universal-links && pnpm run test:session-restore && pnpm run test:auth-routes && pnpm run test:section-guard && pnpm run test:materials-core && pnpm run test:i18n && pnpm run test:accounts && pnpm run test:notification-routing && pnpm run test:create-market && pnpm run test:ui-density && pnpm run test:stay-honesty && pnpm run test:car-hero-honesty && pnpm run test:retired-red && pnpm run test:messenger-wiring && pnpm run test:production-wiring && pnpm run test:import-honesty && pnpm run test:import-docs && pnpm run test:scale && pnpm run test:cdn && pnpm run test:map-chrome && pnpm run test:geo-area && pnpm run test:section-neutrals && pnpm run test:render-coverage && pnpm run test:render"
+    "test": "pnpm run test:avatar-initial && pnpm run test:presence-privacy && pnpm run test:assistant-identity && pnpm run test:icons && pnpm run test:lib && pnpm run test:media-policy && pnpm run test:media-scale && pnpm run test:resilience && pnpm run test:universal-links && pnpm run test:session-restore && pnpm run test:auth-routes && pnpm run test:section-guard && pnpm run test:materials-core && pnpm run test:i18n && pnpm run test:language-sync && pnpm run test:accounts && pnpm run test:notification-routing && pnpm run test:create-market && pnpm run test:ui-density && pnpm run test:stay-honesty && pnpm run test:car-hero-honesty && pnpm run test:retired-red && pnpm run test:messenger-wiring && pnpm run test:production-wiring && pnpm run test:import-honesty && pnpm run test:import-docs && pnpm run test:scale && pnpm run test:cdn && pnpm run test:map-chrome && pnpm run test:geo-area && pnpm run test:section-neutrals && pnpm run test:render-coverage && pnpm run test:render"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

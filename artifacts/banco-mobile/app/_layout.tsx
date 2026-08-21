@@ -28,6 +28,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { logClientCrash, installGlobalCrashHandler } from "@/lib/crashLog";
 import { BiometricProvider } from "@/context/BiometricContext";
 import { LanguageProvider } from "@/context/LanguageContext";
+import { LanguagePreferenceSync } from "@/context/LanguagePreferenceSync";
 import {
   MessageOutboxProvider,
   useMessageOutbox,
@@ -470,6 +471,7 @@ export default function RootLayout() {
                       <BiometricProvider>
                         <MessageOutboxProvider>
                           <AuthTokenBridge />
+                          <LanguagePreferenceSync />
                           <SoundProvider>
                             <PushNotificationsBridge />
                             <GestureHandlerRootView style={{ flex: 1 }}>

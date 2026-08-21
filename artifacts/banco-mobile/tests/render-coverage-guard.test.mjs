@@ -28,6 +28,13 @@ const RENDER_CRITICAL = [
     claim: "body-only chat attempts persist before transport and never cross Clerk identities",
   },
   {
+    source: "context/LanguagePreferenceSync.tsx",
+    symbol: "LanguagePreferenceSync",
+    suite: "tests/render/LanguagePreferenceSync.render.test.tsx",
+    staticGuard: "tests/language-sync-guard.test.mjs",
+    claim: "authenticated language writes are authorized and serialized so the newest preference wins",
+  },
+  {
     source: "components/search/car/CarsHomeHeader.tsx",
     symbol: "CarsHomeHeader",
     suite: "tests/render/CarsHomeHeader.render.test.tsx",
