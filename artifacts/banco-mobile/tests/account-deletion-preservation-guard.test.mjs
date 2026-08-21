@@ -23,7 +23,11 @@ test("account deletion keeps both existing journeys and teardown capabilities", 
     "signOut",
     "router.replace",
   ]) {
-    assert.match(settings, new RegExp(`\\b${required.replace(".", "\\.")}\\b`), `${required} must remain wired`);
+    assert.match(
+      settings,
+      new RegExp(`\\b${required.replace(".", "\\.")}\\b`),
+      `${required} must remain wired`,
+    );
   }
 });
 
@@ -43,7 +47,7 @@ test("MessageOutbox keeps suspend, resume, purge and owner-bound safety semantic
   assert.match(outbox, /messageOutboxStorageKey/);
 });
 
-test("terminal-delete repair must split failure domains, not remove cleanup", () => {
+test("terminal-delete repair preserves every post-delete cleanup capability", () => {
   assert.match(
     settings,
     /await\s+purgeAfterAccountDeletion\(\)\.catch\(/,
@@ -51,10 +55,27 @@ test("terminal-delete repair must split failure domains, not remove cleanup", ()
   );
   assert.match(settings, /await\s+unregisterCachedPushTokenBestEffort\(\)/);
   assert.match(settings, /await\s+signOut\(\)/);
+  assert.match(settings, /router\.replace\("\/\(tabs\)"\)/);
 
   assert.match(
     settings,
     /resumeAfterAccountDeletionFailure\s*\(/,
     "pre-delete/API failure must retain a resume path",
+  );
+});
+
+test("terminal state belongs to the existing purge authority, not a new duplicate flag", () => {
+  const prepareStart = outbox.indexOf("const prepareForSignOut = useCallback");
+  assert.notEqual(prepareStart, -1);
+  const resumeStart = outbox.indexOf("const resumeAfterSignOutFailure", prepareStart);
+  assert.notEqual(resumeStart, -1);
+  const prepareBody = outbox.slice(prepareStart, resumeStart);
+
+  assert.match(prepareBody, /purgingRef\.current\s*=\s*true/);
+  assert.match(outbox, /purgeAfterAccountDeletion:\s*prepareForSignOut/);
+  assert.doesNotMatch(
+    outbox,
+    /accountDeletedRef|deleteTerminalRef|tombstonedRef/,
+    "do not add a second terminal-state authority when purgingRef already owns it",
   );
 });
