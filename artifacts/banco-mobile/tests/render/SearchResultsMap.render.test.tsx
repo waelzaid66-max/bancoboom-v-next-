@@ -1,11 +1,11 @@
 import React from "react";
 import { act, render } from "@testing-library/react-native";
-import { Alert, View } from "react-native";
+import { Alert } from "react-native";
 
 import { SearchResultsMap } from "@/components/search/SearchResultsMap";
 
 const mockGetMapClusters = jest.fn();
-let latestWebViewProps: Record<string, any> = {};
+let mockLatestWebViewProps: Record<string, any> = {};
 
 jest.mock("@workspace/api-client-react", () => ({
   getMapClusters: (...args: unknown[]) => mockGetMapClusters(...args),
@@ -16,7 +16,7 @@ jest.mock("react-native-webview", () => {
   const Native = jest.requireActual<typeof import("react-native")>("react-native");
   return {
     WebView: (props: Record<string, unknown>) => {
-      latestWebViewProps = props;
+      mockLatestWebViewProps = props;
       return ReactRuntime.createElement(Native.View, { testID: "mock-webview" });
     },
   };
@@ -83,9 +83,14 @@ jest.mock("@/components/search/mapHtml", () => ({
       })),
 }));
 
-jest.mock("@/components/search/MapOverlayChrome", () => ({
-  MapOverlayChrome: () => <View testID="mock-map-overlay-chrome" />,
-}));
+jest.mock("@/components/search/MapOverlayChrome", () => {
+  const ReactRuntime = jest.requireActual<typeof import("react")>("react");
+  const Native = jest.requireActual<typeof import("react-native")>("react-native");
+  return {
+    MapOverlayChrome: () =>
+      ReactRuntime.createElement(Native.View, { testID: "mock-map-overlay-chrome" }),
+  };
+});
 
 jest.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 20, right: 0, bottom: 10, left: 0 }),
@@ -136,7 +141,7 @@ const ITEM_B = {
 
 function bridge(type: string, extra: Record<string, unknown> = {}) {
   act(() => {
-    latestWebViewProps.onMessage({
+    mockLatestWebViewProps.onMessage({
       nativeEvent: { data: JSON.stringify({ type, ...extra }) },
     });
   });
@@ -159,7 +164,7 @@ describe("SearchResultsMap bootstrap state", () => {
   let alertSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    latestWebViewProps = {};
+    mockLatestWebViewProps = {};
     mockGetMapClusters.mockReset();
     alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
   });
