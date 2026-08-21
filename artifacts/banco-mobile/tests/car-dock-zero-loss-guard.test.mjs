@@ -18,6 +18,10 @@ function codeOnly(src) {
     .replace(/^\s*\/\/.*$/gm, "");
 }
 
+function countLiteral(src, needle) {
+  return src.split(needle).length - 1;
+}
+
 test("CAR dock keeps every browse capability mounted exactly where the unified header can reach it", () => {
   const host = codeOnly(section);
 
@@ -83,6 +87,39 @@ test("CAR results count label is preserved in list and map result modes", () => 
     countBlock,
     /!\s*\(\s*isCarSection\s*&&\s*mapMode\s*\)/,
     "CAR map mode may compact/reposition chrome but must not suppress the existing results count label",
+  );
+});
+
+test("CAR runtime seats remain single-owner after host migration", () => {
+  const host = codeOnly(section);
+  const dock = codeOnly(axes);
+
+  for (const id of [
+    "section-primary-strip",
+    "section-sort-cycle",
+    "section-listing-mode",
+    "section-engine-strip",
+    "car-brand-origin-strip",
+    "car-brand-strip",
+    "car-brand-btn",
+    "car-origin-strip",
+  ]) {
+    assert.equal(
+      countLiteral(dock, `testID=\"${id}\"`),
+      1,
+      `${id} must have exactly one static seat in CarBrowseAxes`,
+    );
+  }
+
+  assert.equal(
+    countLiteral(host, "controlsSlot={carControlsSlot}"),
+    1,
+    "SectionSearchApp must inject the CAR controls slot exactly once",
+  );
+  assert.equal(
+    countLiteral(host, "<CarBrowseAxes"),
+    1,
+    "SectionSearchApp must construct exactly one CAR browse-axes tree",
   );
 });
 
