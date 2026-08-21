@@ -1,6 +1,6 @@
 # BANCO BOOM NEXT — Build Provenance Audit
 
-Audited on the production assembly branch created from canonical `3951c729`.
+Audited on the production assembly branch after reconciliation with canonical `4f2c81cc553938e808a98adb84d00ecfc76732c5`.
 
 ## Proven source boundary
 
