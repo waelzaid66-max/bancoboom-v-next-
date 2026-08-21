@@ -9,7 +9,6 @@ const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 
 const section = read("components/search/SectionSearchApp.tsx");
 const header = read("components/search/car/CarsHomeHeader.tsx");
-const axes = read("components/search/car/CarBrowseAxes.tsx");
 const carScreen = read("app/section/car.tsx");
 
 function codeOnly(src) {
@@ -52,6 +51,48 @@ test("CAR dock keeps every browse capability mounted exactly where the unified h
   );
 });
 
+test("CAR host migration must move the existing three runtime strips, not invent a second control system", () => {
+  const host = codeOnly(section);
+  const slot = host.match(
+    /const\s+carControlsSlot\s*=\s*isCarSection\s*\?\s*\([\s\S]*?\)\s*:\s*null;/,
+  )?.[0] ?? "";
+
+  assert.ok(slot, "CAR host must define one parent-owned carControlsSlot");
+  assert.doesNotMatch(
+    host,
+    /import\s+\{\s*CarBrowseAxes\s*\}/,
+    "CAR migration must not replace existing host controls with a second CarBrowseAxes implementation",
+  );
+  assert.doesNotMatch(
+    slot,
+    /<CarBrowseAxes\b/,
+    "controlsSlot must contain the existing runtime strips, not a recreated control component",
+  );
+
+  for (const id of [
+    "section-primary-strip",
+    "section-sort-cycle",
+    "section-listing-mode",
+    "section-engine-strip",
+    "car-brand-origin-strip",
+    "car-brand-strip",
+    "car-brand-btn",
+    "car-origin-strip",
+  ]) {
+    assert.ok(slot.includes(id), `${id} must be physically moved into carControlsSlot`);
+    assert.equal(
+      countLiteral(host, id),
+      1,
+      `${id} must keep exactly one static runtime seat after the CAR migration`,
+    );
+  }
+
+  assert.match(slot, /<MarketCountryButton\b/, "the existing market/currency control must move into the slot");
+  assert.match(slot, /axisShape\(chrome,\s*"listingMode"\)/, "listing-mode rendering must keep the existing sectionChrome contract");
+  assert.match(slot, /axisShape\(chrome,\s*"engines"\)/, "engine rendering must keep the existing sectionChrome contract");
+  assert.match(slot, /Haptics\.selectionAsync\(\)/, "moved controls must retain existing haptic behavior");
+});
+
 test("CAR host migration cannot erase dormant non-CAR property chrome", () => {
   const host = codeOnly(section);
   const reTypeBlock = host.match(
@@ -87,39 +128,6 @@ test("CAR results count label is preserved in list and map result modes", () => 
     countBlock,
     /!\s*\(\s*isCarSection\s*&&\s*mapMode\s*\)/,
     "CAR map mode may compact/reposition chrome but must not suppress the existing results count label",
-  );
-});
-
-test("CAR runtime seats remain single-owner after host migration", () => {
-  const host = codeOnly(section);
-  const dock = codeOnly(axes);
-
-  for (const id of [
-    "section-primary-strip",
-    "section-sort-cycle",
-    "section-listing-mode",
-    "section-engine-strip",
-    "car-brand-origin-strip",
-    "car-brand-strip",
-    "car-brand-btn",
-    "car-origin-strip",
-  ]) {
-    assert.equal(
-      countLiteral(dock, `testID=\"${id}\"`),
-      1,
-      `${id} must have exactly one static seat in CarBrowseAxes`,
-    );
-  }
-
-  assert.equal(
-    countLiteral(host, "controlsSlot={carControlsSlot}"),
-    1,
-    "SectionSearchApp must inject the CAR controls slot exactly once",
-  );
-  assert.equal(
-    countLiteral(host, "<CarBrowseAxes"),
-    1,
-    "SectionSearchApp must construct exactly one CAR browse-axes tree",
   );
 });
 
@@ -175,55 +183,16 @@ test("CAR unified header retains identity, search, map/list, save, filters, cate
   );
 });
 
-test("CAR browse axes preserve market, sort, offer, engines, brand and origin with haptics", () => {
-  for (const id of [
-    "cars-host-axes",
-    "section-primary-strip",
-    "section-sort-cycle",
-    "section-listing-mode",
-    "section-engine-strip",
-    "car-brand-origin-strip",
-    "car-brand-strip",
-    "car-brand-btn",
-    "car-origin-strip",
-  ]) {
-    assert.ok(axes.includes(`testID=\"${id}\"`), `CarBrowseAxes must preserve ${id}`);
-  }
+test("CAR section-specific chrome contract remains source-owned by SectionSearchApp", () => {
+  const host = codeOnly(section);
 
-  assert.match(
-    axes,
-    /testID=\{`section-listing-mode-\$\{mode\}`\}/,
-    "all/sale/buy listing-mode segments must keep stable test IDs",
-  );
-  assert.match(
-    axes,
-    /testID=\{`engine-\$\{engine\.key\}`\}/,
-    "every engine chip must keep a stable test ID",
-  );
-  assert.match(
-    axes,
-    /testID=\{`car-origin-\$\{value\}`\}/,
-    "all/local/imported origin controls must keep stable test IDs",
-  );
-  assert.match(axes, /<MarketCountryButton\b/, "country/currency selector must remain mounted");
-  assert.match(axes, /Haptics\.selectionAsync\(\)/, "dock interactions must retain haptic feedback");
-  assert.doesNotMatch(
-    codeOnly(axes).match(/root:\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? "",
-    /position:\s*["']absolute["']/,
-    "browse axes must stay in normal layout flow",
-  );
-});
-
-test("CAR section-specific chrome contract is preserved while the listing-mode control stays one compact pill", () => {
   assert.match(
     carScreen,
     /chrome=\{\{\s*listingMode:\s*"pill",\s*engines:\s*"chips"\s*\}\}/,
     "CAR screen must retain its own pill/chips chrome declaration",
   );
-  assert.match(axes, /listingPill:/, "listing mode must remain a single compact pill surface");
-  assert.match(
-    axes,
-    /listingSegmentActive:/,
-    "the pill must expose the selected state without hiding any option",
-  );
+  assert.match(host, /selectListingMode\s*=\s*\(mode:/, "listing-mode state authority must remain in SectionSearchApp");
+  assert.match(host, /selectEngine\s*=\s*\(key:/, "engine state authority must remain in SectionSearchApp");
+  assert.match(host, /selectOrigin\s*=\s*\(o:/, "origin state authority must remain in SectionSearchApp");
+  assert.match(host, /setCarPickerOpen\(true\)/, "brand-picker state authority must remain in SectionSearchApp");
 });
