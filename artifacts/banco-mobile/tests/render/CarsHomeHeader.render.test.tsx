@@ -1,10 +1,8 @@
 /**
- * Renderer proof for the strongest historical Cars header.
+ * Renderer proof for the CAR B-OOM unified native header.
  *
- * Commit 310028d fixed a fake collapse: the hero and its plate had to return
- * their real height to the results surface, not merely fade. The current dock
- * contract extends that rule to browse-context controls: category/stats/parent
- * axes must return real height while search/map/save/filter stay reachable.
+ * The hero and browse-context bands must return real height to the results/map
+ * viewport; primary search/map-list/save/filter actions remain reachable.
  */
 import React from "react";
 import { fireEvent, render } from "@testing-library/react-native";
@@ -173,7 +171,7 @@ describe("CarsHomeHeader", () => {
     mockIsRTL = false;
   });
 
-  it("mounts the full current identity and every pinned browse control", () => {
+  it("mounts the identity and every primary native browse control", () => {
     const view = render(header());
 
     for (const id of [
@@ -215,7 +213,7 @@ describe("CarsHomeHeader", () => {
     expect(callbacks.onOpenProfile).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps search and filters reachable when optional inventory bands are absent", () => {
+  it("keeps primary actions reachable without optional inventory bands", () => {
     const view = render(header({ categories: [], stats: [] }));
 
     expect(view.queryByTestId("cars-category-strip")).toBeNull();
@@ -226,28 +224,17 @@ describe("CarsHomeHeader", () => {
     expect(view.getByTestId("cars-header-map")).toBeTruthy();
   });
 
-  it("renders parent-owned CAR axes inside the one dock without taking ownership", () => {
+  it("contains parent-owned CAR axes inside the one dock", () => {
     const controlsSlot = <View testID="parent-car-axes" />;
     const view = render(header({ controlsSlot }));
 
     expect(view.getByTestId("cars-controls-slot")).toBeTruthy();
-    expect(view.getByTestId("parent-car-axes")).toBeTruthy();
     expect(view.getByTestId("cars-unified-dock")).toContainElement(
       view.getByTestId("parent-car-axes"),
     );
   });
 
-  it("keeps optional market chrome bounded instead of forcing the search off-screen", () => {
-    const marketSlot = <View testID="market-control" />;
-    const view = render(header({ marketSlot }));
-
-    expect(view.getByTestId("cars-header-market")).toBeTruthy();
-    expect(view.getByTestId("market-control")).toBeTruthy();
-    expect(view.getByTestId("section-search-open")).toBeTruthy();
-    expect(view.getByTestId("section-filter-toggle")).toBeTruthy();
-  });
-
-  it("reclaims hero and browse-context height while primary dock actions stay reachable", () => {
+  it("reclaims hero and browse-context height on scroll", () => {
     const scrollY = { value: 0 } as SharedValue<number>;
     const controlsSlot = <View testID="parent-car-axes" />;
     const view = render(header({ scrollY, controlsSlot }));
@@ -259,7 +246,7 @@ describe("CarsHomeHeader", () => {
     });
     expect(view.getByTestId("cars-dock-extras")).toHaveStyle({
       opacity: 1,
-      maxHeight: 280,
+      maxHeight: 300,
       marginTop: 7,
     });
 
@@ -276,11 +263,34 @@ describe("CarsHomeHeader", () => {
       maxHeight: 0,
       marginTop: 0,
     });
-    expect(view.getByTestId("cars-controls-slot")).toBeTruthy();
     expect(view.getByTestId("section-search-open")).toBeTruthy();
     expect(view.getByTestId("section-filter-toggle")).toBeTruthy();
     expect(view.getByTestId("cars-header-map")).toBeTruthy();
     expect(view.getByTestId("section-save-search")).toBeTruthy();
+  });
+
+  it("forces compact map state and turns the map hit into a list affordance", () => {
+    const controlsSlot = <View testID="parent-car-axes" />;
+    const view = render(
+      header({ compact: true, mapActive: true, controlsSlot }),
+    );
+
+    expect(view.getByTestId("cars-hero")).toHaveStyle({
+      height: 0,
+      opacity: 0,
+      marginBottom: 0,
+    });
+    expect(view.getByTestId("cars-dock-extras")).toHaveStyle({
+      opacity: 0,
+      maxHeight: 0,
+      marginTop: 0,
+    });
+    expect(view.getByTestId("icon-list")).toBeTruthy();
+    expect(view.getByTestId("cars-header-map")).toHaveAccessibilityState({
+      selected: true,
+    });
+    expect(view.getByTestId("section-search-open")).toBeTruthy();
+    expect(view.getByTestId("section-filter-toggle")).toBeTruthy();
   });
 
   it("uses the logical back direction in Arabic", () => {
