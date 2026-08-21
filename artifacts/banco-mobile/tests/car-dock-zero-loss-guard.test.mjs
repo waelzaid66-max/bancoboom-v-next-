@@ -49,8 +49,9 @@ test("CAR dock keeps every browse capability mounted exactly where the unified h
 });
 
 test("CAR unified header retains identity, search, map/list, save, filters, categories, stats, notifications and profile", () => {
+  assert.ok(header.includes("\"cars-home-header\""), "CarsHomeHeader must preserve cars-home-header identity");
+
   for (const id of [
-    "cars-home-header",
     "section-back",
     "cars-boom-brand",
     "cars-header-notifications",
