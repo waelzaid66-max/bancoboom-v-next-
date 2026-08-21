@@ -49,7 +49,6 @@ const HERO_PLATE = require("../../../assets/images/section-hero/car.png");
 
 const VOID = SECTION_NEUTRAL.void;
 const SECONDARY = SECTION_NEUTRAL.secondary;
-const SURFACE = SECTION_NEUTRAL.surface;
 const ACCENT = sectionAccent("car");
 const ACCENT_BRIGHT = "#FF3A40";
 const SNOW = SECTION_NEUTRAL.snow;
@@ -161,12 +160,7 @@ export function CarsHomeHeader({
 
   const topCollapse = useAnimatedStyle(() => {
     const p = scrollY
-      ? interpolate(
-          scrollY.value,
-          [0, COLLAPSE_SCROLL],
-          [0, 1],
-          Extrapolation.CLAMP,
-        )
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
       : 0;
     return {
       height: HEADER_EXPANDED + (HEADER_COLLAPSED - HEADER_EXPANDED) * p,
@@ -175,36 +169,21 @@ export function CarsHomeHeader({
 
   const logoCollapse = useAnimatedStyle(() => {
     const p = scrollY
-      ? interpolate(
-          scrollY.value,
-          [0, COLLAPSE_SCROLL],
-          [0, 1],
-          Extrapolation.CLAMP,
-        )
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
       : 0;
     return { transform: [{ scale: 1 + (LOGO_SCALE_MIN - 1) * p }] };
   });
 
   const poweredCollapse = useAnimatedStyle(() => {
     const opacity = scrollY
-      ? interpolate(
-          scrollY.value,
-          [0, COLLAPSE_SCROLL * 0.6],
-          [1, 0],
-          Extrapolation.CLAMP,
-        )
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL * 0.6], [1, 0], Extrapolation.CLAMP)
       : 1;
     return { opacity };
   });
 
   const heroCollapse = useAnimatedStyle(() => {
     const p = scrollY
-      ? interpolate(
-          scrollY.value,
-          [0, COLLAPSE_SCROLL],
-          [1, 0],
-          Extrapolation.CLAMP,
-        )
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [1, 0], Extrapolation.CLAMP)
       : 1;
     return {
       opacity: p,
@@ -216,12 +195,7 @@ export function CarsHomeHeader({
   const plateExpanded = HEADER_EXPANDED + HERO_MIN_HEIGHT;
   const plateCollapse = useAnimatedStyle(() => {
     const p = scrollY
-      ? interpolate(
-          scrollY.value,
-          [0, COLLAPSE_SCROLL],
-          [0, 1],
-          Extrapolation.CLAMP,
-        )
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
       : 0;
     return {
       height: plateExpanded + (HEADER_COLLAPSED - plateExpanded) * p,
@@ -230,24 +204,14 @@ export function CarsHomeHeader({
 
   const dockCollapse = useAnimatedStyle(() => {
     const marginTop = scrollY
-      ? interpolate(
-          scrollY.value,
-          [0, COLLAPSE_SCROLL],
-          [-DOCK_OVERLAP, 0],
-          Extrapolation.CLAMP,
-        )
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [-DOCK_OVERLAP, 0], Extrapolation.CLAMP)
       : -DOCK_OVERLAP;
     return { marginTop };
   });
 
   const liftCollapse = useAnimatedStyle(() => {
     const p = scrollY
-      ? interpolate(
-          scrollY.value,
-          [0, COLLAPSE_SCROLL],
-          [0, 1],
-          Extrapolation.CLAMP,
-        )
+      ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [0, 1], Extrapolation.CLAMP)
       : 0;
     return {
       shadowOpacity: 0.16 + 0.28 * p,
@@ -268,10 +232,7 @@ export function CarsHomeHeader({
       testID={slot === "scroll" ? "cars-hero-band" : "cars-home-header"}
     >
       {(showPinned || showScroll) && (
-        <Animated.View
-          style={[styles.shellPlate, plateCollapse]}
-          pointerEvents="none"
-        >
+        <Animated.View style={[styles.shellPlate, plateCollapse]} pointerEvents="none">
           <View style={styles.shellPlateImg}>
             <Image
               source={HERO_PLATE}
@@ -289,22 +250,14 @@ export function CarsHomeHeader({
                   <Stop offset="1" stopColor={VOID} stopOpacity="0.92" />
                 </LinearGradient>
               </Defs>
-              <Rect
-                x="0"
-                y="0"
-                width="100%"
-                height="100%"
-                fill="url(#carPlateFoot)"
-              />
+              <Rect x="0" y="0" width="100%" height="100%" fill="url(#carPlateFoot)" />
             </Svg>
           </View>
         </Animated.View>
       )}
 
       {showPinned && (
-        <Animated.View
-          style={[styles.topBar, { flexDirection: rowDir }, topCollapse]}
-        >
+        <Animated.View style={[styles.topBar, { flexDirection: rowDir }, topCollapse]}>
           <View style={[styles.topSide, { flexDirection: rowDir }]}>
             <Pressable
               onPress={onBack}
@@ -323,14 +276,8 @@ export function CarsHomeHeader({
           </View>
 
           <View style={styles.brandBlock} testID="cars-boom-brand">
-            <Animated.View
-              style={[styles.wordmarkRow, { flexDirection: rowDir }, logoCollapse]}
-            >
-              <Image
-                source={BOOM_LOGO}
-                style={styles.wordmarkBoom}
-                contentFit="contain"
-              />
+            <Animated.View style={[styles.wordmarkRow, { flexDirection: rowDir }, logoCollapse]}>
+              <Image source={BOOM_LOGO} style={styles.wordmarkBoom} contentFit="contain" />
               <AppText
                 style={styles.wordmarkCar}
                 numberOfLines={1}
@@ -340,9 +287,7 @@ export function CarsHomeHeader({
                 {t("search.discover.section.carBrand")}
               </AppText>
             </Animated.View>
-            <Animated.View
-              style={[styles.poweredRow, { flexDirection: rowDir }, poweredCollapse]}
-            >
+            <Animated.View style={[styles.poweredRow, { flexDirection: rowDir }, poweredCollapse]}>
               <AppText
                 style={styles.poweredLabel}
                 numberOfLines={1}
@@ -401,20 +346,8 @@ export function CarsHomeHeader({
                   <Stop offset="1" stopColor={ACCENT} stopOpacity="0" />
                 </RadialGradient>
               </Defs>
-              <Rect
-                x="0"
-                y="0"
-                width="100%"
-                height="100%"
-                fill="url(#carHeroGround)"
-              />
-              <Ellipse
-                cx="76%"
-                cy="52%"
-                rx="58%"
-                ry="72%"
-                fill="url(#carHeroKey)"
-              />
+              <Rect x="0" y="0" width="100%" height="100%" fill="url(#carHeroGround)" />
+              <Ellipse cx="76%" cy="52%" rx="58%" ry="72%" fill="url(#carHeroKey)" />
             </Svg>
           </View>
         </Animated.View>
@@ -457,19 +390,11 @@ export function CarsHomeHeader({
               )}
 
               {draftQuery.length > 0 ? (
-                <Pressable
-                  onPress={onClearQuery}
-                  hitSlop={8}
-                  testID="section-search-clear"
-                >
+                <Pressable onPress={onClearQuery} hitSlop={8} testID="section-search-clear">
                   <Feather name="x" size={16} color={ASH} />
                 </Pressable>
               ) : searchOpen ? (
-                <Pressable
-                  onPress={onCloseSearch}
-                  hitSlop={8}
-                  testID="section-search-close"
-                >
+                <Pressable onPress={onCloseSearch} hitSlop={8} testID="section-search-close">
                   <Feather name="x" size={16} color={ASH} />
                 </Pressable>
               ) : null}
@@ -571,10 +496,7 @@ export function CarsHomeHeader({
               testID="cars-stats-strip"
             >
               {stats.map((stat, index) => (
-                <View
-                  key={stat.key}
-                  style={[styles.statCell, { flexDirection: rowDir }]}
-                >
+                <View key={stat.key} style={[styles.statCell, { flexDirection: rowDir }]}>
                   {index > 0 ? <View style={styles.statDivider} /> : null}
                   <View style={{ alignItems: alignStart }}>
                     <AppText style={styles.statValue} numberOfLines={1}>
