@@ -1,8 +1,18 @@
 # Intake and priority order — `canonical @ 4f2c81c`
 
-Full intake of all agent work, reports and plans, followed by a precise priority order. Executed **2026-08-21 18:15 UTC**.
+Full intake of all agent work, reports and plans, followed by a precise priority order. Executed **2026-08-21 18:15 UTC**, **re-verified and corrected 18:50 UTC** — see the correction notice below.
 
-**Headline: canonical is healthy and every gate passes. But six divergent branches now hold 79 commits, the branch named `release` contains none of the other five, and two of them collide on a script name that no guard pins.**
+**Headline: canonical is healthy and every gate passes. But nine live branches now hold 101 commits, the branch named `release` contains none of the other eight, three branches are not even built on the current canonical, and two collide on a script name that no guard pins.**
+
+> ### ⚠️ Correction to this report's own first pass
+>
+> The 18:15 pass enumerated **six** branches / **79** commits and stated that *"canonical **is** an ancestor of every branch."* **Both statements were wrong**, and I found it by re-running the enumeration against a fresh `git fetch --all --prune` before delivering rather than trusting my first sweep.
+>
+> - **Three live branches were omitted:** `fix/recent-search-chrome` (11), `fix/maps-tile-failure-state-v2` (8), `fix/gate3-listing-moderation-authority` (2). The first sweep filtered on today's `-20260821` work in progress and dropped two branches whose last commit predates today's session, plus one created while the sweep ran.
+> - **The ancestry claim is false for three of them.** `fix/recent-search-chrome` and `fix/maps-tile-failure-state-v2` are built on `1ccdbac` (**8 commits behind** canonical); `fix/deployment-sot-next` is built on `3951c72` (**5 behind**). Canonical *is* an ancestor of the other six.
+> - `fix/deployment-sot-next` — **one of the two collision branches** — is one of the stale-base three. That makes §4 more urgent, not less.
+>
+> The count of code files on `fix/deployment-sot-next` was also wrong: **2**, not 21. §2–§5 below are the corrected figures. **Recorded rather than silently overwritten, so this audit is weighed rather than trusted.**
 
 ---
 
@@ -42,37 +52,58 @@ Two of my open findings are being worked directly: **full-workspace lint scope**
 | `audit/cross-repo-continuation-20260821` — accounts/FI, admin-dealer-web, listings-media, messenger residuals, EAS store readiness, baseline-adoption forensic | 10 |
 | `release/production-assembly-20260821` | 13 |
 
-**Pending branches, by weight:**
+**Pending branches, by weight** — every branch in the repository carrying commits above canonical, enumerated by execution, nothing filtered:
 
-| Branch | Commits above canonical | Code files touched |
-|---|---|---|
-| `release/production-assembly-20260821` | **34** | 18 |
-| `fix/db-baseline-adoption-20260821` | **18** | 9 |
-| `audit/current-truth-20260821` | 11 | docs only |
-| `audit/cross-repo-continuation-20260821` | 10 | docs only |
-| `fix/car-header-unified-dock-v2-20260821` | 4 | 2 |
-| `fix/deployment-sot-next-20260821` | 2 | 21 |
-| `fix/maps-bootstrap-error-20260821` | **0** — merged | — |
+| Branch | Commits above canonical | Files | Code files | Base |
+|---|---|---|---|---|
+| `release/production-assembly-20260821` | **34** | 18 | 5 | ✅ canonical |
+| `fix/db-baseline-adoption-20260821` | **18** | 9 | 8 | ✅ canonical |
+| `audit/current-truth-20260821` | 11 | 11 | **0** — docs | ✅ canonical |
+| `audit/cross-repo-continuation-20260821` | 11 | 11 | **0** — docs | ✅ canonical |
+| `fix/recent-search-chrome-20260821` | 11 | 5 | 5 | 🟠 `1ccdbac`, 8 behind |
+| `fix/maps-tile-failure-state-v2-20260821` | 8 | 5 | 5 | 🟠 `1ccdbac`, 8 behind |
+| `fix/car-header-unified-dock-v2-20260821` | 4 | 2 | 2 | ✅ canonical |
+| `fix/deployment-sot-next-20260821` | 2 | 2 | 2 | 🟠 `3951c72`, 5 behind |
+| `fix/gate3-listing-moderation-authority-20260821` | 2 | 2 | 1 | ✅ canonical |
+| **Live total** | **101** | | | |
+| `audit/independent-production-audit-2026-08-11` *(mine)* | 24 | 23 | **0** — docs | ✅ canonical |
+| `ci/final-rc-f45c32c` · `ci/final-rc-26b1fc0` | 1 each | **0** | 0 | stale — empty RC commits |
+| `fix/car-header-unified-dock-20260821` | 1 | 1 | 0 | superseded by `-v2` |
+| `maint/safe-batch-01` | 1 | 2 | 2 | superseded by `26b1fc0` |
+| `fix/maps-bootstrap-error-20260821` | **0** — merged | — | — | — |
 
-**79 commits are outstanding across six live branches.**
+**101 commits are outstanding across nine live branches.** Four more branches are stale or superseded and should be retired; my own audit branch is docs-only and merges cleanly at any time.
+
+**Two notes the table alone does not show:**
+
+- `fix/maps-tile-failure-state-v2` (PR #4) is **superseded** — the maps work landed on canonical via `5f44c86`, in a better form (Leaflet's native `tileerror` on a constant-derived layer, versus this branch's wrapper module with a hardcoded host). **Merging PR #4 now would regress canonical.** Close it, do not merge it.
+- `release/production-assembly` adds a **new workflow file**, `.github/workflows/release-assembly.yml`. With Actions dead at the platform layer (P0 ①), that workflow has never executed and cannot be assumed to work.
 
 ## 3 · 🟠 Structural finding — the topology is divergent, not stacked
 
-canonical **is** an ancestor of every branch, so all six build on the same base. **But no branch contains any other:**
+I tested containment **pairwise across all nine live branches — 72 ordered pairs.** The result is total divergence:
 
 ```
-release/production-assembly  ⊅  audit/current-truth
-                             ⊅  audit/cross-repo-continuation
-                             ⊅  fix/db-baseline-adoption
-                             ⊅  fix/car-header-unified-dock-v2
-                             ⊅  fix/deployment-sot-next
+no live branch is an ancestor of any other live branch
 ```
 
-**The branch named `release/production-assembly` holds 34 commits and excludes the other 45.** That name reads as "the assembled release candidate." It is not one — it is one work-stream among six.
+Not one pair. Nine parallel work-streams, none built on another's work.
 
-**Risk, stated plainly:** anyone treating that branch as the release, or tagging from it, ships without the baseline-adoption work (18 commits), the car-header work, the deployment SOT work, and both audit trails. Nothing currently prevents that; **tags are still 0**, so the mistake has not been made.
+**And six of the nine sit on canonical; three do not:**
 
-**Recommendation:** either rename it to its actual scope, or make it a genuine integration branch by merging the others into it. **Do not tag from it in its current state.**
+| Branch | Built on | Behind canonical |
+|---|---|---|
+| `fix/recent-search-chrome` | `1ccdbac` | **8 commits** |
+| `fix/maps-tile-failure-state-v2` | `1ccdbac` | **8 commits** |
+| `fix/deployment-sot-next` | `3951c72` | **5 commits** |
+
+Those three have not seen C-4 (language sync), the canonical-push CI triggers, the three new chain assertions, the dealer sort-cursor fix, or the lint cleanup. **A gate result measured on any of them is a result about an old tree.**
+
+**The branch named `release/production-assembly` holds 34 commits and excludes the other 67.** That name reads as "the assembled release candidate." It is not one — it is one work-stream among nine.
+
+**Risk, stated plainly:** anyone treating that branch as the release, or tagging from it, ships without the baseline-adoption work (18 commits), the recent-search chrome, the car-header work, the Gate-3 moderation authority, the deployment SOT work, and every audit trail. Nothing currently prevents that; **tags are still 0**, so the mistake has not been made.
+
+**Recommendation:** either rename it to its actual scope, or make it a genuine integration branch by merging the others into it. **Do not tag from it in its current state.** And **rebase the three stale-base branches onto canonical before measuring anything on them.**
 
 ## 4 · 🔴 Concrete collision — two SOT gates, one script name, no guard
 
@@ -103,6 +134,20 @@ Verified file presence:
 2. If both are wanted, give them **distinct** script names.
 3. **Pin the decision with a chain assertion**, exactly as the CI-trigger batch did — otherwise this recurs the next time either file is touched.
 
+### 4b · 🟡 A second defect in the same file, found on re-verification
+
+`fix/deployment-sot-next` also **strips the trailing newline from root `package.json`**:
+
+```
+-}
++}
+\ No newline at end of file
+```
+
+Small, but not cosmetic. It makes every future `package.json` diff show a spurious last-line change, it is the kind of thing `prettier --check` and many pre-commit formatters fail on, and it will be silently re-introduced by whoever resolves the §4 conflict in that branch's favour. **One character. Restore it before the merge.**
+
+*Both §4 findings sit on a branch that is 5 commits behind canonical (§3) — so this conflict must be resolved against a tree that has already moved.*
+
 ## 5 · Priority order
 
 Ordered by what blocks the most, not by size.
@@ -121,16 +166,22 @@ Ordered by what blocks the most, not by size.
 
 **④ The release-branch topology** (§3). Decide whether it is *the* release or *a* stream, before anyone tags. **Tags remain 0 — this is still free to fix.**
 
-### P2 — merge sequence, once ①–④ are settled
+**⑤ Rebase the three stale-base branches** (§3) onto canonical, and **close PR #4 as superseded** rather than merging it — merging it would regress the maps work that already landed via `5f44c86`.
 
-Order chosen to minimise conflict surface:
+### P2 — merge sequence, once ①–⑤ are settled
 
-1. **`audit/*` branches first** — documentation only, zero code, zero conflict risk. They also carry the forensic record the later merges should be read against.
-2. **`fix/car-header-unified-dock-v2`** — 2 code files, no overlap with anything.
-3. **`fix/db-baseline-adoption`** — 18 commits, 9 files, no overlap detected. Largest code change; merge alone and verify.
-4. **`fix/deployment-sot-next`** and **`release/production-assembly`** — **last, and only after ③.** These are the only pair that share a file.
+Order chosen to minimise conflict surface. Nine branches, merged in five waves:
+
+1. **`audit/*` ×2, plus my own audit branch** — documentation only, **zero code files**, zero conflict risk. They also carry the forensic record the later merges should be read against.
+2. **`fix/gate3-listing-moderation-authority`** — 2 files, 1 code file (a test), no overlap.
+3. **`fix/car-header-unified-dock-v2`** — 2 code files, no overlap. *(Retire `fix/car-header-unified-dock` — the v1 — unmerged.)*
+4. **`fix/recent-search-chrome`** — rebase first (8 behind), then merge alone; 5 code files.
+5. **`fix/db-baseline-adoption`** — 18 commits, 8 code files, no overlap detected. Largest code change; **merge alone and verify.**
+6. **`fix/deployment-sot-next`** and **`release/production-assembly`** — **last, and only after ③.** These are the only pair that share a file, and the first must be rebased before it is touched.
 
 **Verify the full battery after each merge, not once at the end.** With CI down, a local run is the only signal, and batching merges would make a regression untraceable.
+
+**Retire without merging:** `fix/maps-tile-failure-state-v2` (PR #4, superseded — would regress), both `ci/final-rc-*` (empty commits against stale heads), `fix/car-header-unified-dock` v1, `maint/safe-batch-01`.
 
 ### P3 — product work still open
 
@@ -154,9 +205,11 @@ No native render · no real-browser WebView render · no live provider journey �
 
 **Source: healthy.** 245/245, 26/26, 124/124, 0 blocking, clean history, no manipulation detected in any batch to date, and eight prior findings closed with protection *increasing* (chain 242 → 245, render 120 → 124).
 
-**Process: at risk.** Six divergent branches, 79 unmerged commits, one unpinned collision, a branch named `release` that is not one, and **no working independent verification.**
+**Process: at risk.** Nine divergent branches, **101 unmerged commits**, three of them built on a canonical that has already moved, one unpinned collision plus a newline defect in the same file, a branch named `release` that is not one, a superseded PR that would regress canonical if merged, and **no working independent verification.**
 
 **Production: `NO-GO`** — unchanged, and the reason is unchanged: the runtime has never been witnessed.
 
+**One process observation, offered plainly:** the gap between nine parallel branches and zero integration is the largest risk in this report — larger than any single defect in it. Every day that gap widens, the merge cost rises and the value of every gate figure measured on a branch falls. **The source is in good shape; the assembly is not.**
+
 ---
-*Intake by execution: branches enumerated, topology computed, the collision traced to file presence on each side, gates run on canonical. No file modified; nothing pushed to `canonical/vnext-assembly`; tags remain 0.*
+*Intake by execution: all 14 branches carrying commits above canonical enumerated after a fresh `fetch --all --prune`, containment tested pairwise across 72 ordered pairs, merge bases computed, the collision traced to file presence and to the exact `package.json` lines on each side, gates run on canonical. This report's own first pass was wrong on the branch count and on ancestry; both are corrected above rather than overwritten. No file modified outside `audit/reports/`; nothing pushed to `canonical/vnext-assembly`; tags remain 0.*
