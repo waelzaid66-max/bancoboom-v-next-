@@ -2,12 +2,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const source = readFileSync(
+const settings = readFileSync(
   new URL("../app/settings.tsx", import.meta.url),
   "utf8",
 );
+const outbox = readFileSync(
+  new URL("../context/MessageOutboxContext.tsx", import.meta.url),
+  "utf8",
+);
 
-const deleteCalls = [...source.matchAll(/await\s+deleteAccount\(\);/g)];
+const deleteCalls = [...settings.matchAll(/await\s+deleteAccount\(\);/g)];
 
 test("both delete-account journeys are present", () => {
   assert.equal(
@@ -17,23 +21,57 @@ test("both delete-account journeys are present", () => {
   );
 });
 
-test("server delete success is terminal for the message outbox", () => {
+test("confirmed server delete reaches the terminal purge boundary in both journeys", () => {
   for (const call of deleteCalls) {
-    const tail = source.slice(call.index, call.index + 1400);
-    const nextCatch = tail.match(/catch\s*(?:\([^)]*\))?\s*\{[\s\S]*?\}/);
-    assert.ok(nextCatch, "each delete journey must retain explicit failure handling");
-    assert.doesNotMatch(
-      nextCatch[0],
-      /resumeAfterAccountDeletionFailure\s*\(/,
-      "after deleteAccount() succeeds, later Clerk/session/push/routing failure must never resume a tombstoned account outbox",
+    const tail = settings.slice(call.index, call.index + 1200);
+    assert.match(
+      tail,
+      /await\s+purgeAfterAccountDeletion\(\)/,
+      "after deleteAccount() succeeds, each journey must enter the terminal outbox purge boundary before Clerk sign-out",
+    );
+    assert.match(
+      tail,
+      /await\s+unregisterCachedPushTokenBestEffort\(\)/,
+      "push unregister must remain after confirmed deletion",
+    );
+    assert.match(
+      tail,
+      /await\s+signOut\(\)/,
+      "Clerk sign-out must remain after confirmed deletion",
     );
   }
 });
 
-test("delete API failure still retains an explicit resume path", () => {
+test("account-deletion resume refuses to reopen a terminal purge", () => {
+  const start = outbox.indexOf("const resumeAfterAccountDeletionFailure = useCallback");
+  assert.notEqual(start, -1, "missing account-deletion resume implementation");
+  const end = outbox.indexOf("const value = useMemo", start);
+  assert.notEqual(end, -1, "missing end marker after account-deletion resume implementation");
+  const body = outbox.slice(start, end);
+
   assert.match(
-    source,
-    /resumeAfterAccountDeletionFailure\s*\(/,
-    "failure before confirmed server deletion must still be able to resume the suspended outbox",
+    body,
+    /purgingRef\.current/,
+    "resume must inspect the terminal purge state",
   );
+  assert.match(
+    body,
+    /if\s*\([^)]*purgingRef\.current[^)]*\)\s*return\s*;/,
+    "once confirmed deletion has entered purge, later Clerk/session/push failure must not reopen the outbox",
+  );
+  assert.match(
+    body,
+    /suspendedRef\.current\s*=\s*false/,
+    "pre-delete/API failure must still be able to resume the suspended outbox",
+  );
+  assert.match(body, /scheduleDrain\(\)/);
+});
+
+test("terminal purge authority is still prepareForSignOut", () => {
+  assert.match(
+    outbox,
+    /const\s+prepareForSignOut\s*=\s*useCallback[\s\S]*?purgingRef\.current\s*=\s*true/,
+    "purge boundary must set terminal state before storage cleanup begins",
+  );
+  assert.match(outbox, /purgeAfterAccountDeletion:\s*prepareForSignOut/);
 });
