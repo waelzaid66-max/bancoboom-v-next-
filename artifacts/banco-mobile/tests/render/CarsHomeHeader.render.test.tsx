@@ -237,6 +237,16 @@ describe("CarsHomeHeader", () => {
     );
   });
 
+  it("keeps optional market chrome bounded instead of forcing the search off-screen", () => {
+    const marketSlot = <View testID="market-control" />;
+    const view = render(header({ marketSlot }));
+
+    expect(view.getByTestId("cars-header-market")).toBeTruthy();
+    expect(view.getByTestId("market-control")).toBeTruthy();
+    expect(view.getByTestId("section-search-open")).toBeTruthy();
+    expect(view.getByTestId("section-filter-toggle")).toBeTruthy();
+  });
+
   it("reclaims hero and browse-context height while primary dock actions stay reachable", () => {
     const scrollY = { value: 0 } as SharedValue<number>;
     const controlsSlot = <View testID="parent-car-axes" />;
