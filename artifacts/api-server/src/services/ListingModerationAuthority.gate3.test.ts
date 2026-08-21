@@ -1,3 +1,4 @@
+import type { Request, Response } from "express";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
 
@@ -13,24 +14,39 @@ import {
 } from "../validators/schemas";
 import {
   bulkUpdateListingStatus,
-  getDealerListings,
   getListingDetail,
   updateListing,
 } from "./ListingService";
+import { getMyManagedListingsHandler } from "../controllers/profileController";
+import { dealerListingsHandler } from "../controllers/dealerController";
 
 const createdUserIds: string[] = [];
 const createdListingIds: string[] = [];
 
-async function seedOwner(): Promise<{ dbUserId: string; clerkId: string }> {
+const moderationHeldStates = [
+  "rejected",
+  "flagged",
+  "pending_review",
+  "pending_approval",
+] as const;
+
+const ownerJourneyStates = ["rejected", "flagged", "pending_review"] as const;
+
+type ModerationHeldState = (typeof moderationHeldStates)[number];
+type UserRole = "individual" | "dealer";
+
+async function seedOwner(
+  role: UserRole = "dealer",
+): Promise<{ dbUserId: string; clerkId: string }> {
   const dbUserId = randomUUID();
-  const clerkId = uniq("gate3-clerk");
+  const clerkId = uniq(`gate3-${role}`);
   createdUserIds.push(dbUserId);
 
   await db.insert(users).values({
     id: dbUserId,
     clerkId,
-    name: "Gate 3 Seller",
-    role: "dealer",
+    name: `Gate 3 ${role}`,
+    role,
     isVerified: false,
   });
 
@@ -63,7 +79,8 @@ async function seedListing(
     status,
     isFlagged: options.isFlagged ?? status === "flagged",
     flagReason:
-      options.flagReason ?? (status === "flagged" ? "admin moderation hold" : null),
+      options.flagReason ??
+      (status === "flagged" ? "admin moderation hold" : null),
   });
 
   await db.insert(listingAttributes).values({
@@ -73,6 +90,50 @@ async function seedListing(
   });
 
   return id;
+}
+
+function createResponseHarness() {
+  let statusCode = 200;
+  let payload: unknown;
+
+  const res = {
+    status(code: number) {
+      statusCode = code;
+      return res;
+    },
+    json(body: unknown) {
+      payload = body;
+      return res;
+    },
+  } as unknown as Response;
+
+  return {
+    res,
+    getStatus: () => statusCode,
+    getPayload: () => payload,
+  };
+}
+
+async function runManagedListingsHandler(clerkId: string) {
+  const harness = createResponseHarness();
+  const req = {
+    userId: clerkId,
+    query: { limit: "20", sort: "created_at", order: "desc" },
+  } as unknown as Request;
+
+  await getMyManagedListingsHandler(req, harness.res);
+  return harness;
+}
+
+async function runDealerListingsHandler(dbUserId: string) {
+  const harness = createResponseHarness();
+  const req = {
+    dbUserId,
+    query: { limit: "20", sort: "created_at", order: "desc" },
+  } as unknown as Request;
+
+  await dealerListingsHandler(req, harness.res);
+  return harness;
 }
 
 beforeEach(() => {
@@ -89,20 +150,23 @@ afterAll(async () => {
 });
 
 describe("Gate 3 — seller/admin moderation authority", () => {
-  it("RED: a seller cannot reactivate an admin-rejected listing through updateListing", async () => {
-    const owner = await seedOwner();
-    const listingId = await seedListing(owner.dbUserId, "rejected");
+  it.each(moderationHeldStates)(
+    "RED: seller cannot reactivate moderation-held state %s through updateListing",
+    async (status: ModerationHeldState) => {
+      const owner = await seedOwner();
+      const listingId = await seedListing(owner.dbUserId, status);
 
-    await expect(
-      updateListing(listingId, owner.clerkId, { status: "active" }),
-    ).rejects.toMatchObject({ code: "INVALID_STATUS_TRANSITION" });
+      await expect(
+        updateListing(listingId, owner.clerkId, { status: "active" }),
+      ).rejects.toMatchObject({ code: "INVALID_STATUS_TRANSITION" });
 
-    const [row] = await db
-      .select({ status: listings.status })
-      .from(listings)
-      .where(eq(listings.id, listingId));
-    expect(row?.status).toBe("rejected");
-  });
+      const [row] = await db
+        .select({ status: listings.status })
+        .from(listings)
+        .where(eq(listings.id, listingId));
+      expect(row?.status).toBe(status);
+    },
+  );
 
   it("RED: content edits cannot clear an existing administrative flag", async () => {
     const owner = await seedOwner();
@@ -129,16 +193,17 @@ describe("Gate 3 — seller/admin moderation authority", () => {
     expect(row?.flagReason).toBe("manual admin flag");
   });
 
-  it("RED: dealer bulk activate cannot publish a moderation-held listing", async () => {
+  it("RED: dealer bulk activate cannot publish any moderation-held state", async () => {
     const owner = await seedOwner();
-    const rejectedId = await seedListing(owner.dbUserId, "rejected");
-    const pendingId = await seedListing(owner.dbUserId, "pending_review");
-
-    const result = await bulkUpdateListingStatus(
-      owner.dbUserId,
-      [rejectedId, pendingId],
-      "activate",
+    const held = await Promise.all(
+      moderationHeldStates.map(async (status) => ({
+        status,
+        id: await seedListing(owner.dbUserId, status),
+      })),
     );
+    const ids = held.map((entry) => entry.id);
+
+    const result = await bulkUpdateListingStatus(owner.dbUserId, ids, "activate");
 
     const rows = await db
       .select({ id: listings.id, status: listings.status })
@@ -146,16 +211,13 @@ describe("Gate 3 — seller/admin moderation authority", () => {
       .where(
         and(
           eq(listings.userId, owner.dbUserId),
-          inArray(listings.id, [rejectedId, pendingId]),
+          inArray(listings.id, ids),
         ),
       );
 
     expect(result.updated).toBe(0);
     expect(new Map(rows.map((row) => [row.id, row.status]))).toEqual(
-      new Map([
-        [rejectedId, "rejected"],
-        [pendingId, "pending_review"],
-      ]),
+      new Map(held.map((entry) => [entry.id, entry.status])),
     );
   });
 
@@ -202,21 +264,31 @@ describe("Gate 3 — owner moderation-state response contracts", () => {
     },
   );
 
-  it("RED: rejected owner detail and managed list remain consumable rather than contract-failing", async () => {
-    const owner = await seedOwner();
-    const listingId = await seedListing(owner.dbUserId, "rejected");
+  it.each(ownerJourneyStates)(
+    "RED: individual owner detail and /me managed-list controller remain consumable for %s",
+    async (status) => {
+      const owner = await seedOwner("individual");
+      const listingId = await seedListing(owner.dbUserId, status);
 
-    const detail = await getListingDetail(listingId, owner.clerkId);
-    expect(detail).not.toBeNull();
-    expect(ListingDetailSchema.safeParse(detail).success).toBe(true);
+      const detail = await getListingDetail(listingId, owner.clerkId);
+      expect(detail).not.toBeNull();
+      expect(ListingDetailSchema.safeParse(detail).success).toBe(true);
 
-    const managed = await getDealerListings(owner.dbUserId, {
-      limit: 20,
-      sort: "created_at",
-      order: "desc",
-    });
-    const row = managed.items.find((item) => item.id === listingId);
-    expect(row).toBeDefined();
-    expect(DealerListingItemSchema.safeParse(row).success).toBe(true);
-  });
+      const managed = await runManagedListingsHandler(owner.clerkId);
+      expect(managed.getStatus()).toBe(200);
+      expect(managed.getPayload()).toBeDefined();
+    },
+  );
+
+  it.each(ownerJourneyStates)(
+    "RED: dealer listings controller response remains consumable for %s",
+    async (status) => {
+      const owner = await seedOwner("dealer");
+      await seedListing(owner.dbUserId, status);
+
+      const managed = await runDealerListingsHandler(owner.dbUserId);
+      expect(managed.getStatus()).toBe(200);
+      expect(managed.getPayload()).toBeDefined();
+    },
+  );
 });
