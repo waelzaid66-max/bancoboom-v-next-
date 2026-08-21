@@ -1,12 +1,10 @@
 /**
  * B-oom Car — unified native browse header.
  *
- * The hero is the master canvas. Search, map, save, filters, vehicle categories
- * and live stats form one compact dock that overlaps the lower hero edge while
- * expanded and returns to normal flow as the hero collapses. The parent keeps
- * ownership of market/sort/listing/engine/brand/origin criteria immediately
- * below this component; `continuesBelow` removes the visual seam so those rows
- * remain the lower continuation of the same dark CAR surface.
+ * The hero is the master canvas. Search, map, save, filters, vehicle categories,
+ * live stats and the parent-owned CAR browse axes can all live in ONE bounded
+ * dock. The parent keeps criteria ownership; this component owns layout only.
+ * That split is deliberate: no duplicated state, no duplicated filter seat.
  *
  * No inventory figure is invented here. Categories and stats render only what
  * the parent supplies, and every existing testID/callback remains stable.
@@ -68,6 +66,7 @@ const TAP = 48;
 const SEARCH_H = 52;
 const SEARCH_R = 26;
 const DOCK_OVERLAP = 96;
+const DOCK_EXTRAS_MAX_HEIGHT = 280;
 
 export const CAR_CATEGORIES: { key: VehicleGlyphName; i18nKey: string }[] = [
   { key: "cars", i18nKey: "search.discover.section.carTypeCars" },
@@ -106,6 +105,12 @@ type Props = {
   stats: CarHeroStat[];
   notificationCount?: number;
   marketSlot?: React.ReactNode;
+  /**
+   * Parent-owned CAR axes rendered physically INSIDE the unified dock.
+   * Ownership does not move: the parent still owns criteria, handlers and testIDs;
+   * this is only a layout portal via normal React children (not a Portal API).
+   */
+  controlsSlot?: React.ReactNode;
   continuesBelow?: boolean;
   slot?: "all" | "pinned" | "scroll";
   scrollY?: SharedValue<number>;
@@ -134,6 +139,7 @@ export function CarsHomeHeader({
   stats,
   notificationCount = 0,
   marketSlot,
+  controlsSlot,
   continuesBelow = false,
   slot = "all",
   scrollY,
@@ -208,6 +214,23 @@ export function CarsHomeHeader({
       ? interpolate(scrollY.value, [0, COLLAPSE_SCROLL], [-DOCK_OVERLAP, 0], Extrapolation.CLAMP)
       : -DOCK_OVERLAP;
     return { marginTop };
+  });
+
+  /**
+   * Category/stats/parent axes are browse context, not the primary sticky action.
+   * They collapse as one bounded block after the first 28px of scroll, while
+   * search/map/save/filter stay reachable. Height really goes to zero — opacity
+   * alone would leave the exact dead vertical space this repair is eliminating.
+   */
+  const dockExtrasCollapse = useAnimatedStyle(() => {
+    const p = scrollY
+      ? interpolate(scrollY.value, [28, COLLAPSE_SCROLL], [1, 0], Extrapolation.CLAMP)
+      : 1;
+    return {
+      opacity: p,
+      maxHeight: DOCK_EXTRAS_MAX_HEIGHT * p,
+      marginTop: 7 * p,
+    };
   });
 
   const liftCollapse = useAnimatedStyle(() => {
@@ -450,67 +473,78 @@ export function CarsHomeHeader({
             </Pressable>
           </View>
 
-          {categories.length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.catScroll}
-              contentContainerStyle={[styles.catContent, { flexDirection: rowDir }]}
-              testID="cars-category-strip"
-            >
-              {categories.map((category) => {
-                const active = selectedCategory === category.key;
-                return (
-                  <Pressable
-                    key={category.key}
-                    onPress={() => onSelectCategory(category.key)}
-                    style={styles.catItem}
-                    testID={`cars-category-${category.key}`}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <View style={[styles.catTile, active && styles.catTileActive]}>
-                      <VehicleGlyph
-                        name={category.key}
-                        size={24}
-                        color={active ? SNOW : STEEL}
-                      />
-                    </View>
-                    <AppText
-                      style={[styles.catLabel, active && styles.catLabelActive]}
-                      numberOfLines={1}
+          <Animated.View
+            style={[styles.dockExtras, dockExtrasCollapse]}
+            testID="cars-dock-extras"
+          >
+            {categories.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.catScroll}
+                contentContainerStyle={[styles.catContent, { flexDirection: rowDir }]}
+                testID="cars-category-strip"
+              >
+                {categories.map((category) => {
+                  const active = selectedCategory === category.key;
+                  return (
+                    <Pressable
+                      key={category.key}
+                      onPress={() => onSelectCategory(category.key)}
+                      style={styles.catItem}
+                      testID={`cars-category-${category.key}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
                     >
-                      {t(category.i18nKey)}
-                    </AppText>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          ) : null}
+                      <View style={[styles.catTile, active && styles.catTileActive]}>
+                        <VehicleGlyph
+                          name={category.key}
+                          size={24}
+                          color={active ? SNOW : STEEL}
+                        />
+                      </View>
+                      <AppText
+                        style={[styles.catLabel, active && styles.catLabelActive]}
+                        numberOfLines={1}
+                      >
+                        {t(category.i18nKey)}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
 
-          {stats.length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.statScroll}
-              contentContainerStyle={[styles.statStrip, { flexDirection: rowDir }]}
-              testID="cars-stats-strip"
-            >
-              {stats.map((stat, index) => (
-                <View key={stat.key} style={[styles.statCell, { flexDirection: rowDir }]}>
-                  {index > 0 ? <View style={styles.statDivider} /> : null}
-                  <View style={{ alignItems: alignStart }}>
-                    <AppText style={styles.statValue} numberOfLines={1}>
-                      {stat.value}
-                    </AppText>
-                    <AppText style={styles.statLabel} numberOfLines={1}>
-                      {t(stat.labelKey)}
-                    </AppText>
+            {stats.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.statScroll}
+                contentContainerStyle={[styles.statStrip, { flexDirection: rowDir }]}
+                testID="cars-stats-strip"
+              >
+                {stats.map((stat, index) => (
+                  <View key={stat.key} style={[styles.statCell, { flexDirection: rowDir }]}>
+                    {index > 0 ? <View style={styles.statDivider} /> : null}
+                    <View style={{ alignItems: alignStart }}>
+                      <AppText style={styles.statValue} numberOfLines={1}>
+                        {stat.value}
+                      </AppText>
+                      <AppText style={styles.statLabel} numberOfLines={1}>
+                        {t(stat.labelKey)}
+                      </AppText>
+                    </View>
                   </View>
-                </View>
-              ))}
-            </ScrollView>
-          ) : null}
+                ))}
+              </ScrollView>
+            ) : null}
+
+            {controlsSlot ? (
+              <View style={styles.controlsSlot} testID="cars-controls-slot">
+                {controlsSlot}
+              </View>
+            ) : null}
+          </Animated.View>
         </Animated.View>
       )}
     </Animated.View>
@@ -638,6 +672,14 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: HAIRLINE,
   },
+  dockExtras: {
+    overflow: "hidden",
+    flexGrow: 0,
+  },
+  controlsSlot: {
+    flexGrow: 0,
+    minHeight: 0,
+  },
   searchRow: {
     alignItems: "center",
     gap: 10,
@@ -719,7 +761,6 @@ const styles = StyleSheet.create({
   },
   catScroll: {
     flexGrow: 0,
-    marginTop: 7,
   },
   catContent: {
     paddingHorizontal: 14,
