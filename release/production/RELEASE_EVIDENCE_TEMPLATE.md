@@ -35,7 +35,7 @@ Complete this file for the final immutable release candidate. Do not mark a fiel
 - Real job steps executed: `PENDING`
 - All required conclusions green: `PENDING`
 
-Zero-step/red pre-runner runs are infrastructure evidence only and are not a source test result.
+Zero-step/red runs with no retrievable command logs prove only that executable source-test evidence is absent. They do not by themselves prove Product failure or a specific runner/infrastructure root cause.
 
 ## Docker / Coolify provenance
 
