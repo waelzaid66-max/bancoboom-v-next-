@@ -60,61 +60,106 @@ needed):
 pnpm --filter @workspace/db run check
 ```
 
+Execute the disposable-PostgreSQL adoption safety matrix:
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5433/banco_test \
+  pnpm --filter @workspace/db run test:baseline-adoption
+```
+
 `push` and `push-force` are still present. They are for throwaway local
 databases only — never point them at a database whose data you would miss.
 
 ## Current authority and database adoption
 
-The committed migrations `0000` through `0007` and their journal are the current
-schema authority. Every new schema change is: edit the schema, `generate`, read
-the SQL, commit both SQL and journal, and let `migrate` apply it.
+The committed migrations and their journal are the current schema authority.
+Every new schema change is: edit the schema, `generate`, read the SQL, commit
+both SQL and journal, and let `migrate` apply it.
 
 ### Fresh empty database
 
 A fresh empty database runs `migrate` directly. It must never be baselined,
-because baselining records the migrations without executing the statements that
-create its schema.
+because baselining records historical migrations without executing those
+statements against `public`.
 
 ```bash
 DATABASE_URL=... pnpm --filter @workspace/db run migrate
 ```
 
-### Existing pre-journal database
+### Existing historical pre-journal database
 
-An existing pre-journal database may contain tables created by the historical
-schema-push flow but no `drizzle.__drizzle_migrations` history. Do not infer
-equivalence from a non-empty database. Before baseline, independently prove its
-live schema is equivalent to the exact committed schema represented by the
-release SHA and migration journal, and take the required production backup.
+The real-database cutover from schema push to committed migrations occurred at
+commit:
 
-This is a hard operator boundary: `src/baseline.ts` checks only that at least one
-public table exists, then stamps every current migration hash without executing
-its SQL. It does not compare tables, columns, enums, indexes, constraints, or
-data migrations. Therefore `baseline` is safe only after the independent schema
-comparison has succeeded.
-
-Then, and only then, stamp that existing database once:
-
-```bash
-DATABASE_URL=... pnpm --filter @workspace/db run baseline
+```text
+9f3e5c59fbf11014c78b06cf01262fc8e2949bb0
 ```
 
-Immediately run the committed migration runner. It should apply only migrations
-that are genuinely newer than the proven baseline:
+At that exact commit the journal contained only:
+
+1. `0000_fantastic_warbird`
+2. `0001_minor_stingray`
+
+That is the **only** legacy adoption boundary. Migrations `0002` and newer must
+remain pending and must be executed by `migrate`; baseline is never allowed to
+stamp the current contents of the migration folder wholesale.
+
+`src/baseline.ts` now fails closed. Before writing any migration history it:
+
+- requires the exact cutover confirmation and expected database name;
+- pins the Git blobs of the historical `0000` and `0001` SQL files;
+- rejects an empty database;
+- rejects any pre-existing `drizzle` schema, including partial, complete and
+  repeat-adoption states;
+- starts one transaction and takes an advisory lock;
+- locks the current public tables against concurrent DDL;
+- executes the pinned `0000 + 0001` SQL into an isolated reference schema;
+- compares the reference and public logical PostgreSQL definitions, including
+  relations, columns, types, defaults/generated expressions, constraints,
+  index definitions, enum order, sequences, triggers, policies and RLS state;
+- drops the reference schema;
+- stamps exactly `0000 + 0001`;
+- leaves `0002+` pending for the normal migrator.
+
+A mismatch rolls back the transaction. It does not create or repair a migration
+journal and it is not permission to bypass the mismatch with schema push.
+
+Before this one-time operation:
+
+1. freeze the exact release SHA;
+2. stop the API and every other migration/deployment process;
+3. take and independently verify the required backup;
+4. confirm the target is the historical push-built, pre-journal database;
+5. use the exact database name as the second arming control.
+
+Then run once:
 
 ```bash
-DATABASE_URL=... pnpm --filter @workspace/db run migrate
+DATABASE_URL='postgresql://...' \
+BANCO_BASELINE_EXPECT_DATABASE='<exact_database_name>' \
+BANCO_BASELINE_ADOPTION_CONFIRM='9f3e5c59fbf11014c78b06cf01262fc8e2949bb0:0001_minor_stingray' \
+pnpm --filter @workspace/db run baseline
 ```
 
-If the schema comparison cannot prove equivalence, stop and reconcile the
-database. Never baseline or use schema push merely to bypass a migration error.
+Immediately run the committed migration runner. It must execute `0002` and every
+later pending migration normally, including the FI/Billing/Messenger DDL and DML
+in `0004` through `0007`:
+
+```bash
+DATABASE_URL='postgresql://...' pnpm --filter @workspace/db run migrate
+```
+
+A second baseline invocation is an error. A database with any Drizzle schema is
+not automatically repaired by baseline; inspect and reconcile it explicitly.
+If executable equivalence cannot be proven, stop. Never baseline or use schema
+push merely to bypass a migration error.
 
 ## Switching the deployment over
 
-Production/runtime callers and disposable-PostgreSQL test gates now use the
-same committed migration authority. The completed adoption produced:
-`0000_fantastic_warbird.sql` (293 `CREATE`s, zero `DROP`s) plus the later
-journalled migrations exist in Git.
+Production/runtime callers and disposable-PostgreSQL test gates use the same
+committed migration authority. The completed migration history started with
+`0000_fantastic_warbird.sql` (293 `CREATE`s, zero `DROP`s) and continues through
+the later journalled migrations.
 
 | Where | Was | Now |
 | --- | --- | --- |
@@ -122,20 +167,18 @@ journalled migrations exist in Git.
 | `docker-compose.prod.yml` → `migrate` service | `push -- --force` | `run migrate` ✅ |
 | `scripts/post-merge.sh` | `push-force` | `run migrate` ✅ |
 | `deploy/aws/scripts/db-migrate.sh` | `push-force` | `run migrate` ✅ |
-| `.github/workflows/ci.yml` PostgreSQL 16 gate | `push-force` | `check` + `migrate` twice ✅ |
+| `.github/workflows/ci.yml` PostgreSQL 16 gate | `push-force` | `check` + baseline-adoption matrix + `migrate` twice ✅ |
 | `.github/workflows/deploy.yml` verification DB | `push-force` | `check` + `migrate` twice ✅ |
-| `scripts/run-api-tests-local.mjs` disposable DB | `push-force` | `check` + `migrate` twice ✅ |
+| `scripts/run-api-tests-local.mjs` disposable DB | `push-force` | `check` + baseline-adoption matrix + `migrate` twice ✅ |
 
-> An existing pre-journal database must complete independent schema-equivalence
-> proof before its one-time baseline. `migrate` on an un-stamped historical
-> database fails loudly on the first already-existing object; do not bypass that
-> signal. A fresh empty database needs no stamp and runs `migrate` directly.
+> `migrate` on an un-stamped historical database fails loudly on the first
+> already-existing object; do not bypass that signal. A fresh empty database
+> needs no stamp and runs `migrate` directly.
 
-Note on blast radius, since it was mis-stated in the Phase 0 audit and corrected
-here: the Coolify `migrate` service is gated behind `profiles: ["migrate"]` and
-does **not** run on a normal deploy — it is a deliberate one-off. The
-post-merge helper also executes the committed migration runner; neither path
-uses live schema push as production authority.
+The Coolify `migrate` service is gated behind `profiles: ["migrate"]` and does
+**not** run on a normal deploy — it is a deliberate one-off. The post-merge
+helper also executes the committed migration runner; neither path uses live
+schema push as production authority.
 
 ## Absorbing `ensureSchema.ts`
 
