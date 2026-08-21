@@ -129,11 +129,7 @@ export function CarBrowseAxes({
 
         <View style={[styles.divider, { backgroundColor: HAIRLINE }]} />
 
-        <View
-          style={[styles.listingPill, { flexDirection: rowDir }]}
-          testID="section-listing-mode"
-          accessibilityRole="radiogroup"
-        >
+        <View style={[styles.listingPill, { flexDirection: rowDir }]} testID="section-listing-mode">
           {(["all", "sale", "buy"] as const).map((mode) => {
             const active = listingMode === mode;
             const label =
