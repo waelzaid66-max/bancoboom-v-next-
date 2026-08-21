@@ -32,18 +32,34 @@ test("Discover stays a portal surface with every section route and testID preser
     "section-card-booking",
     "discover-explore-map",
     "discover-map-portals",
-    "discover-map-car",
-    "discover-map-properties",
-    "discover-map-materials",
-    "discover-map-factories",
-    "discover-map-stays",
     "discover-car-import",
     "discover-supply-portal",
     "discover-importers-hub",
     "discover-banks-hub",
   ]) {
-    assert.ok(discover.includes(`testID=\"${id}\"`), `missing Discover testID ${id}`);
+    assert.ok(
+      discover.includes(`testID=\"${id}\"`),
+      `missing Discover JSX testID ${id}`,
+    );
   }
+
+  for (const id of [
+    "discover-map-car",
+    "discover-map-properties",
+    "discover-map-materials",
+    "discover-map-factories",
+    "discover-map-stays",
+  ]) {
+    assert.ok(
+      discover.includes(`testID: \"${id}\"`),
+      `missing Discover map portal testID definition ${id}`,
+    );
+  }
+  assert.match(
+    discover,
+    /testID=\{portal\.testID\}/,
+    "map portal definitions must remain wired to the rendered Pressable testID",
+  );
 
   assert.doesNotMatch(codeOnly(discover), /onBrowseSection/);
 });
