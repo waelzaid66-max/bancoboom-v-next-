@@ -17,6 +17,12 @@ import {
 } from "@/components/CategoryTabs";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
+import {
+  BANKS_ACCENT,
+  SECTION_GRADIENT as SECTION_IDENTITY_GRADIENT,
+  SECTION_NEUTRAL,
+  sectionAccent,
+} from "@/lib/sectionTheme";
 
 // Concrete, browseable sections (no "all" — these are the real catalogues a
 // shopper picks between). Each card pushes a dedicated section mini-app —
@@ -41,21 +47,9 @@ const SECTION_ROUTE: Record<BrowseSection, Href> = {
   materials: "/section/materials",
 };
 
-// On-brand gradient pairs per section so each card reads as its own world while
-// staying in the BANCO red/charcoal family.
-// Red-family fallback fills behind the section photos (identity rule: logo red
-// + derivatives only — aligned with lib/sectionTheme's corrected palette).
-const SECTION_GRADIENT: Record<BrowseSection, [string, string]> = {
-  car: ["#8A0E14", "#1C0507"],
-  real_estate: ["#7A1226", "#190509"],
-  facilities: ["#7E1F14", "#140505"],
-  materials: ["#6E1A10", "#160805"],
-};
-
 // Real, representative cover photography per browse section, bundled locally so
 // the cards read as authentic (trust) and premium. A cinematic scrim sits over
-// each photo for legibility and a framed, editorial feel. The gradient above
-// stays as the fallback fill behind the photo while it loads.
+// each photo for legibility and a framed, editorial feel.
 const SECTION_PHOTO: Partial<Record<Category, number>> = {
   car: require("../assets/images/categories/car.jpg"),
   real_estate: require("../assets/images/categories/real_estate.jpg"),
@@ -103,6 +97,11 @@ export function SearchDiscover({ onExploreMap }: Props) {
     </AppText>
   );
 
+  const portalPressStyle = ({ pressed }: { pressed: boolean }) => [
+    styles.portalWrap,
+    pressed ? styles.portalPressed : null,
+  ];
+
   return (
     <ScrollView
       style={styles.container}
@@ -117,7 +116,10 @@ export function SearchDiscover({ onExploreMap }: Props) {
           <Pressable
             key={cat}
             onPress={() => handleSectionPress(cat)}
-            style={styles.sectionCardWrap}
+            style={({ pressed }) => [
+              styles.sectionCardWrap,
+              pressed ? styles.portalPressed : null,
+            ]}
             accessibilityRole="button"
             accessibilityLabel={t(`home.categories.${cat}`)}
             testID={`section-card-${cat}`}
@@ -125,7 +127,7 @@ export function SearchDiscover({ onExploreMap }: Props) {
             <View
               style={[
                 styles.sectionCard,
-                { backgroundColor: SECTION_GRADIENT[cat][1] },
+                { backgroundColor: SECTION_IDENTITY_GRADIENT[cat][1] },
               ]}
             >
               <Image
@@ -134,8 +136,6 @@ export function SearchDiscover({ onExploreMap }: Props) {
                 contentFit="cover"
                 transition={220}
               />
-              {/* Cinematic scrim: keeps the photo legible and lends a premium,
-                  editorial depth (light at the top, deep at the base). */}
               <LinearGradient
                 colors={[
                   "rgba(12,4,5,0.10)",
@@ -155,7 +155,12 @@ export function SearchDiscover({ onExploreMap }: Props) {
                   tintColor="#FFFFFF"
                 />
               </View>
-              <View style={styles.sectionBadge}>
+              <View
+                style={[
+                  styles.sectionBadge,
+                  { backgroundColor: sectionAccent(cat) },
+                ]}
+              >
                 <CategoryIcon category={cat} color="#FFFFFF" />
               </View>
               <View
@@ -167,7 +172,7 @@ export function SearchDiscover({ onExploreMap }: Props) {
                 <View
                   style={[
                     styles.sectionAccent,
-                    { backgroundColor: colors.primary },
+                    { backgroundColor: sectionAccent(cat) },
                   ]}
                 />
                 <AppText style={[styles.sectionLabel, { textAlign }]}>
@@ -188,21 +193,21 @@ export function SearchDiscover({ onExploreMap }: Props) {
         ))}
       </View>
 
-      {/* ── 5th portal card — Booking & Stays (إيجار وحجز) ──────────────────
-          Residential + furnished rental (NOT hotels). Full-width to read as a
-          portal into its own mini-app (/section/booking → BookingStaysApp),
-          not a same-tier catalogue section. Real photo + scrim + watermark,
-          exactly like the four section cards; rose real-estate identity —
-          blue is reserved for Banks & Financiers. */}
       <Pressable
         onPress={() => router.push("/section/booking" as Href)}
-        style={styles.bookingCardWrap}
+        style={({ pressed }) => [
+          styles.bookingCardWrap,
+          pressed ? styles.portalPressed : null,
+        ]}
         accessibilityRole="button"
         accessibilityLabel={t("search.discover.bookingHub")}
         testID="section-card-booking"
       >
         <View
-          style={[styles.bookingCard, { backgroundColor: SECTION_GRADIENT.real_estate[1] }]}
+          style={[
+            styles.bookingCard,
+            { backgroundColor: SECTION_IDENTITY_GRADIENT.real_estate[1] },
+          ]}
         >
           <Image
             source={BOOKING_PHOTO}
@@ -230,7 +235,12 @@ export function SearchDiscover({ onExploreMap }: Props) {
             />
           </View>
           <View style={[styles.bookingTopRow, { flexDirection: rowDir }]}>
-            <View style={styles.sectionBadge}>
+            <View
+              style={[
+                styles.sectionBadge,
+                { backgroundColor: sectionAccent("real_estate") },
+              ]}
+            >
               <Feather name="calendar" size={18} color="#FFFFFF" />
             </View>
             <Feather
@@ -247,7 +257,10 @@ export function SearchDiscover({ onExploreMap }: Props) {
               ]}
             >
               <View
-                style={[styles.sectionAccent, { backgroundColor: colors.primary }]}
+                style={[
+                  styles.sectionAccent,
+                  { backgroundColor: sectionAccent("real_estate") },
+                ]}
               />
               <AppText style={[styles.sectionLabel, { textAlign, fontSize: 18 }]}>
                 {t("search.discover.bookingHub")}
@@ -265,42 +278,50 @@ export function SearchDiscover({ onExploreMap }: Props) {
           duplicate per-catalogue ?map=1 feeds (Owner: maps serve all sections). */}
       <Pressable
         onPress={onExploreMap}
-        style={styles.mapCtaWrap}
+        style={portalPressStyle}
         accessibilityRole="button"
         accessibilityLabel={t("search.discover.exploreMap")}
         testID="discover-explore-map"
       >
-          <LinearGradient
-            colors={["#23252B", "#0C0D10"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.mapCta}
-          >
+        <LinearGradient
+          colors={[SECTION_NEUTRAL.secondary, SECTION_NEUTRAL.void]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.portalCard}
+        >
+          <View pointerEvents="none" style={styles.sectionWatermarkWrap}>
             <Image
-              source={require("../assets/images/banco-glow.png")}
-              style={[styles.mapGlow, isRTL ? { left: -24 } : { right: -24 }]}
+              source={BANCO_WATERMARK}
+              style={styles.hubWatermark}
               contentFit="contain"
+              tintColor="#FFFFFF"
             />
-            <View style={[styles.mapCtaRow, { flexDirection: rowDir }]}>
-              <View style={[styles.mapBadge, { backgroundColor: colors.primary }]}>
-                <Feather name="map" size={20} color="#FFFFFF" />
-              </View>
-              <View style={styles.mapCtaText}>
-                <AppText style={[styles.mapTitle, { textAlign }]}>
-                  {t("search.discover.exploreMap")}
-                </AppText>
-                <AppText style={[styles.mapSub, { textAlign }]}>
-                  {t("search.discover.exploreMapSub")}
-                </AppText>
-              </View>
-              <Feather
-                name={isRTL ? "chevron-left" : "chevron-right"}
-                size={20}
-                color="rgba(255,255,255,0.8)"
-              />
+          </View>
+          <View style={[styles.mapCtaRow, { flexDirection: rowDir }]}>
+            <View
+              style={[
+                styles.mapBadge,
+                { backgroundColor: sectionAccent("all") },
+              ]}
+            >
+              <Feather name="map" size={20} color="#FFFFFF" />
             </View>
-          </LinearGradient>
-        </Pressable>
+            <View style={styles.mapCtaText}>
+              <AppText style={[styles.mapTitle, { textAlign }]}>
+                {t("search.discover.exploreMap")}
+              </AppText>
+              <AppText style={[styles.mapSub, { textAlign }]}>
+                {t("search.discover.exploreMapSub")}
+              </AppText>
+            </View>
+            <Feather
+              name={isRTL ? "chevron-left" : "chevron-right"}
+              size={20}
+              color="rgba(255,255,255,0.8)"
+            />
+          </View>
+        </LinearGradient>
+      </Pressable>
 
       <AppText
         style={[styles.mapPortalHint, { color: colors.mutedForeground, textAlign }]}
@@ -350,13 +371,14 @@ export function SearchDiscover({ onExploreMap }: Props) {
           <Pressable
             key={portal.id}
             onPress={() => router.push(portal.href)}
-            style={[
+            style={({ pressed }) => [
               styles.mapPortalChip,
               {
                 borderColor: colors.border,
                 backgroundColor: colors.card,
                 flexDirection: rowDir,
               },
+              pressed ? styles.mapPortalPressed : null,
             ]}
             accessibilityRole="button"
             accessibilityLabel={portal.label}
@@ -370,23 +392,18 @@ export function SearchDiscover({ onExploreMap }: Props) {
         ))}
       </ScrollView>
 
-      {/* Car import — ENTER the CAR IMPORT mini-app hub (/import). Browsing
-          imported cars stays one tap away: the hub's "Search Cars" card pushes
-          SECTION_ROUTE.car with ?engine=import seeded, so the anti-melt
-          contract (dedicated mini-app entry, never shared-Search filters)
-          holds end to end. */}
       <Pressable
         onPress={() => router.push("/import" as Href)}
-        style={styles.hubCtaWrap}
+        style={portalPressStyle}
         accessibilityRole="button"
         accessibilityLabel={t("search.discover.carImport")}
         testID="discover-car-import"
       >
         <LinearGradient
-          colors={["#8A0E14", "#1C0507"]}
+          colors={SECTION_IDENTITY_GRADIENT.car}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.hubCta}
+          style={styles.portalCard}
         >
           <View pointerEvents="none" style={styles.sectionWatermarkWrap}>
             <Image
@@ -397,7 +414,12 @@ export function SearchDiscover({ onExploreMap }: Props) {
             />
           </View>
           <View style={[styles.mapCtaRow, { flexDirection: rowDir }]}>
-            <View style={[styles.mapBadge, { backgroundColor: colors.primary }]}>
+            <View
+              style={[
+                styles.mapBadge,
+                { backgroundColor: sectionAccent("car") },
+              ]}
+            >
               <CategoryIcon category="car" color="#FFFFFF" />
             </View>
             <View style={styles.mapCtaText}>
@@ -419,23 +441,22 @@ export function SearchDiscover({ onExploreMap }: Props) {
 
       {/* ── Business & supply hubs (الأعمال والتوريد) ────────────────────────
           Rectangular portal rows into the B2B worlds. Each carries the BANCO
-          watermark so the identity never drops. Colours: supply = deep red
-          family, importers = neutral charcoal, Banks & Financiers = the ONE
-          trust-blue section outside the red family (deliberate, banks only). */}
+          watermark so the identity never drops. Banks & Financiers remains the
+          one deliberate trust-blue identity outside the BANCO red family. */}
       <SectionHeader label={t("search.discover.businessHub")} />
 
       <Pressable
         onPress={() => router.push("/business/global-supply")}
-        style={styles.hubCtaWrap}
+        style={portalPressStyle}
         accessibilityRole="button"
         accessibilityLabel={t("search.discover.supplyPortal")}
         testID="discover-supply-portal"
       >
         <LinearGradient
-          colors={["#4A0D12", "#170506"]}
+          colors={SECTION_IDENTITY_GRADIENT.industrial}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.hubCta}
+          style={styles.portalCard}
         >
           <View pointerEvents="none" style={styles.sectionWatermarkWrap}>
             <Image
@@ -446,7 +467,12 @@ export function SearchDiscover({ onExploreMap }: Props) {
             />
           </View>
           <View style={[styles.mapCtaRow, { flexDirection: rowDir }]}>
-            <View style={[styles.mapBadge, { backgroundColor: colors.primary }]}>
+            <View
+              style={[
+                styles.mapBadge,
+                { backgroundColor: SECTION_IDENTITY_GRADIENT.industrial[0] },
+              ]}
+            >
               <Feather name="globe" size={20} color="#FFFFFF" />
             </View>
             <View style={styles.mapCtaText}>
@@ -468,16 +494,16 @@ export function SearchDiscover({ onExploreMap }: Props) {
 
       <Pressable
         onPress={() => router.push("/business/supply-hub")}
-        style={styles.hubCtaWrap}
+        style={portalPressStyle}
         accessibilityRole="button"
         accessibilityLabel={t("search.discover.importersHub")}
         testID="discover-importers-hub"
       >
         <LinearGradient
-          colors={["#23252B", "#0C0D10"]}
+          colors={[SECTION_NEUTRAL.surface, SECTION_NEUTRAL.void]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.hubCta}
+          style={styles.portalCard}
         >
           <View pointerEvents="none" style={styles.sectionWatermarkWrap}>
             <Image
@@ -488,7 +514,12 @@ export function SearchDiscover({ onExploreMap }: Props) {
             />
           </View>
           <View style={[styles.mapCtaRow, { flexDirection: rowDir }]}>
-            <View style={[styles.mapBadge, { backgroundColor: "rgba(255,255,255,0.16)" }]}>
+            <View
+              style={[
+                styles.mapBadge,
+                { backgroundColor: sectionAccent("all") },
+              ]}
+            >
               <Feather name="package" size={20} color="#FFFFFF" />
             </View>
             <View style={styles.mapCtaText}>
@@ -510,16 +541,16 @@ export function SearchDiscover({ onExploreMap }: Props) {
 
       <Pressable
         onPress={() => router.push("/business/banks" as Href)}
-        style={styles.hubCtaWrap}
+        style={portalPressStyle}
         accessibilityRole="button"
         accessibilityLabel={t("search.discover.banksHub")}
         testID="discover-banks-hub"
       >
         <LinearGradient
-          colors={["#0D2B4A", "#071522"]}
+          colors={SECTION_IDENTITY_GRADIENT.banks}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.hubCta}
+          style={styles.portalCard}
         >
           <View pointerEvents="none" style={styles.sectionWatermarkWrap}>
             <Image
@@ -530,7 +561,7 @@ export function SearchDiscover({ onExploreMap }: Props) {
             />
           </View>
           <View style={[styles.mapCtaRow, { flexDirection: rowDir }]}>
-            <View style={[styles.mapBadge, { backgroundColor: "#1E6FD9" }]}>
+            <View style={[styles.mapBadge, { backgroundColor: BANKS_ACCENT }]}>
               <Feather name="credit-card" size={20} color="#FFFFFF" />
             </View>
             <View style={styles.mapCtaText}>
@@ -549,7 +580,6 @@ export function SearchDiscover({ onExploreMap }: Props) {
           </View>
         </LinearGradient>
       </Pressable>
-
     </ScrollView>
   );
 }
@@ -575,12 +605,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    // Premium depth: each card reads as a framed, elevated tile.
     shadowColor: "#000000",
     shadowOpacity: 0.28,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 5,
+  },
+  portalPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.992 }],
   },
   sectionPhoto: {
     ...StyleSheet.absoluteFillObject,
@@ -602,11 +635,15 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.18)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.28)",
+    borderColor: "rgba(255,255,255,0.30)",
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000000",
+    shadowOpacity: 0.24,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   sectionLabelRow: {
     flexDirection: "row",
@@ -632,23 +669,25 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 14,
   },
-  mapCtaWrap: {
+  portalWrap: {
     marginHorizontal: 16,
-    marginTop: 18,
+    marginTop: 12,
   },
-  mapCta: {
+  portalCard: {
+    minHeight: 76,
     borderRadius: 18,
     overflow: "hidden",
     padding: 16,
-  },
-  mapGlow: {
-    position: "absolute",
-    top: -16,
-    bottom: -16,
-    width: 130,
-    opacity: 0.5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    shadowColor: "#000000",
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   mapCtaRow: {
+    minHeight: 44,
     alignItems: "center",
     gap: 14,
   },
@@ -658,9 +697,12 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.20)",
   },
   mapCtaText: {
     flex: 1,
+    minWidth: 0,
   },
   mapTitle: {
     fontSize: 16,
@@ -686,12 +728,16 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   mapPortalChip: {
+    minHeight: 44,
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
+  },
+  mapPortalPressed: {
+    opacity: 0.86,
   },
   mapPortalChipText: {
     fontSize: 12.5,
@@ -727,17 +773,6 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(0,0,0,0.55)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
-  },
-  hubCtaWrap: {
-    marginHorizontal: 16,
-    marginTop: 12,
-  },
-  hubCta: {
-    borderRadius: 18,
-    overflow: "hidden",
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
   },
   hubWatermark: {
     width: "40%",
