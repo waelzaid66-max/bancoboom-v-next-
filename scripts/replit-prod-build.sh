@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# Replit Production Build — compiles ALL five surfaces
+# Replit Production Build — compiles every surface claimed by replit-prod-start.
+#
+# This path is Replit-specific, but it must preserve the same fail-closed
+# workspace identity and compile semantics as the canonical monorepo build.
+# Replit remains a preview/diagnostic environment; this script is not a release
+# certificate and does not replace exact-RC CI / Docker / Coolify acceptance.
 #
 # Surfaces & output paths:
 #   api-server       → artifacts/api-server/dist/
@@ -8,7 +13,7 @@
 #   landing          → artifacts/landing/dist/public/
 #   dealer-os        → artifacts/dealer-os/dist/public/   (BASE_PATH=/market/)
 #   admin-os         → artifacts/admin-os/dist/public/    (BASE_PATH=/admin/)
-#   banco-mobile web → artifacts/banco-mobile/static-build/web/  (expo export)
+#   banco-mobile web → artifacts/banco-mobile/static-build/web/ (expo export)
 #
 # Run by: [deployment].build in .replit
 # ─────────────────────────────────────────────────────────────────────────────
@@ -16,9 +21,14 @@ set -euo pipefail
 
 log() { echo "▶ $*"; }
 ok()  { echo "✅ $*"; }
-warn(){ echo "⚠  $*"; }
 
 WORKSPACE="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$WORKSPACE"
+
+# ── 0. Workspace identity / toolchain guard ──────────────────────────────────
+log "Verifying authoritative workspace..."
+pnpm run workspace:verify
+ok "Workspace verified"
 
 # ── 1. Dependencies ───────────────────────────────────────────────────────────
 log "Installing dependencies..."
@@ -28,12 +38,19 @@ pnpm install \
   --verify-store-integrity=false \
   2>/dev/null \
   || pnpm install --frozen-lockfile
+ok "Dependencies installed"
 
-# ── 2. Shared libraries ───────────────────────────────────────────────────────
-log "Building shared libraries..."
-pnpm --filter @workspace/db          build 2>/dev/null || true
-pnpm --filter @workspace/taxonomy    build 2>/dev/null || true
-pnpm --filter @workspace/api-client  build 2>/dev/null || true
+# ── 2. Canonical workspace typecheck + shared-library build scripts ──────────
+# Preserve the root build's compile authority before building the Replit subset.
+# This checks shared libraries plus every artifact/script package that exposes a
+# typecheck script; the surface builds below then remain a documented Replit-only
+# subset rather than an inferred replacement for the canonical root build.
+log "Typechecking canonical workspace..."
+pnpm run typecheck
+
+log "Running optional shared-library build scripts..."
+pnpm -r --filter "./lib/**" --if-present run build
+ok "Workspace typecheck and shared libraries verified"
 
 # ── 3. API server ─────────────────────────────────────────────────────────────
 log "Building api-server..."
@@ -57,12 +74,16 @@ BASE_PATH=/admin/ pnpm --filter @workspace/admin-os run build
 
 ok "All Vite SPAs built"
 
-# ── 6. Expo web export — browser surface for banco-mobile ────────────────────
+# ── 6. Expo web export — required browser surface for banco-mobile ───────────
+# replit-prod-start advertises and serves /banco-mobile/. Therefore its export is
+# required. If it cannot be produced, fail this build instead of reporting a
+# misleading partial deployment success.
 log "Building Expo web export (banco-mobile browser surface)..."
 (
   cd "$WORKSPACE/artifacts/banco-mobile"
 
-  # Clerk key: prefer explicit EXPO_PUBLIC_ key, fall back to shared CLERK_PUBLISHABLE_KEY
+  # Clerk key: prefer explicit EXPO_PUBLIC_ key, fall back to shared
+  # CLERK_PUBLISHABLE_KEY. The Expo app itself owns any missing-key warning.
   CLERK_KEY="${EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:-${CLERK_PUBLISHABLE_KEY:-}}"
 
   EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_KEY" \
@@ -72,8 +93,7 @@ log "Building Expo web export (banco-mobile browser surface)..."
     --output-dir static-build/web \
     --platform web \
     --no-minify
-) \
-  && ok "Expo web export ready → artifacts/banco-mobile/static-build/web/" \
-  || warn "Expo web export failed — mobile surface will serve the Expo Go QR page (non-fatal)"
+)
+ok "Expo web export ready → artifacts/banco-mobile/static-build/web/"
 
-ok "Build complete — all surfaces ready for deployment"
+ok "Build complete — every claimed Replit deployment surface built successfully"
