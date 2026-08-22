@@ -20,33 +20,68 @@
 set -euo pipefail
 
 WORKSPACE="$(cd "$(dirname "$0")/.." && pwd)"
-STATIC_DIR="/tmp/banco-static"
-NGINX_CONF="/tmp/banco-nginx.conf"
-NGINX_PID_FILE="/tmp/nginx.pid"
+STATIC_DIR="${STATIC_DIR:-/tmp/banco-static}"
+NGINX_CONF="${NGINX_CONF:-/tmp/banco-nginx.conf}"
+NGINX_PID_FILE="${NGINX_PID_FILE:-/tmp/nginx.pid}"
+ROUTER_PORT="${ROUTER_PORT:-5000}"
+API_PORT="${API_PORT:-8080}"
+WEB_PORT="${WEB_PORT:-3001}"
+MOBILE_PORT="${MOBILE_PORT:-3000}"
+NGINX_PREFIX="$(dirname "$(dirname "$(readlink -f "$(command -v nginx)")")")"
+NGINX_MIME_TYPES="${NGINX_MIME_TYPES:-$NGINX_PREFIX/conf/mime.types}"
 
 log()  { echo "▶ $*"; }
 ok()   { echo "✅ $*"; }
 warn() { echo "⚠  $*"; }
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "❌ Required runtime command not found: $1" >&2
+    exit 1
+  }
+}
+
+require_free_port() {
+  local port="$1"
+  if (echo >/dev/tcp/127.0.0.1/"$port") >/dev/null 2>&1; then
+    echo "❌ Port :$port is already in use; stop the development service before starting the production router." >&2
+    exit 1
+  fi
+}
+
+require_command nginx
+require_command pnpm
+require_command node
+if [ ! -f "$NGINX_MIME_TYPES" ]; then
+  echo "❌ nginx MIME types file not found: $NGINX_MIME_TYPES" >&2
+  exit 1
+fi
+require_free_port "$ROUTER_PORT"
+require_free_port "$API_PORT"
+require_free_port "$WEB_PORT"
+require_free_port "$MOBILE_PORT"
 
 # ── Guard: DATABASE_URL ───────────────────────────────────────────────────────
 if [ -z "${DATABASE_URL:-}" ]; then
   warn "DATABASE_URL not set — api-server will refuse to start"
 fi
 
-# ── 1. Start api-server on :8080 ──────────────────────────────────────────────
-log "Starting api-server on :8080..."
-PORT=8080 pnpm --filter @workspace/api-server run start &
+# ── 1. Start api-server on the router-owned internal port ─────────────────────
+# The production router is the only process that starts the API. The development
+# API workflow must be stopped before this script is run in the same workspace.
+log "Starting api-server on :$API_PORT..."
+PORT="$API_PORT" pnpm --filter @workspace/api-server run start &
 API_PID=$!
 
-# ── 2. Start banco-website (Next.js) on :3001 ────────────────────────────────
-log "Starting banco-website (Next.js) on :3001..."
-PORT=3001 pnpm --filter @workspace/banco-website exec -- \
-  next start --hostname 0.0.0.0 --port 3001 &
+# ── 2. Start banco-website (Next.js) on the router-owned internal port ───────
+log "Starting banco-website (Next.js) on :$WEB_PORT..."
+PORT="$WEB_PORT" pnpm --filter @workspace/banco-website exec -- \
+  next start --hostname 0.0.0.0 --port "$WEB_PORT" &
 WEB_PID=$!
 
-# ── 3. Start mobile serve.js on :3000 ────────────────────────────────────────
-log "Starting banco-mobile server on :3000 (BASE_PATH=/banco-mobile)..."
-PORT=3000 BASE_PATH=/banco-mobile \
+# ── 3. Start mobile serve.js on the router-owned internal port ───────────────
+log "Starting banco-mobile server on :$MOBILE_PORT (BASE_PATH=/banco-mobile)..."
+PORT="$MOBILE_PORT" BASE_PATH=/banco-mobile \
   node "$WORKSPACE/artifacts/banco-mobile/server/serve.js" &
 MOBILE_PID=$!
 
@@ -97,7 +132,7 @@ events { worker_connections 1024; }
 
 http {
   access_log  /tmp/nginx-access.log;
-  include     /etc/nginx/mime.types;
+  include     $NGINX_MIME_TYPES;
   default_type application/octet-stream;
   sendfile    on;
   tcp_nopush  on;
@@ -109,12 +144,12 @@ http {
   client_max_body_size 60m;
 
   # ── Upstreams ────────────────────────────────────────────────────────────
-  upstream banco_api    { server 127.0.0.1:8080; keepalive 16; }
-  upstream banco_web    { server 127.0.0.1:3001; keepalive 16; }
-  upstream banco_mobile { server 127.0.0.1:3000; keepalive 16; }
+  upstream banco_api    { server 127.0.0.1:$API_PORT; keepalive 16; }
+  upstream banco_web    { server 127.0.0.1:$WEB_PORT; keepalive 16; }
+  upstream banco_mobile { server 127.0.0.1:$MOBILE_PORT; keepalive 16; }
 
   server {
-    listen 5000;
+    listen $ROUTER_PORT;
     server_name _;
     root $STATIC_DIR;
 
@@ -264,21 +299,21 @@ sleep 4
 # ── 7. Signal handling ───────────────────────────────────────────────────────
 cleanup() {
   echo "Shutting down all services..."
-  nginx -c "$NGINX_CONF" -s stop 2>/dev/null || true
+  nginx -p /tmp/ -c "$NGINX_CONF" -s stop 2>/dev/null || true
   kill "$API_PID" "$WEB_PID" "$MOBILE_PID" 2>/dev/null || true
   exit 0
 }
 trap cleanup SIGTERM SIGINT
 
 # ── 8. Start nginx (foreground — this IS the main process) ───────────────────
-log "Starting nginx on :5000..."
-log "  /             → banco-website (Next.js) :3001"
+log "Starting nginx on :$ROUTER_PORT..."
+log "  /             → banco-website (Next.js) :$WEB_PORT"
 log "  /market/      → dealer-os SPA"
 log "  /admin/       → admin-os SPA"
-log "  /api/         → api-server :8080"
-log "  /banco-mobile/ → mobile (Expo web / QR) :3000"
+log "  /api/         → api-server :$API_PORT"
+log "  /banco-mobile/ → mobile (Expo web / QR) :$MOBILE_PORT"
 
-nginx -c "$NGINX_CONF" -g "daemon off;"
+nginx -p /tmp/ -c "$NGINX_CONF" -g "daemon off;"
 
 # nginx exited — tear down everything
 warn "nginx exited unexpectedly"

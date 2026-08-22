@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "python-3.12", "web"]
+modules = ["python-3.12", "web", "nodejs-22"]
 
 [deployment]
 router = "application"
@@ -21,89 +21,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Web App"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Mobile Serve"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "API Server"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Dealer OS Dev"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Admin OS Dev"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
 args = "artifacts/banco-mobile: expo"
-
-# ── banco-website Next.js consumer web (:5000 → external :80) ────────────────
-[[workflows.workflow]]
-name = "Web App"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "webview"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/banco-website exec -- next dev --hostname 0.0.0.0 --port 5000"
-waitForPort = 5000
-
-# ── Fresh mobile web build + serve.js (:3000 → external :6800) ───────────────
-[[workflows.workflow]]
-name = "Mobile Serve"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "webview"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/banco-mobile run build:web && PORT=3000 BASE_PATH=/banco-mobile node artifacts/banco-mobile/server/serve.js"
-waitForPort = 3000
-
-# ── Mobile web build (run once to generate static-build/web/) ─────────────────
-[[workflows.workflow]]
-name = "Mobile Web Build"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/banco-mobile run build:web"
-
-# ── Dealer-os market SPA (:5002) ──────────────────────────────────────────────
-[[workflows.workflow]]
-name = "Dealer OS Dev"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "PORT=5002 BASE_PATH=/market/ pnpm --filter @workspace/dealer-os run dev"
-
-# ── Admin-os SPA (:5003) ─────────────────────────────────────────────────────
-[[workflows.workflow]]
-name = "Admin OS Dev"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "PORT=5003 BASE_PATH=/admin/ pnpm --filter @workspace/admin-os run dev"
 
 # ── Expo dev server (Metro bundler, for native app development) ──────────────
 [[workflows.workflow]]
@@ -116,18 +34,6 @@ outputType = "console"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "EXPO_NO_INTERACTIVE=1 NODE_PATH=/home/runner/workspace/artifacts/banco-mobile/node_modules pnpm --filter @workspace/banco-mobile run dev"
-
-[[workflows.workflow]]
-name = "API Server"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "PORT=8080 pnpm --filter @workspace/api-server run dev"
-waitForPort = 8080
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [agent]
 stack = "BEST_EFFORT_FALLBACK"
@@ -218,13 +124,13 @@ CLERK_TELEMETRY_DISABLED = "true"
 PUBLIC_OBJECT_SEARCH_PATHS = "/public"
 PRIVATE_OBJECT_DIR = "/private"
 OBJECT_STORAGE_PROVIDER = "s3"
-VITE_ADMIN_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/admin/"
-VITE_MARKET_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/market/"
-VITE_WEB_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev"
-NEXT_PUBLIC_ADMIN_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/admin/"
-NEXT_PUBLIC_MARKET_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/market/"
-NEXT_PUBLIC_SITE_URL = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev"
-NEXT_PUBLIC_SITE_URL_EN = "https://d6193e5e-9f22-436d-b29b-b52f98f6e66d-00-2ijdcga1saq1d.riker.replit.dev/en"
+VITE_ADMIN_URL = "https://bcfee6f4-aa39-4e69-bdbc-930478a53c75-00-32dpzx04gndfg.worf.replit.dev/admin-os/"
+VITE_MARKET_URL = "https://bcfee6f4-aa39-4e69-bdbc-930478a53c75-00-32dpzx04gndfg.worf.replit.dev/dealer-os/"
+VITE_WEB_URL = "https://bcfee6f4-aa39-4e69-bdbc-930478a53c75-00-32dpzx04gndfg.worf.replit.dev"
+NEXT_PUBLIC_ADMIN_URL = "https://bcfee6f4-aa39-4e69-bdbc-930478a53c75-00-32dpzx04gndfg.worf.replit.dev/admin-os/"
+NEXT_PUBLIC_MARKET_URL = "https://bcfee6f4-aa39-4e69-bdbc-930478a53c75-00-32dpzx04gndfg.worf.replit.dev/dealer-os/"
+NEXT_PUBLIC_SITE_URL = "https://bcfee6f4-aa39-4e69-bdbc-930478a53c75-00-32dpzx04gndfg.worf.replit.dev"
+NEXT_PUBLIC_SITE_URL_EN = "https://bcfee6f4-aa39-4e69-bdbc-930478a53c75-00-32dpzx04gndfg.worf.replit.dev/en"
 WEB_PLUG_ENABLED = "true"
 # PAYMENT_CONFIG_ENCRYPTION_KEY  <- REMOVED from source control.
 # It is a real AES-256 key: it MUST come from Replit Secrets / Coolify env only.
@@ -235,4 +141,8 @@ WEB_PLUG_ENABLED = "true"
 # Replit Secrets, all from the same Clerk instance.
 
 [userenv.production]
+
+[nix]
+channel = "stable-25_05"
+packages = ["nginx"]
 # Publishable + secret keys: set via Secrets UI (do not commit pk_live / sk_*).

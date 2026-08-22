@@ -164,6 +164,33 @@ test("tile failures cross the bridge once and are visible on native and web", ()
   assert.equal((i18n.match(/mapUnavailableBody:/g) ?? []).length, 2);
 });
 
+test("native bootstrap is fail-closed while tile errors stay active", () => {
+  const ready = nativeHost.indexOf('msg.type === "ready"');
+  const bootstrapError = nativeHost.indexOf('msg.type === "error"');
+  const tileError = nativeHost.indexOf('msg.type === "tile_error"');
+  assert.ok(ready >= 0 && bootstrapError > ready && tileError > bootstrapError);
+  assert.doesNotMatch(
+    nativeHost.slice(bootstrapError, tileError),
+    /setReady\(true\)/,
+    "a bootstrap error must never report the map ready",
+  );
+  assert.match(
+    nativeHost,
+    /setBootstrapUnavailable\(true\)/,
+    "bootstrap failure must enter an explicit unavailable state",
+  );
+  assert.match(
+    nativeHost,
+    /testID="map-bootstrap-unavailable"/,
+    "bootstrap failure must be visible to users",
+  );
+  assert.match(
+    nativeHost.slice(tileError),
+    /setReady\(true\)/,
+    "tile errors must preserve the active degraded map path",
+  );
+});
+
 test("the page draws the area; the host decides what is inside it", () => {
   // One implementation of point-in-polygon, in the file that has tests. If the
   // page ever grew its own, the two would drift and the map would disagree

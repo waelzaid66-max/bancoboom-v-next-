@@ -132,7 +132,17 @@ function serveHtml(html, res) {
 
 function serveWebIndex(res) {
   // index.html must never be cached — it points at hashed bundles.
-  sendFile(WEB_INDEX, res, { "cache-control": "no-cache" });
+  const html = fs
+    .readFileSync(WEB_INDEX, "utf-8")
+    .replace(
+      "<head>",
+      '<head><meta name="banco-surface" content="mobile">',
+    );
+  res.writeHead(200, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-cache",
+  });
+  res.end(html);
 }
 
 const server = http.createServer((req, res) => {

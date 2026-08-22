@@ -1549,6 +1549,11 @@ export function SectionSearchApp({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View
+        style={isCarSection ? styles.carsHeaderDock : undefined}
+        testID={isCarSection ? "cars-header-dock" : undefined}
+        collapsable={false}
+      >
       {isRealEstateSection ? (
         <PropertyHomeHeader
           slot="pinned"
@@ -1991,7 +1996,10 @@ export function SectionSearchApp({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={styles.hScroll}
+        style={[
+          styles.hScroll,
+          isCarSection ? styles.carDockLane : null,
+        ]}
         contentContainerStyle={[styles.chipStripRow, { flexDirection: rowDir }]}
         testID="section-primary-strip"
       >
@@ -2090,7 +2098,10 @@ export function SectionSearchApp({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={styles.hScroll}
+        style={[
+          styles.hScroll,
+          isCarSection ? styles.carDockLane : null,
+        ]}
         contentContainerStyle={[styles.chipStripRow, { flexDirection: rowDir }]}
         testID="section-engine-strip"
       >
@@ -2150,8 +2161,6 @@ export function SectionSearchApp({
           );
         }) : null}
       </ScrollView>
-      ) : null}
-      </View>
       ) : null}
 
       {/* ── RE property-type axis (Stay-parallel) — never mixed into offer row.
@@ -2250,7 +2259,11 @@ export function SectionSearchApp({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={[styles.hScroll, styles.carFilterPanelFooter]}
+           style={[
+             styles.hScroll,
+             styles.carFilterPanelFooter,
+             isCarSection ? styles.carDockLane : null,
+           ]}
           contentContainerStyle={[styles.chipStrip, { flexDirection: rowDir }]}
           testID="car-brand-origin-strip"
         >
@@ -2328,6 +2341,8 @@ export function SectionSearchApp({
             })}
           </View>
         </ScrollView>
+       ) : null}
+       </View>
       ) : null}
 
       {/* ── Materials smart axis strip: types + origin ONE horizontal scroll.
@@ -2782,6 +2797,7 @@ export function SectionSearchApp({
       />
 
       <MiniAppBottomNav lightened={searchOpen} />
+      </View>
     </View>
   );
 }
@@ -2935,6 +2951,36 @@ const styles = StyleSheet.create({
   carFilterPanel: {
     backgroundColor: SECTION_NEUTRAL.void,
     paddingTop: 10,
+    paddingBottom: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    maxHeight: 70,
+    overflow: "hidden",
+    zIndex: 9,
+    elevation: 2,
+  },
+  /** CAR-only outer surface: header, hero, search and the compact dock share
+   * one native tree node, so the results list starts after one measured block. */
+  carsHeaderDock: {
+    backgroundColor: SECTION_NEUTRAL.void,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 5,
+    zIndex: 10,
+  },
+  /** Each CAR axis owns a compact horizontal viewport inside the one-row dock.
+   * flexBasis 0 prevents any single axis from pushing the other lanes off
+   * narrow phones; the lane itself remains horizontally scrollable. */
+  carDockLane: {
+    flexBasis: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    maxHeight: 58,
   },
   /** The last cars filter row: same surface, and the rounded bottom that closes
    *  the card off. This row is now the bottom edge of the whole header+filters

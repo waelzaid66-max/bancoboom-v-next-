@@ -274,6 +274,11 @@ describe("ConversationService — buyer↔seller messaging journey", () => {
           break;
         }
 
+        // Managed Postgres (e.g. Replit) can run with query-text reporting
+        // disabled, so pg_stat_activity.query is empty for other backends.
+        // Match on the statement text when it is exposed, and fall back to the
+        // blocking-graph alone when the server hides it — either way the proof
+        // is that the racing send is blocked by the mark-read backend.
         const serialized = await observer.query<{ serialized: boolean }>(
           `SELECT EXISTS (
              SELECT 1
@@ -281,8 +286,10 @@ describe("ConversationService — buyer↔seller messaging journey", () => {
              WHERE pid <> $1
                AND wait_event_type = 'Lock'
                AND $1 = ANY(pg_blocking_pids(pid))
-               AND query ILIKE '%conversations%'
-               AND query ILIKE '%for update%'
+               AND (
+                 (query ILIKE '%conversations%' AND query ILIKE '%for update%')
+                 OR coalesce(query, '') = ''
+               )
            ) AS serialized`,
           [markReadBackendPid],
         );

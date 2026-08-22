@@ -17,6 +17,7 @@
     "ops:website-staging-prep": "node scripts/website-staging-prep-audit.mjs",
     "ops:website-staging-smoke": "node scripts/website-staging-smoke.mjs",
     "ops:website-soft-launch-prep": "node scripts/website-soft-launch-prep-audit.mjs",
+    "ops:prod-route-smoke": "node scripts/replit-prod-route-smoke.mjs",
     "ops:live-cutover": "node scripts/ops-live-cutover-check.mjs",
     "confidence": "node scripts/production-confidence-check.mjs",
     "security:audit": "node scripts/dependency-security-gate.mjs",

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import type { WebViewMessageEvent } from "react-native-webview";
 
+import { AppText } from "@/components/AppText";
 import { apiCategoryFor } from "@/components/CategoryTabs";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
@@ -78,6 +79,7 @@ export function SearchResultsMap({
   const tileFailureShownRef = useRef(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [bootstrapUnavailable, setBootstrapUnavailable] = useState(false);
   // Total in the visible viewport per the last server response (honest count);
   // null until the first response, when we fall back to the loaded-page count.
   const [serverTotal, setServerTotal] = useState<number | null>(null);
@@ -182,6 +184,7 @@ export function SearchResultsMap({
   // invalidate any in-flight cluster fetch from the previous page.
   useEffect(() => {
     setReady(false);
+    setBootstrapUnavailable(false);
     setSelectedId(null);
     setServerTotal(null);
     vpSeqRef.current++;
@@ -325,9 +328,15 @@ export function SearchResultsMap({
     (event: WebViewMessageEvent) => {
       try {
         const msg = JSON.parse(event.nativeEvent.data) as MapBridgeMessage;
-        if (msg.type === "ready" || msg.type === "error") {
+        if (msg.type === "ready") {
           setReady(true);
+        } else if (msg.type === "error") {
+          // A bootstrap error is not an active map. Keep the WebView mounted
+          // for diagnostics, but fail closed instead of exposing dead chrome.
+          setBootstrapUnavailable(true);
         } else if (msg.type === "tile_error") {
+          // Tiles are a degraded-but-active map case: the Leaflet bridge and
+          // its controls remain usable even when raster data is unavailable.
           setReady(true);
           if (!tileFailureShownRef.current) {
             tileFailureShownRef.current = true;
@@ -427,16 +436,35 @@ export function SearchResultsMap({
         </View>
       ) : null}
 
-      <MapOverlayChrome
-        count={serverTotal ?? markers.length}
-        areaCount={areaTotal}
-        selected={selected}
-        onClose={() => setSelectedId(null)}
-        onOpenListing={onOpenListing}
-        onSave={onSave}
-        isSaved={isSaved}
-        CardComponent={CardComponent}
-      />
+      {bootstrapUnavailable ? (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            styles.unavailable,
+            { backgroundColor: colors.card },
+          ]}
+          testID="map-bootstrap-unavailable"
+          accessibilityRole="alert"
+        >
+          <AppText style={[styles.unavailableTitle, { color: colors.foreground }]}>
+            {t("search.mapUnavailableTitle")}
+          </AppText>
+          <AppText style={[styles.unavailableBody, { color: colors.foreground }]}>
+            {t("search.mapUnavailableBody")}
+          </AppText>
+        </View>
+      ) : (
+        <MapOverlayChrome
+          count={serverTotal ?? markers.length}
+          areaCount={areaTotal}
+          selected={selected}
+          onClose={() => setSelectedId(null)}
+          onOpenListing={onOpenListing}
+          onSave={onSave}
+          isSaved={isSaved}
+          CardComponent={CardComponent}
+        />
+      )}
     </View>
   );
 }
@@ -444,4 +472,11 @@ export function SearchResultsMap({
 const styles = StyleSheet.create({
   web: { flex: 1, backgroundColor: "transparent" },
   center: { alignItems: "center", justifyContent: "center" },
+  unavailable: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+  },
+  unavailableTitle: { fontSize: 16, fontWeight: "700", textAlign: "center" },
+  unavailableBody: { fontSize: 13, marginTop: 8, textAlign: "center" },
 });
