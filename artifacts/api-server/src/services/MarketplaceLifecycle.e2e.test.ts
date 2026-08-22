@@ -11,6 +11,7 @@ import { searchListings } from "./SearchService";
 import { getFeed } from "./FeedService";
 import { createConversation, sendMessage, getMessages } from "./ConversationService";
 import { saveOrUnsaveListing, isSaved } from "./SaveService";
+import { cleanText } from "./NormalizationService";
 import { CreateListingSchema } from "../validators/schemas";
 import { db, deleteUsers, uniq, randomUUID } from "../__tests__/helpers";
 import { listings, listingAttributes, users, locations } from "@workspace/db/schema";
@@ -52,7 +53,7 @@ describe("Marketplace lifecycle — full sale cycle (executed E2E)", () => {
   it("publishes → appears → search → open → message → favorite → edit → promote → archive → republish → delete", async () => {
     const seller = await seedUser("E2E Seller");
     const buyer = await seedUser("E2E Buyer");
-    const token = uniq("E2ECYCLE").toUpperCase();
+    const token = cleanText(uniq("E2ECYCLE").toUpperCase());
 
     // 1) PUBLISH (validated through the real controller schema).
     const input = CreateListingSchema.parse({
