@@ -61,6 +61,7 @@ const operatorFiles = [
   "docs/DEPLOY_COOLIFY.md",
   "release/production/README.md",
   "release/production/COOLIFY_RUNBOOK.md",
+  "release/production/ENVIRONMENT_CONTRACT.md",
 ];
 
 // Fail only when the historical repository is presented as an ACTIVE source.
@@ -89,6 +90,34 @@ for (const relativePath of operatorFiles) {
         `historical deploy source is still presented as live authority in ${relativePath}: ${pattern}`,
       );
     }
+  }
+}
+
+// Current operator-facing deployment documents must describe the same immutable
+// first-party image identity as Compose. Keep historical/audit documents outside
+// this list so prohibition/provenance text cannot create a false release failure.
+const immutableImageOperatorFiles = [
+  "COOLIFY_DEPLOY_NOW.md",
+  "OPS_GO_LIVE_CHECKLIST.md",
+  "docs/DEPLOYMENT_SOURCE_OF_TRUTH.md",
+  "docs/DEPLOY_COOLIFY.md",
+  "release/production/ENVIRONMENT_CONTRACT.md",
+];
+const mutableFirstPartyImagePattern =
+  /\bbanco-(?:api|web|website|web-static):latest\b/i;
+
+for (const relativePath of immutableImageOperatorFiles) {
+  const fullPath = path.join(root, relativePath);
+  if (!fs.existsSync(fullPath)) {
+    failures.push(`operator release contract missing: ${relativePath}`);
+    continue;
+  }
+  const text = fs.readFileSync(fullPath, "utf8");
+  if (!text.includes("RELEASE_SHA")) {
+    failures.push(`operator release contract must require RELEASE_SHA: ${relativePath}`);
+  }
+  if (mutableFirstPartyImagePattern.test(text)) {
+    failures.push(`mutable first-party :latest image remains in operator contract: ${relativePath}`);
   }
 }
 
