@@ -41,6 +41,7 @@ const DEAD_TOKEN = "ExpoPushToken[receipt-p0-dead]";
 const HEALTHY_TOKEN = "ExpoPushToken[receipt-p0-healthy]";
 const CREDENTIAL_TOKEN = "ExpoPushToken[receipt-p0-credential]";
 const TICKET = "ticket-receipt-p0";
+const RECEIPT_MAX_ATTEMPTS = 3;
 
 function response(status: number, data: unknown): Response {
   return new Response(JSON.stringify({ data }), {
@@ -105,7 +106,7 @@ describe("PushService post-ticket receipt P0 contract", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("retries a transient receipt network failure with positive bounded delay", async () => {
+  it("retries a transient receipt network failure only after a positive delay", async () => {
     vi.useFakeTimers();
     const fetchMock = vi
       .fn()
@@ -114,9 +115,30 @@ describe("PushService post-ticket receipt P0 contract", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const processing = processPushReceipts([TICKET], ticketMap());
-    await flushTimers(processing);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.runAllTimersAsync();
+    await processing;
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops after the bounded receipt attempt budget when a network failure persists", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const fetchMock = vi.fn().mockRejectedValue(new Error("receipt network unavailable"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const processing = processPushReceipts([TICKET], ticketMap());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.runAllTimersAsync();
+    await processing;
+
+    expect(fetchMock).toHaveBeenCalledTimes(RECEIPT_MAX_ATTEMPTS);
+    expect(mocked.deleteFn).not.toHaveBeenCalled();
   });
 
   it("retries HTTP 429 receipt fetch and can recover", async () => {
@@ -147,6 +169,20 @@ describe("PushService post-ticket receipt P0 contract", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("does not retry a permanent non-429 HTTP 4xx receipt response", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const fetchMock = vi.fn().mockResolvedValue(response(400, {}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const processing = processPushReceipts([TICKET], ticketMap());
+    await vi.runAllTimersAsync();
+    await processing;
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mocked.deleteFn).not.toHaveBeenCalled();
+  });
+
   it("does not treat a missing requested receipt as terminal success", async () => {
     vi.useFakeTimers();
     const fetchMock = vi
@@ -159,6 +195,22 @@ describe("PushService post-ticket receipt P0 contract", () => {
     await flushTimers(processing);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(mocked.deleteFn).not.toHaveBeenCalled();
+  });
+
+  it("bounds persistent missing-receipt polling to the in-process P0 attempt budget", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue(response(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const processing = processPushReceipts([TICKET], ticketMap());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.runAllTimersAsync();
+    await processing;
+
+    expect(fetchMock).toHaveBeenCalledTimes(RECEIPT_MAX_ATTEMPTS);
     expect(mocked.deleteFn).not.toHaveBeenCalled();
   });
 
