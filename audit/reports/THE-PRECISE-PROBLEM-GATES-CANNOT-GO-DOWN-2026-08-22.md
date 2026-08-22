@@ -252,6 +252,27 @@ for b in …; do git merge-base --is-ancestor origin/$b HEAD || echo "STALE: $b"
 
 **`fix/auth-account-deleted-retry-20260822` is pinned at `f93d8e4`** — its last head that typechecks. **Fourteen verified commits are in. The five red ones are not.**
 
+**Final battery on the rebuilt tree — every gate, including the two that had never been run on an assembly:**
+
+```
+pnpm install --frozen-lockfile   exit 0
+pnpm run typecheck               exit 0    9 projects
+pnpm run build                   BUILD_EXIT=0
+chain integrity                  245/245
+production confidence            26/26 (local)  ·  24/24 (--skip-typecheck, as CI runs it)
+dependency security              0 blocking
+mobile                           127 passed / 127 total
+API vs real PostgreSQL 16        527 passed · 3 skipped · 0 failed   (95 files)
+```
+
+**And what the green tree still carries, stated here rather than hidden by it:**
+```
+test files: 163   reachable: 152   UNREACHABLE: 11
+```
+*Eleven guards that no runner invokes, in a tree that reports green on eight gates. That is §1 made concrete: the numbers cannot go down, so eleven silent guards cost nothing visible.*
+
+**Published as `local/owner-assembly-20260822-r2`, not as an update to this morning's branch.** *Rule ⑧ — no force-push to a shared branch — was issued by me this morning after finding one on `fix/car-header-unified-dock-v2`. A rule I apply to the team and not to myself is not a rule.*
+
 **⚠️ Correction #28 to my own process:** *I published an assembly and reported its branch list without re-checking containment at publish time. Two of sixteen inputs had moved within hours. A merge is only true for the head that existed when it happened, and "verified green" carries a timestamp whether or not I write one.*
 
 ---
