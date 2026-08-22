@@ -173,6 +173,67 @@ if (fs.existsSync(composePath)) {
   if (seenImageNames.size !== expectedImageNames.size) {
     failures.push("first-party image set must contain exactly the four approved BANCO application images");
   }
+
+  // P0 release identity: API image tag, API build metadata, API runtime pin and
+  // the one-off migrate builder must all derive from mandatory RELEASE_SHA.
+  const mandatoryRelease =
+    "${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}";
+  const releaseBindingLines = compose
+    .split(/\r?\n/)
+    .map((line) => line.trim());
+
+  const countExact = (line) => releaseBindingLines.filter((entry) => entry === line).length;
+  if (countExact(`RELEASE_SHA: ${mandatoryRelease}`) < 3) {
+    failures.push(
+      "compose must bind RELEASE_SHA to migrate build, API build and API runtime with no fallback",
+    );
+  }
+  if (countExact(`GIT_SHA: ${mandatoryRelease}`) !== 1) {
+    failures.push("API runtime GIT_SHA must derive exactly once from mandatory RELEASE_SHA");
+  }
+  if (countExact(`BUILD_ID: ${mandatoryRelease}`) !== 1) {
+    failures.push("API runtime BUILD_ID must derive exactly once from mandatory RELEASE_SHA");
+  }
+  if (/GIT_SHA:\s*\$\{GIT_SHA|BUILD_ID:\s*\$\{BUILD_ID|SOURCE_COMMIT:-/.test(compose)) {
+    failures.push(
+      "compose must not retain independent GIT_SHA/BUILD_ID/SOURCE_COMMIT fallbacks for release identity",
+    );
+  }
+}
+
+const apiDockerfilePath = path.join(root, "deploy", "coolify", "Dockerfile.api");
+if (fs.existsSync(apiDockerfilePath)) {
+  const dockerfile = fs.readFileSync(apiDockerfilePath, "utf8");
+  for (const required of [
+    "ARG RELEASE_SHA=",
+    "LABEL org.opencontainers.image.revision=$RELEASE_SHA",
+    "ENV RELEASE_SHA=$RELEASE_SHA",
+    "GIT_SHA=$RELEASE_SHA",
+    "BUILD_ID=$RELEASE_SHA",
+  ]) {
+    if (!dockerfile.includes(required)) {
+      failures.push(`API Dockerfile release identity binding missing: ${required}`);
+    }
+  }
+  if (/ARG\s+GIT_SHA|ARG\s+BUILD_ID/.test(dockerfile)) {
+    failures.push("API Dockerfile must not expose competing GIT_SHA/BUILD_ID build authorities");
+  }
+}
+
+const healthPath = path.join(root, "artifacts", "api-server", "src", "routes", "health.ts");
+if (fs.existsSync(healthPath)) {
+  const health = fs.readFileSync(healthPath, "utf8");
+  for (const required of [
+    "const FULL_GIT_SHA = /^[0-9a-f]{40}$/i;",
+    'cleanEnv("RELEASE_SHA")',
+    "explicitGitSha === releaseSha",
+    "explicitBuildId === releaseSha",
+    'checks.release_identity = identity.valid ? "ok" : "down"',
+  ]) {
+    if (!health.includes(required)) {
+      failures.push(`API readiness release-identity fail-closed contract missing: ${required}`);
+    }
+  }
 }
 
 if (failures.length > 0) {
