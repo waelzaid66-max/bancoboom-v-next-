@@ -31,6 +31,8 @@ const DEFAULT_SERVER_URL =
   "postgresql://postgres:postgres@127.0.0.1:5433/postgres";
 const EXTERNAL_CONFIRM = "CREATE_DROP_RANDOM_CHILD_DB";
 const CHILD_PREFIX = "banco_api_test_";
+const DOCKER_READY_ATTEMPTS = 30;
+const DOCKER_READY_DELAY_MS = 1_000;
 
 export function commandExecutable(cmd, platform = process.platform) {
   return platform === "win32" && cmd === "pnpm" ? "pnpm.cmd" : cmd;
@@ -60,6 +62,10 @@ function executableAvailable(cmd, args = ["--version"]) {
 
 function dockerAvailable() {
   return executableAvailable("docker", ["info"]);
+}
+
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 export function databaseNameFromUrl(databaseUrl) {
@@ -191,28 +197,54 @@ function externalPsql(databaseUrl, sql, { tuplesOnly = false, inherit = true } =
   return result.stdout?.trim() ?? "";
 }
 
-function dockerPsql(database, sql, { tuplesOnly = false, inherit = true } = {}) {
-  const args = [
+function dockerClientArgs(tool, database, toolArgs = []) {
+  return [
     "compose",
     "-f",
     "docker-compose.test.yml",
-    "exec",
-    "-T",
+    "run",
+    "--rm",
+    "-e",
+    "PGPASSWORD=postgres",
     "postgres",
-    "psql",
-    "-X",
-    "-v",
-    "ON_ERROR_STOP=1",
+    tool,
+    "-h",
+    "postgres",
     "-U",
     "postgres",
     "-d",
     database,
+    ...toolArgs,
   ];
-  if (tuplesOnly) args.push("-A", "-t");
-  args.push("-c", sql);
-  const result = commandResult("docker", args, {
-    stdio: inherit ? "inherit" : ["ignore", "pipe", "pipe"],
-  });
+}
+
+function dockerPostgresReady() {
+  const result = commandResult(
+    "docker",
+    dockerClientArgs("pg_isready", "postgres"),
+    { stdio: "ignore" },
+  );
+  return result.status === 0;
+}
+
+function waitForDockerPostgres() {
+  for (let attempt = 1; attempt <= DOCKER_READY_ATTEMPTS; attempt += 1) {
+    if (dockerPostgresReady()) return;
+    if (attempt < DOCKER_READY_ATTEMPTS) sleep(DOCKER_READY_DELAY_MS);
+  }
+  throw new Error("Disposable Docker Postgres did not become ready in time.");
+}
+
+function dockerPsql(database, sql, { tuplesOnly = false, inherit = true } = {}) {
+  const toolArgs = ["-X", "-v", "ON_ERROR_STOP=1"];
+  if (tuplesOnly) toolArgs.push("-A", "-t");
+  toolArgs.push("-c", sql);
+
+  const result = commandResult(
+    "docker",
+    dockerClientArgs("psql", database, toolArgs),
+    { stdio: inherit ? "inherit" : ["ignore", "pipe", "pipe"] },
+  );
   if (result.status !== 0) {
     const error = new Error(`docker psql exited with status ${result.status ?? "unknown"}`);
     error.exitCode = result.status ?? 1;
@@ -230,7 +262,8 @@ function quotedIdentifier(identifier) {
 
 function provisionDockerChild(database) {
   console.log("Starting dedicated test Postgres server (docker-compose.test.yml)…");
-  run("docker", ["compose", "-f", "docker-compose.test.yml", "up", "-d", "--wait"]);
+  run("docker", ["compose", "-f", "docker-compose.test.yml", "up", "-d", "postgres"]);
+  waitForDockerPostgres();
   dockerPsql("postgres", `CREATE DATABASE ${quotedIdentifier(database)}`);
   return {
     databaseUrl: databaseUrlForChild(DEFAULT_SERVER_URL, database),
