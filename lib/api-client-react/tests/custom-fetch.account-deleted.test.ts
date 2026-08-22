@@ -55,16 +55,18 @@ function okResponse(): Response {
 }
 
 const originalFetch = globalThis.fetch;
+const SESSION_A = "sess_auth_a";
+const SESSION_B = "sess_auth_b";
 
 test.beforeEach(() => {
   setBaseUrl(null);
   setAuthTokenGetter(null);
-  setAuthFailureHandler(null);
+  setAuthFailureHandler(null, null);
 });
 
 test.afterEach(() => {
   globalThis.fetch = originalFetch;
-  setAuthFailureHandler(null);
+  setAuthFailureHandler(null, null);
 });
 
 async function tombstoneCall(): Promise<unknown> {
@@ -72,9 +74,9 @@ async function tombstoneCall(): Promise<unknown> {
   return customFetch("https://api.example.test/v1/me", { responseType: "json" });
 }
 
-test("first ACCOUNT_DELETED invokes the handler once and preserves ApiError", async () => {
+test("first ACCOUNT_DELETED invokes once for the Clerk session and preserves ApiError", async () => {
   let calls = 0;
-  setAuthFailureHandler(() => {
+  setAuthFailureHandler(SESSION_A, () => {
     calls += 1;
   });
 
@@ -87,34 +89,25 @@ test("first ACCOUNT_DELETED invokes the handler once and preserves ApiError", as
   assert.equal(calls, 1);
 });
 
-test("concurrent tombstones share one in-flight teardown", async () => {
-  const first = deferred();
+test("concurrent same-session tombstones coalesce to one teardown", async () => {
+  const flight = deferred();
   let calls = 0;
-  setAuthFailureHandler(() => {
+  setAuthFailureHandler(SESSION_A, () => {
     calls += 1;
-    return first.promise;
+    return flight.promise;
   });
 
   await Promise.allSettled(Array.from({ length: 8 }, () => tombstoneCall()));
   assert.equal(calls, 1);
 
-  first.resolve();
-  await first.promise;
+  flight.resolve();
+  await flight.promise;
   await Promise.resolve();
-
-  const second = deferred();
-  setAuthFailureHandler(() => {
-    calls += 1;
-    return second.promise;
-  });
-  await Promise.allSettled([tombstoneCall(), tombstoneCall()]);
-  assert.equal(calls, 2);
-  second.resolve();
 });
 
-test("synchronous handler throw re-arms for the next tombstone", async () => {
+test("synchronous handler throw re-arms the same session", async () => {
   let calls = 0;
-  setAuthFailureHandler(() => {
+  setAuthFailureHandler(SESSION_A, () => {
     calls += 1;
     throw new Error("sync teardown failure");
   });
@@ -124,10 +117,10 @@ test("synchronous handler throw re-arms for the next tombstone", async () => {
   assert.equal(calls, 2);
 });
 
-test("asynchronous handler rejection re-arms for the next tombstone", async () => {
+test("asynchronous handler rejection re-arms the same session", async () => {
   let calls = 0;
   let rejectFirst!: (reason?: unknown) => void;
-  setAuthFailureHandler(() => {
+  setAuthFailureHandler(SESSION_A, () => {
     calls += 1;
     if (calls === 1) {
       return new Promise<void>((_resolve, reject) => {
@@ -146,9 +139,9 @@ test("asynchronous handler rejection re-arms for the next tombstone", async () =
   assert.equal(calls, 2);
 });
 
-test("successful async teardown re-arms for a later tombstone", async () => {
+test("successful teardown suppresses later stale tombstones for the same session", async () => {
   let calls = 0;
-  setAuthFailureHandler(async () => {
+  setAuthFailureHandler(SESSION_A, async () => {
     calls += 1;
   });
 
@@ -156,23 +149,78 @@ test("successful async teardown re-arms for a later tombstone", async () => {
   await Promise.resolve();
   await Promise.resolve();
   await assert.rejects(tombstoneCall(), ApiError);
-  assert.equal(calls, 2);
+  assert.equal(calls, 1);
 });
 
-test("old Promise settlement cannot clear a replacement handler generation", async () => {
+test("same-session handler replacement preserves COMPLETED state", async () => {
+  let firstCalls = 0;
+  let replacementCalls = 0;
+  setAuthFailureHandler(SESSION_A, async () => {
+    firstCalls += 1;
+  });
+
+  await assert.rejects(tombstoneCall(), ApiError);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(firstCalls, 1);
+
+  setAuthFailureHandler(SESSION_A, () => {
+    replacementCalls += 1;
+  });
+  await assert.rejects(tombstoneCall(), ApiError);
+  assert.equal(replacementCalls, 0);
+});
+
+test("same-session cleanup and re-registration do not re-arm COMPLETED", async () => {
+  let calls = 0;
+  setAuthFailureHandler(SESSION_A, async () => {
+    calls += 1;
+  });
+
+  await assert.rejects(tombstoneCall(), ApiError);
+  await Promise.resolve();
+  await Promise.resolve();
+  setAuthFailureHandler(SESSION_A, null);
+  setAuthFailureHandler(SESSION_A, () => {
+    calls += 1;
+  });
+
+  await assert.rejects(tombstoneCall(), ApiError);
+  assert.equal(calls, 1);
+});
+
+test("a genuinely new Clerk session starts a fresh generation", async () => {
+  let sessionACalls = 0;
+  let sessionBCalls = 0;
+  setAuthFailureHandler(SESSION_A, async () => {
+    sessionACalls += 1;
+  });
+  await assert.rejects(tombstoneCall(), ApiError);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  setAuthFailureHandler(SESSION_B, async () => {
+    sessionBCalls += 1;
+  });
+  await assert.rejects(tombstoneCall(), ApiError);
+  assert.equal(sessionACalls, 1);
+  assert.equal(sessionBCalls, 1);
+});
+
+test("old-session Promise settlement cannot mutate a newer session generation", async () => {
   const oldFlight = deferred();
   const newFlight = deferred();
   let oldCalls = 0;
   let newCalls = 0;
 
-  setAuthFailureHandler(() => {
+  setAuthFailureHandler(SESSION_A, () => {
     oldCalls += 1;
     return oldFlight.promise;
   });
   await assert.rejects(tombstoneCall(), ApiError);
   assert.equal(oldCalls, 1);
 
-  setAuthFailureHandler(() => {
+  setAuthFailureHandler(SESSION_B, () => {
     newCalls += 1;
     return newFlight.promise;
   });
@@ -182,20 +230,21 @@ test("old Promise settlement cannot clear a replacement handler generation", asy
   oldFlight.resolve();
   await oldFlight.promise;
   await Promise.resolve();
-
   await assert.rejects(tombstoneCall(), ApiError);
-  assert.equal(newCalls, 1, "old generation settlement must not clear the new flight");
+  assert.equal(newCalls, 1, "old-session settlement must not clear the new in-flight teardown");
 
-  newFlight.resolve();
-  await newFlight.promise;
+  newFlight.reject(new Error("session B teardown failure"));
+  await assert.rejects(newFlight.promise);
   await Promise.resolve();
+  await Promise.resolve();
+
   await assert.rejects(tombstoneCall(), ApiError);
-  assert.equal(newCalls, 2);
+  assert.equal(newCalls, 2, "session B rejection must re-arm session B only");
 });
 
 test("non-tombstone responses never invoke the auth failure handler", async () => {
   let calls = 0;
-  setAuthFailureHandler(() => {
+  setAuthFailureHandler(SESSION_A, () => {
     calls += 1;
   });
 
