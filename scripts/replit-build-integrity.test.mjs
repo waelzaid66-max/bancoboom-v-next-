@@ -7,18 +7,25 @@ import { test } from "node:test";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const buildScript = readFileSync(resolve(root, "scripts/replit-prod-build.sh"), "utf8");
 
-test("Replit production build verifies workspace identity before compiling", () => {
+test("Replit preview/deployment build verifies workspace identity before compiling", () => {
   const verify = buildScript.indexOf("pnpm run workspace:verify");
   const install = buildScript.indexOf("pnpm install");
+  const typecheck = buildScript.indexOf("pnpm run typecheck\n");
   const apiBuild = buildScript.indexOf("@workspace/api-server run build");
 
   assert.ok(verify >= 0, "workspace verification must remain part of the Replit build");
   assert.ok(install > verify, "workspace verification must happen before dependency/build work");
-  assert.ok(apiBuild > install, "application builds must happen after install");
+  assert.ok(typecheck > install, "canonical full typecheck must happen after install");
+  assert.ok(apiBuild > typecheck, "application builds must happen after canonical full typecheck");
 });
 
-test("shared-library verification mirrors root semantics without fake package builds", () => {
-  assert.match(buildScript, /pnpm run typecheck:libs/);
+test("workspace compile verification preserves canonical typecheck semantics", () => {
+  assert.match(buildScript, /pnpm run typecheck\n/);
+  assert.doesNotMatch(
+    buildScript,
+    /pnpm run typecheck:libs/,
+    "Replit must not substitute libs-only typecheck for the canonical workspace typecheck",
+  );
   assert.match(buildScript, /pnpm -r --filter "\.\/lib\/\*\*" --if-present run build/);
 
   for (const staleWorkspace of ["@workspace/db run build", "@workspace/taxonomy run build", "@workspace/api-client run build"]) {
