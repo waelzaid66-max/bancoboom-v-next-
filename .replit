@@ -194,6 +194,9 @@ externalPort = 8008
 localPort = 23351
 externalPort = 8000
 
+[nix]
+packages = ["nginx"]
+
 [objectStorage]
 defaultBucketID = "replit-objstore-41fc812e-9f5e-42cb-93cc-f15445fe1efa"
 
