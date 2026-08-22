@@ -24,7 +24,9 @@ const EXPO_CHUNK_SIZE = 100;
 /** Expo docs: wait before fetching receipts; tickets are not receipts. */
 const RECEIPT_DELAY_MS = 15_000;
 const SEND_MAX_ATTEMPTS = 3;
-const SEND_RETRY_DELAY_MS = [500, 1_500] as const;
+const SEND_RETRY_BASE_DELAY_MS = 500;
+const SEND_RETRY_MAX_DELAY_MS = 4_000;
+const SEND_RETRY_JITTER_RATIO = 0.25;
 
 export interface PushPayload {
   title: string;
@@ -183,8 +185,25 @@ function scheduleReceiptCheck(
   }
 }
 
+export function computeSendRetryDelayMs(
+  attempt: number,
+  random: () => number = Math.random,
+): number {
+  const safeAttempt = Math.max(1, Math.floor(attempt));
+  const baseDelay = Math.min(
+    SEND_RETRY_MAX_DELAY_MS,
+    SEND_RETRY_BASE_DELAY_MS * 2 ** (safeAttempt - 1),
+  );
+  const randomValue = random();
+  const boundedRandom = Number.isFinite(randomValue)
+    ? Math.min(1, Math.max(0, randomValue))
+    : 0;
+  const jitter = baseDelay * SEND_RETRY_JITTER_RATIO * boundedRandom;
+  return Math.max(1, Math.round(baseDelay + jitter));
+}
+
 function waitForSendRetry(attempt: number): Promise<void> {
-  const delay = SEND_RETRY_DELAY_MS[Math.min(attempt - 1, SEND_RETRY_DELAY_MS.length - 1)];
+  const delay = computeSendRetryDelayMs(attempt);
   return new Promise((resolve) => setTimeout(resolve, delay));
 }
 
