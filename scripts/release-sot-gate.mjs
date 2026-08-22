@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -7,6 +8,7 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 
 const expectedRepo = "waelzaid66-max/bancoboom-v-next-";
 const expectedBranch = "canonical/vnext-assembly";
+const fullGitSha = /^[0-9a-f]{40}$/i;
 
 const failures = [];
 
@@ -24,6 +26,38 @@ if (manifest.coolify?.sourceBranch !== expectedBranch) {
 }
 if (manifest.coolify?.composeFile !== "docker-compose.coolify.yml") {
   failures.push("manifest.coolify.composeFile must be docker-compose.coolify.yml");
+}
+
+// When the release executor supplies RELEASE_SHA, prove it is the exact checked-out
+// Git object and reject any secondary provenance identity that disagrees. This is
+// the executable counterpart to the static Compose/Dockerfile contract below.
+const executionReleaseSha = process.env.RELEASE_SHA?.trim() ?? "";
+if (executionReleaseSha) {
+  if (!fullGitSha.test(executionReleaseSha)) {
+    failures.push("RELEASE_SHA must be a full 40-hex Git SHA");
+  } else {
+    try {
+      const checkedOutSha = execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: root,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+      if (checkedOutSha !== executionReleaseSha) {
+        failures.push(
+          `RELEASE_SHA must equal checked-out source HEAD: expected ${checkedOutSha}, received ${executionReleaseSha}`,
+        );
+      }
+    } catch {
+      failures.push("unable to prove checked-out Git HEAD for RELEASE_SHA verification");
+    }
+  }
+
+  for (const name of ["GIT_SHA", "BUILD_ID", "SOURCE_COMMIT"]) {
+    const value = process.env[name]?.trim();
+    if (value && value !== executionReleaseSha) {
+      failures.push(`${name} must equal RELEASE_SHA when supplied to release verification`);
+    }
+  }
 }
 
 const requiredPaths = [
