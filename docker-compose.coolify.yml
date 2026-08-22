@@ -99,6 +99,8 @@ services:
       context: .
       dockerfile: deploy/coolify/Dockerfile.api
       target: builder
+      args:
+        RELEASE_SHA: ${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
     restart: "no"
     depends_on:
       postgres:
@@ -122,9 +124,8 @@ services:
       context: .
       dockerfile: deploy/coolify/Dockerfile.api
       args:
-        # F1 deploy pin — Coolify often exposes SOURCE_COMMIT; prefer explicit GIT_SHA.
-        GIT_SHA: ${GIT_SHA:-${SOURCE_COMMIT:-}}
-        BUILD_ID: ${BUILD_ID:-${SOURCE_COMMIT:-}}
+        # One release identity for image tag, build metadata and runtime readiness.
+        RELEASE_SHA: ${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
     image: banco-api:${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
     restart: always
     depends_on:
@@ -176,9 +177,10 @@ services:
       # Coolify markers — objectStorageProvider forbids replit when these are set.
       COOLIFY_URL: ${COOLIFY_URL:-}
       COOLIFY_FQDN: ${COOLIFY_FQDN:-}
-      # Runtime deploy pin (also baked via build args when Coolify supplies them).
-      GIT_SHA: ${GIT_SHA:-${SOURCE_COMMIT:-}}
-      BUILD_ID: ${BUILD_ID:-${SOURCE_COMMIT:-}}
+      # Single runtime release authority. /api/readyz fail-closes on mismatch/malformed identity.
+      RELEASE_SHA: ${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
+      GIT_SHA: ${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
+      BUILD_ID: ${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
       # Observability
       ERROR_ALERT_WEBHOOK: ${ERROR_ALERT_WEBHOOK:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
