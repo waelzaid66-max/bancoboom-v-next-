@@ -1531,7 +1531,7 @@ export default function ProfileScreen() {
             >
               <AppText style={[styles.roleText, { color: colors.primary }]}>
                 {categoryLabel ||
-                  ((user.publicMetadata?.role as string) || t("profile.member"))
+                  (role || t("profile.member"))
                     .replace(/_/g, " ")
                     .replace(/\b\w/g, (c) => c.toUpperCase())}
               </AppText>
@@ -1847,7 +1847,7 @@ export default function ProfileScreen() {
                 size={16}
                 color="#FFFFFF"
               />
-              <AppText style={[styles.businessBtnText, { color: "#FFFFFF" }]}>
+              <AppText style={[styles.businessBtnText, { color: "#FFFFFF" }] }>
                 {t("profile.fiOpenBanks")}
               </AppText>
             </Pressable>
@@ -2011,7 +2011,7 @@ export default function ProfileScreen() {
         {/* Instagram-style grid of the user's REAL own listings */}
         <View style={[styles.postsHeader, isRTL && styles.rowReverse]}>
           <Ionicons name="grid" size={16} color={colors.foreground} />
-          <AppText style={[styles.postsTitle, { color: colors.foreground }]}>
+          <AppText style={[styles.postsTitle, { color: colors.foreground }] }>
             {t("profile.postsTitle")}
           </AppText>
         </View>
@@ -2043,7 +2043,7 @@ export default function ProfileScreen() {
               ]}
               testID="posts-retry"
             >
-              <AppText style={[styles.postsRetryText, { color: colors.primary }]}>
+              <AppText style={[styles.postsRetryText, { color: colors.primary }] }>
                 {t("common.retry")}
               </AppText>
             </Pressable>
@@ -2062,7 +2062,7 @@ export default function ProfileScreen() {
                 color={colors.mutedForeground}
               />
             </View>
-            <AppText style={[styles.postsEmptyTitle, { color: colors.foreground }]}>
+            <AppText style={[styles.postsEmptyTitle, { color: colors.foreground }] }>
               {t("profile.postsEmptyTitle")}
             </AppText>
             <AppText
@@ -2224,7 +2224,7 @@ export default function ProfileScreen() {
               {listingsQuery.isFetchingNextPage ? (
                 <ActivityIndicator size="small" color={colors.mutedForeground} />
               ) : (
-                <AppText style={[styles.postsLoadMoreText, { color: colors.foreground }]}>
+                <AppText style={[styles.postsLoadMoreText, { color: colors.foreground }] }>
                   {t("profile.loadMoreListings")}
                 </AppText>
               )}
@@ -2250,7 +2250,7 @@ export default function ProfileScreen() {
                 },
               ]}
             >
-              <AppText style={[styles.modalTitle, { color: colors.foreground }]}>
+              <AppText style={[styles.modalTitle, { color: colors.foreground }] }>
                 {t("profile.socialEditTitle")}
               </AppText>
               <AppText
@@ -2388,7 +2388,7 @@ export default function ProfileScreen() {
                 },
               ]}
             >
-              <AppText style={[styles.modalTitle, { color: colors.foreground }]}>
+              <AppText style={[styles.modalTitle, { color: colors.foreground }] }>
                 {t("profile.editProfileTitle")}
               </AppText>
               <AppText
@@ -2623,7 +2623,7 @@ export default function ProfileScreen() {
               <View
                 style={[styles.menuHandle, { backgroundColor: colors.border }]}
               />
-              <AppText style={[styles.menuTitle, { color: colors.foreground }]}>
+              <AppText style={[styles.menuTitle, { color: colors.foreground }] }>
                 {t("profile.menuTitle")}
               </AppText>
               {userEmail ? (
@@ -2698,10 +2698,10 @@ export default function ProfileScreen() {
           colors={colors}
           style={styles.authLangToggle}
         />
-        <AppText style={[styles.authTitle, { color: colors.foreground }]}>
+        <AppText style={[styles.authTitle, { color: colors.foreground }] }>
           {t("profile.verifyTitle")}
         </AppText>
-        <AppText style={[styles.authSubtitle, { color: colors.mutedForeground }]}>
+        <AppText style={[styles.authSubtitle, { color: colors.mutedForeground }] }>
           {t("profile.verifySent", { email })}
         </AppText>
 
@@ -2716,7 +2716,7 @@ export default function ProfileScreen() {
             testID="verify-code-input"
           />
           {signUpErrors?.fields?.code && (
-            <AppText style={[styles.error, { color: colors.destructive }]}>
+            <AppText style={[styles.error, { color: colors.destructive }] }>
               {signUpErrors.fields.code.message}
             </AppText>
           )}
@@ -2750,9 +2750,9 @@ export default function ProfileScreen() {
           onPress={() => signUp.verifications.sendEmailCode()}
           style={styles.switchBtn}
         >
-          <AppText style={[styles.switchText, { color: colors.mutedForeground }]}>
+          <AppText style={[styles.switchText, { color: colors.mutedForeground }] }>
             {t("profile.didntReceive")}
-            <AppText style={[styles.switchLink, { color: colors.primary }]}>
+            <AppText style={[styles.switchLink, { color: colors.primary }] }>
               {t("profile.resend")}
             </AppText>
           </AppText>
@@ -2775,8 +2775,8 @@ export default function ProfileScreen() {
           style={styles.switchBtn}
           testID="verify-go-back"
         >
-          <AppText style={[styles.switchText, { color: colors.mutedForeground }]}>
-            <AppText style={[styles.switchLink, { color: colors.primary }]}>
+          <AppText style={[styles.switchText, { color: colors.mutedForeground }] }>
+            <AppText style={[styles.switchLink, { color: colors.primary }] }>
               {t("profile.goBack")}
             </AppText>
           </AppText>
@@ -2813,7 +2813,7 @@ export default function ProfileScreen() {
           colors={colors}
           style={styles.authLangToggle}
         />
-        <AppText style={[styles.authTitle, { color: colors.foreground }]}>
+        <AppText style={[styles.authTitle, { color: colors.foreground }] }>
           {t("profile.mfaTitle")}
         </AppText>
         <AppText
@@ -2842,7 +2842,7 @@ export default function ProfileScreen() {
             testID="mfa-code-input"
           />
           {signInErrors?.fields?.code && (
-            <AppText style={[styles.error, { color: colors.destructive }]}>
+            <AppText style={[styles.error, { color: colors.destructive }] }>
               {signInErrors.fields.code.message}
             </AppText>
           )}
@@ -2880,7 +2880,7 @@ export default function ProfileScreen() {
               style={[styles.switchText, { color: colors.mutedForeground }]}
             >
               {t("profile.didntReceive")}
-              <AppText style={[styles.switchLink, { color: colors.primary }]}>
+              <AppText style={[styles.switchLink, { color: colors.primary }] }>
                 {t("profile.resend")}
               </AppText>
             </AppText>
@@ -2926,7 +2926,7 @@ export default function ProfileScreen() {
           <AppText
             style={[styles.switchText, { color: colors.mutedForeground }]}
           >
-            <AppText style={[styles.switchLink, { color: colors.primary }]}>
+            <AppText style={[styles.switchLink, { color: colors.primary }] }>
               {t("profile.goBack")}
             </AppText>
           </AppText>
@@ -2952,7 +2952,7 @@ export default function ProfileScreen() {
           colors={colors}
           style={styles.authLangToggle}
         />
-        <AppText style={[styles.authTitle, { color: colors.foreground }]}>
+        <AppText style={[styles.authTitle, { color: colors.foreground }] }>
           {t("profile.resetTitle")}
         </AppText>
         <AppText
@@ -2972,7 +2972,7 @@ export default function ProfileScreen() {
             testID="reset-code-input"
           />
           {signInErrors?.fields?.code && (
-            <AppText style={[styles.error, { color: colors.destructive }]}>
+            <AppText style={[styles.error, { color: colors.destructive }] }>
               {signInErrors.fields.code.message}
             </AppText>
           )}
@@ -3006,7 +3006,7 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
           {signInErrors?.fields?.password && (
-            <AppText style={[styles.error, { color: colors.destructive }]}>
+            <AppText style={[styles.error, { color: colors.destructive }] }>
               {signInErrors.fields.password.message}
             </AppText>
           )}
@@ -3046,7 +3046,7 @@ export default function ProfileScreen() {
             style={[styles.switchText, { color: colors.mutedForeground }]}
           >
             {t("profile.didntReceive")}
-            <AppText style={[styles.switchLink, { color: colors.primary }]}>
+            <AppText style={[styles.switchLink, { color: colors.primary }] }>
               {t("profile.resend")}
             </AppText>
           </AppText>
@@ -3063,7 +3063,7 @@ export default function ProfileScreen() {
           <AppText
             style={[styles.switchText, { color: colors.mutedForeground }]}
           >
-            <AppText style={[styles.switchLink, { color: colors.primary }]}>
+            <AppText style={[styles.switchLink, { color: colors.primary }] }>
               {t("profile.goBack")}
             </AppText>
           </AppText>
@@ -3101,10 +3101,10 @@ export default function ProfileScreen() {
         colors={colors}
         style={styles.authLangToggle}
       />
-      <AppText style={[styles.authTitle, { color: colors.foreground }]}>
+      <AppText style={[styles.authTitle, { color: colors.foreground }] }>
         {mode === "signin" ? t("profile.welcomeBack") : t("profile.createAccount")}
       </AppText>
-      <AppText style={[styles.authSubtitle, { color: colors.mutedForeground }]}>
+      <AppText style={[styles.authSubtitle, { color: colors.mutedForeground }] }>
         {mode === "signin" ? t("profile.signInToSave") : t("profile.joinBanco")}
       </AppText>
 
@@ -3152,12 +3152,12 @@ export default function ProfileScreen() {
         />
         {mode === "signin"
           ? signInErrors?.fields?.identifier && (
-              <AppText style={[styles.error, { color: colors.destructive }]}>
+              <AppText style={[styles.error, { color: colors.destructive }] }>
                 {signInErrors.fields.identifier.message}
               </AppText>
             )
           : signUpErrors?.fields?.emailAddress && (
-              <AppText style={[styles.error, { color: colors.destructive }]}>
+              <AppText style={[styles.error, { color: colors.destructive }] }>
                 {signUpErrors.fields.emailAddress.message}
               </AppText>
             )}
@@ -3189,12 +3189,12 @@ export default function ProfileScreen() {
         </View>
         {mode === "signin"
           ? signInErrors?.fields?.password && (
-              <AppText style={[styles.error, { color: colors.destructive }]}>
+              <AppText style={[styles.error, { color: colors.destructive }] }>
                 {signInErrors.fields.password.message}
               </AppText>
             )
           : signUpErrors?.fields?.password && (
-              <AppText style={[styles.error, { color: colors.destructive }]}>
+              <AppText style={[styles.error, { color: colors.destructive }] }>
                 {signUpErrors.fields.password.message}
               </AppText>
             )}
@@ -3209,7 +3209,7 @@ export default function ProfileScreen() {
             ]}
             testID="forgot-password"
           >
-            <AppText style={[styles.forgotText, { color: colors.primary }]}>
+            <AppText style={[styles.forgotText, { color: colors.primary }] }>
               {resetSending ? t("profile.sending") : t("profile.forgotPassword")}
             </AppText>
           </Pressable>
@@ -3242,7 +3242,7 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
           {passwordMismatch && confirmPassword.length > 0 && (
-            <AppText style={[styles.error, { color: colors.destructive }]}>
+            <AppText style={[styles.error, { color: colors.destructive }] }>
               {t("profile.passwordsDoNotMatch")}
             </AppText>
           )}
@@ -3403,11 +3403,11 @@ export default function ProfileScreen() {
         style={styles.switchBtn}
         testID="auth-switch-mode"
       >
-        <AppText style={[styles.switchText, { color: colors.mutedForeground }]}>
+        <AppText style={[styles.switchText, { color: colors.mutedForeground }] }>
           {mode === "signin"
             ? t("profile.dontHaveAccount")
             : t("profile.alreadyHaveAccount")}
-          <AppText style={[styles.switchLink, { color: colors.primary }]}>
+          <AppText style={[styles.switchLink, { color: colors.primary }] }>
             {mode === "signin" ? t("profile.signUp") : t("profile.signIn")}
           </AppText>
         </AppText>
@@ -3420,7 +3420,7 @@ export default function ProfileScreen() {
       {socialProviders.length > 0 && (
         <View style={styles.oauthDivider}>
           <View style={[styles.oauthLine, { backgroundColor: colors.border }]} />
-          <AppText style={[styles.oauthOr, { color: colors.mutedForeground }]}>
+          <AppText style={[styles.oauthOr, { color: colors.mutedForeground }] }>
             {t("profile.orDivider")}
           </AppText>
           <View style={[styles.oauthLine, { backgroundColor: colors.border }]} />
@@ -3447,7 +3447,7 @@ export default function ProfileScreen() {
         ) : (
           <>
             <Ionicons name="logo-google" size={18} color={colors.foreground} />
-            <AppText style={[styles.oauthBtnText, { color: colors.foreground }]}>
+            <AppText style={[styles.oauthBtnText, { color: colors.foreground }] }>
               {t("profile.continueWithGoogle")}
             </AppText>
           </>
@@ -3475,7 +3475,7 @@ export default function ProfileScreen() {
         ) : (
           <>
             <Ionicons name="logo-facebook" size={18} color={colors.foreground} />
-            <AppText style={[styles.oauthBtnText, { color: colors.foreground }]}>
+            <AppText style={[styles.oauthBtnText, { color: colors.foreground }] }>
               {t("profile.continueWithFacebook")}
             </AppText>
           </>
