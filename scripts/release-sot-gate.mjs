@@ -39,6 +39,7 @@ const requiredPaths = [
   "artifacts/landing/package.json",
   "artifacts/dealer-os/package.json",
   "artifacts/admin-os/package.json",
+  "release/production/IMAGE_ROLLBACK_TEMPLATE.md",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
 ];
@@ -91,11 +92,10 @@ for (const relativePath of operatorFiles) {
   }
 }
 
-// First-party application images must never resolve through a mutable tag.
-// External infrastructure images (for example postgres:16) are intentionally
-// outside this check; the release blocker here is rollback/provenance for code
-// built from this repository. The accepted deployment must bind each BANCO image
-// to an immutable release identity (exact SHA tag and/or digest), never :latest.
+// First-party application images must use one explicit release identity. External
+// infrastructure images (for example postgres:16) are intentionally outside
+// this check. RELEASE_SHA has no default: Coolify must supply the approved exact
+// source SHA and the release procedure separately records content IDs/digests.
 const composePath = path.join(root, "docker-compose.coolify.yml");
 if (fs.existsSync(composePath)) {
   const compose = fs.readFileSync(composePath, "utf8");
@@ -103,6 +103,14 @@ if (fs.existsSync(composePath)) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => /^image:\s*banco-[^\s]+/i.test(line));
+
+  const expectedImageNames = new Set([
+    "banco-api",
+    "banco-web",
+    "banco-website",
+    "banco-web-static",
+  ]);
+  const seenImageNames = new Set();
 
   if (firstPartyImageLines.length === 0) {
     failures.push("docker-compose.coolify.yml must declare first-party BANCO application images");
@@ -115,6 +123,26 @@ if (fs.existsSync(composePath)) {
         `mutable first-party image tag is forbidden in docker-compose.coolify.yml: ${imageRef}`,
       );
     }
+
+    const match = imageRef.match(
+      /^(banco-api|banco-web|banco-website|banco-web-static):\$\{RELEASE_SHA:\?[^}]+\}$/,
+    );
+    if (!match) {
+      failures.push(
+        `first-party image must require RELEASE_SHA with no fallback/default: ${imageRef}`,
+      );
+      continue;
+    }
+    seenImageNames.add(match[1]);
+  }
+
+  for (const imageName of expectedImageNames) {
+    if (!seenImageNames.has(imageName)) {
+      failures.push(`required first-party image missing immutable RELEASE_SHA identity: ${imageName}`);
+    }
+  }
+  if (seenImageNames.size !== expectedImageNames.size) {
+    failures.push("first-party image set must contain exactly the four approved BANCO application images");
   }
 }
 
