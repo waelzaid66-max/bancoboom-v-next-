@@ -24,8 +24,10 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
 let _authFailureHandler: AuthFailureHandler | null = null;
+let _authFailureSessionId: string | null = null;
 let _authFailureGeneration = 0;
-let _accountDeletedTeardownInFlight: { generation: number } | null = null;
+type AccountDeletedTeardownState = "idle" | "in_flight" | "completed";
+let _accountDeletedTeardownState: AccountDeletedTeardownState = "idle";
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -55,15 +57,36 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
 
 /**
  * Register a handler for auth failures that require client session teardown
- * (today: soft-deleted account with a lingering Clerk JWT). Pass `null` to clear.
+ * (today: soft-deleted account with a lingering Clerk JWT).
  *
- * Every replacement advances a generation so a Promise started by an older
- * handler can never clear or otherwise mutate the new handler's in-flight state.
+ * Clerk sessionId is the generation authority. Replacing/clearing a handler
+ * for the same session preserves IN_FLIGHT/COMPLETED teardown state; only a
+ * genuinely different session starts a fresh generation. Pass `(null, null)`
+ * to reset the module-level registration when no Clerk session exists.
  */
-export function setAuthFailureHandler(handler: AuthFailureHandler | null): void {
-  _authFailureGeneration += 1;
+export function setAuthFailureHandler(
+  sessionId: string | null,
+  handler: AuthFailureHandler | null,
+): void {
+  if (sessionId === null && handler === null) {
+    _authFailureGeneration += 1;
+    _authFailureSessionId = null;
+    _authFailureHandler = null;
+    _accountDeletedTeardownState = "idle";
+    return;
+  }
+
+  // Ignore cleanup from an already superseded Clerk session. This prevents a
+  // stale React effect cleanup from replacing the active session generation.
+  if (handler === null && sessionId !== _authFailureSessionId) return;
+
+  if (sessionId !== _authFailureSessionId) {
+    _authFailureGeneration += 1;
+    _authFailureSessionId = sessionId;
+    _accountDeletedTeardownState = "idle";
+  }
+
   _authFailureHandler = handler;
-  _accountDeletedTeardownInFlight = null;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -406,24 +429,29 @@ function maybeNotifyAccountDeleted(status: number, data: unknown): void {
   if (extractErrorCode(data) !== "ACCOUNT_DELETED") return;
 
   const handler = _authFailureHandler;
-  if (!handler || _accountDeletedTeardownInFlight) return;
+  const sessionId = _authFailureSessionId;
+  if (!handler || !sessionId || _accountDeletedTeardownState !== "idle") return;
 
-  const flight = { generation: _authFailureGeneration };
-  _accountDeletedTeardownInFlight = flight;
+  const generation = _authFailureGeneration;
+  _accountDeletedTeardownState = "in_flight";
 
-  const finish = () => {
+  const settle = (next: "idle" | "completed") => {
     if (
-      _accountDeletedTeardownInFlight === flight &&
-      _authFailureGeneration === flight.generation
+      _authFailureGeneration === generation &&
+      _authFailureSessionId === sessionId &&
+      _accountDeletedTeardownState === "in_flight"
     ) {
-      _accountDeletedTeardownInFlight = null;
+      _accountDeletedTeardownState = next;
     }
   };
 
   try {
     const result = handler({ code: "ACCOUNT_DELETED", status });
-    void Promise.resolve(result).then(finish, finish);
+    void Promise.resolve(result).then(
+      () => settle("completed"),
+      () => settle("idle"),
+    );
   } catch {
-    finish();
+    settle("idle");
   }
 }
