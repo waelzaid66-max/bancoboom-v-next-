@@ -34,6 +34,21 @@ test("external server mode requires the explicit destructive-test arming phrase"
   );
 });
 
+test("external server mode rejects query-bearing admin URLs before connection semantics can drift", () => {
+  assert.throws(
+    () =>
+      validateExternalAdminConfig({
+        BANCO_API_TEST_ADMIN_URL:
+          "postgresql://tester:secret@db.test.internal:5544/postgres?sslmode=require",
+        BANCO_API_TEST_DISPOSABLE_CONFIRM: ARM,
+        BANCO_API_TEST_EXPECT_HOST: "db.test.internal",
+        BANCO_API_TEST_EXPECT_PORT: "5544",
+        BANCO_API_TEST_EXPECT_DATABASE: "postgres",
+      }),
+    /query parameters are unsupported/,
+  );
+});
+
 test("external server mode fails closed on host, port, or database identity mismatch", () => {
   const base = {
     BANCO_API_TEST_ADMIN_URL:
