@@ -23,6 +23,8 @@ const EXPO_RECEIPTS_ENDPOINT = "https://exp.host/--/api/v2/push/getReceipts";
 const EXPO_CHUNK_SIZE = 100;
 /** Expo docs: wait before fetching receipts; tickets are not receipts. */
 const RECEIPT_DELAY_MS = 15_000;
+const SEND_MAX_ATTEMPTS = 3;
+const SEND_RETRY_DELAY_MS = [500, 1_500] as const;
 
 export interface PushPayload {
   title: string;
@@ -181,6 +183,15 @@ function scheduleReceiptCheck(
   }
 }
 
+function waitForSendRetry(attempt: number): Promise<void> {
+  const delay = SEND_RETRY_DELAY_MS[Math.min(attempt - 1, SEND_RETRY_DELAY_MS.length - 1)];
+  return new Promise((resolve) => setTimeout(resolve, delay));
+}
+
+function isRetryableSendStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
 /**
  * Send a push to every registered device of an internal user id. Best-effort:
  * all errors are swallowed after logging. Caller passes the SAME userId used
@@ -233,21 +244,38 @@ async function sendChunk(
   messages: Array<Record<string, unknown>>,
   chunkTokens: string[],
 ): Promise<void> {
-  try {
-    const res = await fetch(EXPO_PUSH_ENDPOINT, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(messages),
-    });
+  let res: Response | null = null;
 
-    if (!res.ok) {
+  for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      res = await fetch(EXPO_PUSH_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(messages),
+      });
+    } catch (err) {
+      if (attempt >= SEND_MAX_ATTEMPTS) {
+        console.error("[Push chunk]", err);
+        return;
+      }
+      await waitForSendRetry(attempt);
+      continue;
+    }
+
+    if (res.ok) break;
+    if (!isRetryableSendStatus(res.status) || attempt >= SEND_MAX_ATTEMPTS) {
       console.error("[Push send] Expo responded", res.status);
       return;
     }
+    await waitForSendRetry(attempt);
+  }
 
+  if (!res?.ok) return;
+
+  try {
     const json = (await res.json()) as {
       data?: ExpoTicket[];
     };
@@ -259,8 +287,16 @@ async function sendChunk(
     json.data?.forEach((ticket, idx) => {
       const token = chunkTokens[idx];
       if (!token) return;
-      if (ticket.status === "error" && isDeadDeviceError(ticket.details?.error)) {
-        dead.push(token);
+      if (ticket.status === "error") {
+        if (isDeadDeviceError(ticket.details?.error)) {
+          dead.push(token);
+        } else {
+          console.error(
+            "[Push send] Expo ticket error",
+            ticket.details?.error ?? "UnknownTicketError",
+            ticket.message ?? "",
+          );
+        }
         return;
       }
       if (ticket.status === "ok" && ticket.id) {
