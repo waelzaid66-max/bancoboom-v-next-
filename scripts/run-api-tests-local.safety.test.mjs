@@ -152,3 +152,14 @@ test("DB admin commands remain direct argv and Windows pnpm resolution is isolat
   );
   assert.doesNotMatch(source, /\bshell\s*:/);
 });
+
+test("Docker Postgres transport avoids exec/setns and compose health wait", () => {
+  const source = readFileSync(
+    new URL("./run-api-tests-local.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /"exec"\s*,/);
+  assert.doesNotMatch(source, /"--wait"/);
+  assert.match(source, /"run"\s*,\s*"--rm"/s);
+  assert.match(source, /dockerClientArgs\("pg_isready",\s*"postgres"\)/);
+});
