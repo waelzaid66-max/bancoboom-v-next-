@@ -7,6 +7,8 @@ on:
       - "release/production/**"
       - "docker-compose.coolify.yml"
       - "deploy/coolify/**"
+      - "artifacts/api-server/src/routes/health.ts"
+      - "artifacts/api-server/src/health.test.ts"
       - "COOLIFY_DEPLOY_NOW.md"
       - "OPS_GO_LIVE_CHECKLIST.md"
       - "docs/DEPLOYMENT_SOURCE_OF_TRUTH.md"
@@ -20,6 +22,8 @@ on:
       - "release/production/**"
       - "docker-compose.coolify.yml"
       - "deploy/coolify/**"
+      - "artifacts/api-server/src/routes/health.ts"
+      - "artifacts/api-server/src/health.test.ts"
       - "COOLIFY_DEPLOY_NOW.md"
       - "OPS_GO_LIVE_CHECKLIST.md"
       - "docs/DEPLOYMENT_SOURCE_OF_TRUTH.md"
@@ -63,6 +67,10 @@ jobs:
       - name: Verify workspace identity
         run: pnpm run workspace:verify
       - name: Verify release source of truth
+        env:
+          RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BUILD_ID: ${{ github.event.pull_request.head.sha || github.sha }}
         run: pnpm run release:verify
       - name: Verify dependency security
         run: pnpm run security:audit
