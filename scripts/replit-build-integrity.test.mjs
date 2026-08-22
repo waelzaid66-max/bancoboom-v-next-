@@ -17,14 +17,16 @@ test("Replit production build verifies workspace identity before compiling", () 
   assert.ok(apiBuild > install, "application builds must happen after install");
 });
 
-test("required shared-library builds cannot be swallowed", () => {
-  for (const workspace of ["@workspace/db", "@workspace/taxonomy", "@workspace/api-client"]) {
-    const line = buildScript
-      .split("\n")
-      .find((candidate) => candidate.includes(workspace) && candidate.includes("run build"));
+test("shared-library verification mirrors root semantics without fake package builds", () => {
+  assert.match(buildScript, /pnpm run typecheck:libs/);
+  assert.match(buildScript, /pnpm -r --filter "\.\/lib\/\*\*" --if-present run build/);
 
-    assert.ok(line, `missing required ${workspace} build`);
-    assert.doesNotMatch(line, /\|\|\s*(true|:)/, `${workspace} failure must stop the build`);
+  for (const staleWorkspace of ["@workspace/db run build", "@workspace/taxonomy run build", "@workspace/api-client run build"]) {
+    assert.doesNotMatch(
+      buildScript,
+      new RegExp(staleWorkspace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      `must not require a non-existent build script: ${staleWorkspace}`,
+    );
   }
 });
 
