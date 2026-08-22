@@ -137,7 +137,9 @@ Ignore for Coolify: root `Dockerfile`, `deploy/aws/*`, `deploy/gcp/Dockerfile.ap
 
 ### Compose-required (`:?`)
 
-`POSTGRES_PASSWORD` · `CLERK_SECRET_KEY` · `SESSION_SECRET` · `PAYMENT_CONFIG_ENCRYPTION_KEY`
+`RELEASE_SHA` · `POSTGRES_PASSWORD` · `CLERK_SECRET_KEY` · `SESSION_SECRET` · `PAYMENT_CONFIG_ENCRYPTION_KEY`
+
+`RELEASE_SHA` must equal the exact approved 40-character Git SHA pinned in Coolify and has no fallback/default for first-party BANCO images.
 
 ### postgres
 
@@ -192,6 +194,7 @@ Runtime: `PORT` · `NODE_ENV` · `CLERK_SECRET_KEY` · `BANCO_WEBSITE_HOST_PORT`
 ## FIRST DEPLOYMENT CHECKLIST
 
 □ Coolify → Docker Compose → repo **`waelzaid66-max/bancoboom-v-next-`** → branch **`canonical/vnext-assembly`** pinned to the exact approved immutable release SHA → file **`docker-compose.coolify.yml`**
+□ Set `RELEASE_SHA` to that same exact approved 40-character SHA; stop if it differs from the pinned Coolify checkout
 □ Set `POSTGRES_PASSWORD` `CLERK_SECRET_KEY` `SESSION_SECRET` `PAYMENT_CONFIG_ENCRYPTION_KEY`
 □ Set S3: `OBJECT_STORAGE_PROVIDER=s3` + `AWS_*` / `S3_BUCKET` / object paths
 □ Set build-time `NEXT_PUBLIC_*` / `VITE_*` / public URLs
