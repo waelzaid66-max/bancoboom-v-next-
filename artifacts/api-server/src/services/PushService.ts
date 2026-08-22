@@ -23,6 +23,10 @@ const EXPO_RECEIPTS_ENDPOINT = "https://exp.host/--/api/v2/push/getReceipts";
 const EXPO_CHUNK_SIZE = 100;
 /** Expo docs: wait before fetching receipts; tickets are not receipts. */
 const RECEIPT_DELAY_MS = 15_000;
+const SEND_MAX_ATTEMPTS = 3;
+const SEND_RETRY_BASE_DELAY_MS = 500;
+const SEND_RETRY_MAX_DELAY_MS = 4_000;
+const SEND_RETRY_JITTER_RATIO = 0.25;
 
 export interface PushPayload {
   title: string;
@@ -181,6 +185,32 @@ function scheduleReceiptCheck(
   }
 }
 
+export function computeSendRetryDelayMs(
+  attempt: number,
+  random: () => number = Math.random,
+): number {
+  const safeAttempt = Math.max(1, Math.floor(attempt));
+  const baseDelay = Math.min(
+    SEND_RETRY_MAX_DELAY_MS,
+    SEND_RETRY_BASE_DELAY_MS * 2 ** (safeAttempt - 1),
+  );
+  const randomValue = random();
+  const boundedRandom = Number.isFinite(randomValue)
+    ? Math.min(1, Math.max(0, randomValue))
+    : 0;
+  const jitter = baseDelay * SEND_RETRY_JITTER_RATIO * boundedRandom;
+  return Math.max(1, Math.round(baseDelay + jitter));
+}
+
+function waitForSendRetry(attempt: number): Promise<void> {
+  const delay = computeSendRetryDelayMs(attempt);
+  return new Promise((resolve) => setTimeout(resolve, delay));
+}
+
+function isRetryableSendStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
 /**
  * Send a push to every registered device of an internal user id. Best-effort:
  * all errors are swallowed after logging. Caller passes the SAME userId used
@@ -233,21 +263,38 @@ async function sendChunk(
   messages: Array<Record<string, unknown>>,
   chunkTokens: string[],
 ): Promise<void> {
-  try {
-    const res = await fetch(EXPO_PUSH_ENDPOINT, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(messages),
-    });
+  let res: Response | null = null;
 
-    if (!res.ok) {
+  for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      res = await fetch(EXPO_PUSH_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(messages),
+      });
+    } catch (err) {
+      if (attempt >= SEND_MAX_ATTEMPTS) {
+        console.error("[Push chunk]", err);
+        return;
+      }
+      await waitForSendRetry(attempt);
+      continue;
+    }
+
+    if (res.ok) break;
+    if (!isRetryableSendStatus(res.status) || attempt >= SEND_MAX_ATTEMPTS) {
       console.error("[Push send] Expo responded", res.status);
       return;
     }
+    await waitForSendRetry(attempt);
+  }
 
+  if (!res?.ok) return;
+
+  try {
     const json = (await res.json()) as {
       data?: ExpoTicket[];
     };
@@ -259,8 +306,16 @@ async function sendChunk(
     json.data?.forEach((ticket, idx) => {
       const token = chunkTokens[idx];
       if (!token) return;
-      if (ticket.status === "error" && isDeadDeviceError(ticket.details?.error)) {
-        dead.push(token);
+      if (ticket.status === "error") {
+        if (isDeadDeviceError(ticket.details?.error)) {
+          dead.push(token);
+        } else {
+          console.error(
+            "[Push send] Expo ticket error",
+            ticket.details?.error ?? "UnknownTicketError",
+            ticket.message ?? "",
+          );
+        }
         return;
       }
       if (ticket.status === "ok" && ticket.id) {
