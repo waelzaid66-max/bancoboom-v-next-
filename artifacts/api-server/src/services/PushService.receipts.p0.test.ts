@@ -200,7 +200,7 @@ describe("PushService post-ticket receipt P0 contract", () => {
 
   it("bounds persistent missing-receipt polling to the in-process P0 attempt budget", async () => {
     vi.useFakeTimers();
-    const fetchMock = vi.fn().mockResolvedValue(response(200, {}));
+    const fetchMock = vi.fn().mockImplementation(async () => response(200, {}));
     vi.stubGlobal("fetch", fetchMock);
 
     const processing = processPushReceipts([TICKET], ticketMap());
