@@ -17,7 +17,9 @@
 # ---- builder: install the api subtree, build --------------------------------
 FROM node:24-bookworm-slim AS builder
 ARG RELEASE_SHA=
+ENV RELEASE_SHA=$RELEASE_SHA
 LABEL org.opencontainers.image.revision=$RELEASE_SHA
+RUN node -e "if (!/^[0-9a-f]{40}$/i.test(process.env.RELEASE_SHA || '')) { console.error('RELEASE_SHA must be a full 40-hex Git SHA'); process.exit(1) }"
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable
@@ -57,6 +59,7 @@ COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
 ENV RELEASE_SHA=$RELEASE_SHA \
     GIT_SHA=$RELEASE_SHA \
     BUILD_ID=$RELEASE_SHA
+RUN node -e "if (!/^[0-9a-f]{40}$/i.test(process.env.RELEASE_SHA || '')) { console.error('RELEASE_SHA must be a full 40-hex Git SHA'); process.exit(1) }"
 
 # Non-root execution.
 RUN useradd -r -u 10001 -g root banco && chown -R banco:root /app
