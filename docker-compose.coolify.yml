@@ -16,15 +16,19 @@
 #   6. Start `api`, then the web surfaces after API readiness
 #
 # ─── Service ↔ Image map (DO NOT CONFUSE THESE NAMES) ────────────────────────
-#   Service          Image                    Role
-#   postgres         postgres:16              DB (internal)
-#   migrate          (profile migrate)        one-off committed migrations
-#   api              banco-api:latest         API · compose health = /api/readyz
-#                                             (Dockerfile HEALTHCHECK = /api/healthz
-#                                              is image liveness only; compose wins)
-#   banco-web        banco-web:latest         Next.js consumer
-#   banco-website    banco-website:latest     Next.js marketing/twin
-#   web              banco-web-static:latest  Nginx SPAs + /.well-known + /api proxy
+#   Service          Image                                  Role
+#   postgres         postgres:16                            DB (internal)
+#   migrate          (profile migrate)                      one-off committed migrations
+#   api              banco-api:${RELEASE_SHA}               API · compose health = /api/readyz
+#                                                           (Dockerfile HEALTHCHECK = /api/healthz
+#                                                            is image liveness only; compose wins)
+#   banco-web        banco-web:${RELEASE_SHA}               Next.js consumer
+#   banco-website    banco-website:${RELEASE_SHA}           Next.js marketing/twin
+#   web              banco-web-static:${RELEASE_SHA}        Nginx SPAs + /.well-known + /api proxy
+#
+# RELEASE_SHA is mandatory for every first-party image and must equal the exact
+# approved source SHA pinned in Coolify. Never reuse a release tag for different
+# image bytes; capture image IDs/RepoDigests per release/production/COOLIFY_RUNBOOK.md.
 #
 # ─── Network ─────────────────────────────────────────────────────────────────
 #   All services share `banco_net`. Inter-service DNS uses the service name
@@ -121,7 +125,7 @@ services:
         # F1 deploy pin — Coolify often exposes SOURCE_COMMIT; prefer explicit GIT_SHA.
         GIT_SHA: ${GIT_SHA:-${SOURCE_COMMIT:-}}
         BUILD_ID: ${BUILD_ID:-${SOURCE_COMMIT:-}}
-    image: banco-api:latest
+    image: banco-api:${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
     restart: always
     depends_on:
       postgres:
@@ -218,7 +222,7 @@ services:
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
         NEXT_PUBLIC_CLERK_PROXY_URL: ${NEXT_PUBLIC_CLERK_PROXY_URL:-}
         NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
-    image: banco-web:latest
+    image: banco-web:${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
     restart: always
     depends_on:
       api:
@@ -264,7 +268,7 @@ services:
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required}
         NEXT_PUBLIC_CLERK_PROXY_URL: ${NEXT_PUBLIC_CLERK_PROXY_URL:-}
         NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
-    image: banco-website:latest
+    image: banco-website:${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
     restart: always
     depends_on:
       api:
@@ -301,7 +305,7 @@ services:
         VITE_WEB_URL: ${VITE_WEB_URL:-}
         VITE_APP_ANDROID_URL: ${VITE_APP_ANDROID_URL:-}
         VITE_APP_IOS_URL: ${VITE_APP_IOS_URL:-}
-    image: banco-web-static:latest
+    image: banco-web-static:${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
     restart: always
     depends_on:
       api:
