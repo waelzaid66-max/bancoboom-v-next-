@@ -26,8 +26,6 @@ WORKSPACE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$WORKSPACE"
 
 # ── 0. Workspace identity / toolchain guard ──────────────────────────────────
-# Keep Replit from building a wrong repo/worktree/pnpm version. This is the same
-# guard used by the canonical root prebuild contract.
 log "Verifying authoritative workspace..."
 pnpm run workspace:verify
 ok "Workspace verified"
@@ -43,13 +41,15 @@ pnpm install \
 ok "Dependencies installed"
 
 # ── 2. Shared libraries ───────────────────────────────────────────────────────
-# These are required compile authorities for downstream consumers. Never swallow
-# their failures: a broken shared package must stop the deployment build here.
-log "Building shared libraries..."
-pnpm --filter @workspace/db run build
-pnpm --filter @workspace/taxonomy run build
-pnpm --filter @workspace/api-client run build
-ok "Shared libraries built"
+# Mirror the root build contract instead of naming packages that may not expose
+# a build script. TypeScript project references are the compile authority for the
+# shared libs; optional package build scripts run only when they actually exist.
+log "Typechecking shared libraries..."
+pnpm run typecheck:libs
+
+log "Running optional shared-library build scripts..."
+pnpm -r --filter "./lib/**" --if-present run build
+ok "Shared libraries verified"
 
 # ── 3. API server ─────────────────────────────────────────────────────────────
 log "Building api-server..."
