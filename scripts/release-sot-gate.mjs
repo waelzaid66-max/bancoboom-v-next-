@@ -210,10 +210,14 @@ if (fs.existsSync(apiDockerfilePath)) {
     "ENV RELEASE_SHA=$RELEASE_SHA",
     "GIT_SHA=$RELEASE_SHA",
     "BUILD_ID=$RELEASE_SHA",
+    "RELEASE_SHA must be a full 40-hex Git SHA",
   ]) {
     if (!dockerfile.includes(required)) {
       failures.push(`API Dockerfile release identity binding missing: ${required}`);
     }
+  }
+  if ((dockerfile.match(/ARG RELEASE_SHA=/g) ?? []).length < 2) {
+    failures.push("API Dockerfile must bind RELEASE_SHA in both builder/migrate and runner stages");
   }
   if (/ARG\s+GIT_SHA|ARG\s+BUILD_ID/.test(dockerfile)) {
     failures.push("API Dockerfile must not expose competing GIT_SHA/BUILD_ID build authorities");
