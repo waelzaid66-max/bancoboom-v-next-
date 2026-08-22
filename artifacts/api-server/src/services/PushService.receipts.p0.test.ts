@@ -207,9 +207,11 @@ describe("PushService post-ticket receipt P0 contract", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    // Drive both bounded async retry windows (max 2.5s + 5s under the
-    // shared BANCO backoff policy) without relying on one runAllTimers pass.
-    await vi.advanceTimersByTimeAsync(10_000);
+    // Advance each bounded retry window separately so each async fetch/microtask
+    // can schedule the next timer relative to the updated fake clock.
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(5_000);
     await processing;
 
     expect(fetchMock).toHaveBeenCalledTimes(RECEIPT_MAX_ATTEMPTS);
