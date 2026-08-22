@@ -40,7 +40,7 @@ const clerkAppearance = {
 };
 
 function AuthTokenBridgeInner() {
-  const { getToken, isLoaded, signOut } = useAuth();
+  const { getToken, isLoaded, sessionId, signOut } = useAuth();
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -60,12 +60,12 @@ function AuthTokenBridgeInner() {
     // Soft-deleted accounts reject with 401 ACCOUNT_DELETED while Clerk JWT
     // may still exist — clear the local session once so the user is not stuck.
     // Mirrors artifacts/banco-mobile/app/_layout.tsx AuthTokenBridge.
-    setAuthFailureHandler(({ code }) => {
+    setAuthFailureHandler(sessionId, ({ code }) => {
       if (code !== "ACCOUNT_DELETED") return;
       return signOut();
     });
-    return () => setAuthFailureHandler(null);
-  }, [signOut]);
+    return () => setAuthFailureHandler(sessionId, null);
+  }, [sessionId, signOut]);
 
   return null;
 }
