@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import express from "express";
 import http from "node:http";
 import healthRouter from "./routes/health";
-import "./__tests__/helpers";
+import { db } from "./__tests__/helpers";
 
 function httpGet(path: string): Promise<{ status: number; body: string }> {
   const app = express();
@@ -93,6 +93,30 @@ describe("health probes (P0 smoke)", () => {
     // F1 pin: fields present (null locally when unset; real SHA in deployed images).
     expect("gitSha" in body).toBe(true);
     expect("buildId" in body).toBe(true);
+  });
+
+  it("GET /api/readyz reports every dependent schema down when Postgres is unreachable", async () => {
+    const executeSpy = vi
+      .spyOn(db, "execute")
+      .mockRejectedValueOnce(new Error("database unavailable"));
+
+    try {
+      const res = await httpGet("/api/readyz");
+      expect(res.status).toBe(503);
+      const body = JSON.parse(res.body) as {
+        status: string;
+        checks?: Record<string, string>;
+      };
+      expect(body.status).toBe("degraded");
+      expect(body.checks).toMatchObject({
+        database: "down",
+        money_schema: "down",
+        messaging_schema: "down",
+        upload_claims: "down",
+      });
+    } finally {
+      executeSpy.mockRestore();
+    }
   });
 
   it("GET /api/readyz fails closed in production when release identities diverge", async () => {
