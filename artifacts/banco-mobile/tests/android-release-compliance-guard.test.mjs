@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const mobileRoot = path.resolve("artifacts/banco-mobile");
+const mobileRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const appConfig = JSON.parse(
   fs.readFileSync(path.join(mobileRoot, "app.json"), "utf8"),
 ).expo;
