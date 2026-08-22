@@ -114,10 +114,11 @@ The exact commands and the fresh-vs-existing database decision are below.
 
 ## Environment Variables
 
-### Required (API server will refuse to start without these)
+### Required (API/release will fail closed without these)
 
 | Variable | Description |
 |----------|-------------|
+| `RELEASE_SHA` | Full approved immutable Git SHA; must exactly match the Coolify checkout/source SHA and is required by first-party image tags |
 | `POSTGRES_PASSWORD` | Postgres database password |
 | `CLERK_SECRET_KEY` | Clerk backend secret key (`sk_live_...`) |
 | `SESSION_SECRET` | Random 32+ character string for session signing |
@@ -410,6 +411,7 @@ curl http://<vps-ip>/nginx-health
 Before going live:
 
 - [ ] Set all **required** environment variables (see table above)
+- [ ] Set `RELEASE_SHA` to the same full approved immutable SHA as the pinned Coolify source checkout; stop if they differ
 - [ ] Set `BANCO_WEB_URL`, `BANCO_WEBSITE_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` before first build
 - [ ] Configure domains in Coolify → Traefik issues TLS certificates automatically
 - [ ] Run committed database migrations after Postgres health and before API readiness (`--profile migrate run --rm migrate`)
