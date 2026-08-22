@@ -183,6 +183,7 @@ router.get("/readyz", async (_req, res) => {
     }
   } else {
     checks.money_schema = "down";
+    checks.messaging_schema = "down";
     checks.upload_claims = "down";
   }
 
