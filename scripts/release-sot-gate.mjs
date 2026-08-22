@@ -91,6 +91,33 @@ for (const relativePath of operatorFiles) {
   }
 }
 
+// First-party application images must never resolve through a mutable tag.
+// External infrastructure images (for example postgres:16) are intentionally
+// outside this check; the release blocker here is rollback/provenance for code
+// built from this repository. The accepted deployment must bind each BANCO image
+// to an immutable release identity (exact SHA tag and/or digest), never :latest.
+const composePath = path.join(root, "docker-compose.coolify.yml");
+if (fs.existsSync(composePath)) {
+  const compose = fs.readFileSync(composePath, "utf8");
+  const firstPartyImageLines = compose
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^image:\s*banco-[^\s]+/i.test(line));
+
+  if (firstPartyImageLines.length === 0) {
+    failures.push("docker-compose.coolify.yml must declare first-party BANCO application images");
+  }
+
+  for (const line of firstPartyImageLines) {
+    const imageRef = line.replace(/^image:\s*/i, "").trim();
+    if (/:latest(?:\s|$)/i.test(imageRef)) {
+      failures.push(
+        `mutable first-party image tag is forbidden in docker-compose.coolify.yml: ${imageRef}`,
+      );
+    }
+  }
+}
+
 if (failures.length > 0) {
   console.error("RELEASE_SOT_GATE_FAIL");
   for (const failure of failures) console.error(`- ${failure}`);
