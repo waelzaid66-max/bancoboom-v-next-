@@ -40,16 +40,17 @@ pnpm install \
   || pnpm install --frozen-lockfile
 ok "Dependencies installed"
 
-# ── 2. Shared libraries ───────────────────────────────────────────────────────
-# Mirror the root build contract instead of naming packages that may not expose
-# a build script. TypeScript project references are the compile authority for the
-# shared libs; optional package build scripts run only when they actually exist.
-log "Typechecking shared libraries..."
-pnpm run typecheck:libs
+# ── 2. Canonical workspace typecheck + shared-library build scripts ──────────
+# Preserve the root build's compile authority before building the Replit subset.
+# This checks shared libraries plus every artifact/script package that exposes a
+# typecheck script; the surface builds below then remain a documented Replit-only
+# subset rather than an inferred replacement for the canonical root build.
+log "Typechecking canonical workspace..."
+pnpm run typecheck
 
 log "Running optional shared-library build scripts..."
 pnpm -r --filter "./lib/**" --if-present run build
-ok "Shared libraries verified"
+ok "Workspace typecheck and shared libraries verified"
 
 # ── 3. API server ─────────────────────────────────────────────────────────────
 log "Building api-server..."
