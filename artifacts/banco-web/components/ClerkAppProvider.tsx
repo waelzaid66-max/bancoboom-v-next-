@@ -62,7 +62,7 @@ function AuthTokenBridgeInner() {
     // Mirrors artifacts/banco-mobile/app/_layout.tsx AuthTokenBridge.
     setAuthFailureHandler(({ code }) => {
       if (code !== "ACCOUNT_DELETED") return;
-      void signOut().catch(() => {});
+      return signOut();
     });
     return () => setAuthFailureHandler(null);
   }, [signOut]);
