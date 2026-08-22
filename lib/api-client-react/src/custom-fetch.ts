@@ -16,6 +16,7 @@ export type AuthFailureHandler = (info: {
 
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
+const LEGACY_AUTH_FAILURE_SESSION = "__legacy_auth_failure_handler__";
 
 // ---------------------------------------------------------------------------
 // Module-level configuration
@@ -61,13 +62,35 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
  *
  * Clerk sessionId is the generation authority. Replacing/clearing a handler
  * for the same session preserves IN_FLIGHT/COMPLETED teardown state; only a
- * genuinely different session starts a fresh generation. Pass `(null, null)`
- * to reset the module-level registration when no Clerk session exists.
+ * genuinely different session starts a fresh generation. `(null, null)` resets
+ * the module-level registration when no Clerk session exists.
+ *
+ * The one-argument form is retained only while all five consumers migrate to
+ * explicit Clerk sessionId registration. It preserves the previous replacement
+ * semantics and must not be treated as session-generation authority.
  */
+export function setAuthFailureHandler(handler: AuthFailureHandler | null): void;
 export function setAuthFailureHandler(
   sessionId: string | null,
   handler: AuthFailureHandler | null,
+): void;
+export function setAuthFailureHandler(
+  sessionIdOrHandler: string | AuthFailureHandler | null,
+  maybeHandler?: AuthFailureHandler | null,
 ): void {
+  if (arguments.length === 1) {
+    const legacyHandler =
+      typeof sessionIdOrHandler === "function" ? sessionIdOrHandler : null;
+    _authFailureGeneration += 1;
+    _authFailureSessionId = legacyHandler ? LEGACY_AUTH_FAILURE_SESSION : null;
+    _authFailureHandler = legacyHandler;
+    _accountDeletedTeardownState = "idle";
+    return;
+  }
+
+  const sessionId = typeof sessionIdOrHandler === "string" ? sessionIdOrHandler : null;
+  const handler = maybeHandler ?? null;
+
   if (sessionId === null && handler === null) {
     _authFailureGeneration += 1;
     _authFailureSessionId = null;
