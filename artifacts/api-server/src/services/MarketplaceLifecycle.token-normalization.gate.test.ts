@@ -42,19 +42,19 @@ afterAll(async () => {
 });
 
 describe("Marketplace lifecycle token normalization regression", () => {
-  it("RED: raw UUID-like token can diverge from the normalized persisted title and disappear from token search", async () => {
+  it("keeps normalized UUID-like fixture tokens searchable after title normalization", async () => {
     const seller = await seedSeller();
     const rawToken = "E2ECYCLE_550E8400-E29B-41D4-A716-AAAA1234BCDE";
-    const normalizedToken = cleanText(rawToken);
+    const token = cleanText(rawToken);
 
-    expect(normalizedToken).not.toBe(rawToken);
-    expect(normalizedToken).toBe("E2ECYCLE_550E8400-E29B-41D4-A716-AAA1234BCDE");
+    expect(token).not.toBe(rawToken);
+    expect(token).toBe("E2ECYCLE_550E8400-E29B-41D4-A716-AAA1234BCDE");
     expect(
-      detectSpamKeywords(`${normalizedToken} Toyota Corolla 2020`, "Clean, one owner, full service history."),
+      detectSpamKeywords(`${token} Toyota Corolla 2020`, "Clean, one owner, full service history."),
     ).toEqual([]);
 
     const input = CreateListingSchema.parse({
-      title: `${rawToken} Toyota Corolla 2020`,
+      title: `${token} Toyota Corolla 2020`,
       description: "Clean, one owner, full service history.",
       category: "car",
       base_price_cash: 850000,
@@ -63,7 +63,7 @@ describe("Marketplace lifecycle token normalization regression", () => {
       media: [
         {
           type: "image",
-          url: `https://cdn.example/${rawToken}.jpg`,
+          url: `https://cdn.example/${token}.jpg`,
           is_thumbnail: true,
         },
       ],
@@ -76,7 +76,7 @@ describe("Marketplace lifecycle token normalization regression", () => {
     expect(feed.items.map((item) => item.id)).toContain(id);
 
     const found = await searchListings(
-      { category: "car", search_term: rawToken },
+      { category: "car", search_term: token },
       undefined,
       50,
     );
