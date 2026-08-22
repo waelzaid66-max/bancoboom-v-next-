@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  commandExecutable,
+  createCleanupController,
   databaseNameFromUrl,
   databaseUrlForChild,
   makeChildDatabaseName,
@@ -113,4 +116,39 @@ test("child URL can only target a generated child name and preserves credentials
   assert.equal(decodeURIComponent(parsed.username), "tester");
   assert.equal(decodeURIComponent(parsed.password), "secret");
   assert.throws(() => databaseUrlForChild(admin, "banco_test"), /unsafe child database name/);
+});
+
+test("cleanup failure remains retryable against the same target until cleanup succeeds", () => {
+  let attempts = 0;
+  const targets = [];
+  const cleanup = createCleanupController(() => {
+    targets.push("banco_api_test_0011223344556677");
+    attempts += 1;
+    if (attempts === 1) throw new Error("simulated drop failure");
+  });
+
+  assert.throws(() => cleanup.run(), /simulated drop failure/);
+  assert.equal(cleanup.isCleaned(), false);
+  cleanup.run();
+  assert.equal(cleanup.isCleaned(), true);
+  cleanup.run();
+
+  assert.equal(attempts, 2);
+  assert.deepEqual(targets, [
+    "banco_api_test_0011223344556677",
+    "banco_api_test_0011223344556677",
+  ]);
+});
+
+test("DB admin commands remain direct argv and Windows pnpm resolution is isolated", () => {
+  assert.equal(commandExecutable("docker", "win32"), "docker");
+  assert.equal(commandExecutable("psql", "win32"), "psql");
+  assert.equal(commandExecutable("pnpm", "win32"), "pnpm.cmd");
+  assert.equal(commandExecutable("pnpm", "linux"), "pnpm");
+
+  const source = readFileSync(
+    new URL("./run-api-tests-local.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /\bshell\s*:/);
 });
