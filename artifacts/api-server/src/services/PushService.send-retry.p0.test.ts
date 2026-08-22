@@ -110,6 +110,23 @@ describe("PushService pre-ticket P0 retry contract", () => {
     expect(attemptTimes.slice(1).every((time, index) => time > attemptTimes[index])).toBe(true);
   });
 
+  it("stops after a bounded number of attempts when a transient network failure never recovers", async () => {
+    vi.useFakeTimers({ timerLimit: 20 });
+    seedDevices();
+    const fetchMock = vi.fn().mockRejectedValue(new Error("network remains unavailable"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const sendPromise = sendOnce();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.runAllTimersAsync();
+    await sendPromise;
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(4);
+  });
+
   it("retries HTTP 429 after a positive delay and then succeeds", async () => {
     vi.useFakeTimers();
     seedDevices();
