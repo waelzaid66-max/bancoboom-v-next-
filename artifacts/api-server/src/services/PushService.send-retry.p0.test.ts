@@ -35,7 +35,7 @@ vi.mock("drizzle-orm", async (importOriginal) => {
   };
 });
 
-import { sendPushToUser } from "./PushService";
+import { computeSendRetryDelayMs, sendPushToUser } from "./PushService";
 
 const TOKEN = "ExpoPushToken[push-send-p0-test]";
 const HEALTHY_TOKEN = "ExpoPushToken[push-send-p0-healthy]";
@@ -83,6 +83,26 @@ describe("PushService pre-ticket P0 retry contract", () => {
     vi.restoreAllMocks();
   });
 
+  it("uses increasing exponential retry windows with bounded controllable jitter", () => {
+    const attemptOneBase = computeSendRetryDelayMs(1, () => 0);
+    const attemptOneMaxJitter = computeSendRetryDelayMs(1, () => 1);
+    const attemptTwoBase = computeSendRetryDelayMs(2, () => 0);
+    const attemptTwoMaxJitter = computeSendRetryDelayMs(2, () => 1);
+
+    expect(attemptOneBase).toBe(500);
+    expect(attemptOneMaxJitter).toBe(625);
+    expect(attemptTwoBase).toBe(1_000);
+    expect(attemptTwoMaxJitter).toBe(1_250);
+    expect(attemptTwoBase).toBeGreaterThan(attemptOneMaxJitter);
+
+    expect(computeSendRetryDelayMs(1, () => -10)).toBe(attemptOneBase);
+    expect(computeSendRetryDelayMs(1, () => 10)).toBe(attemptOneMaxJitter);
+    expect(computeSendRetryDelayMs(1, () => Number.NaN)).toBe(attemptOneBase);
+    expect(computeSendRetryDelayMs(1, () => 0.5)).toBeGreaterThan(attemptOneBase);
+    expect(computeSendRetryDelayMs(1, () => 0.5)).toBeLessThan(attemptOneMaxJitter);
+    expect(computeSendRetryDelayMs(1, () => 0)).toBeGreaterThan(0);
+  });
+
   it("retries transient network failures with positive delay and a bounded attempt count", async () => {
     vi.useFakeTimers();
     seedDevices();
@@ -106,7 +126,7 @@ describe("PushService pre-ticket P0 retry contract", () => {
     await sendPromise;
 
     expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
-    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(4);
+    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(3);
     expect(attemptTimes.slice(1).every((time, index) => time > attemptTimes[index])).toBe(true);
   });
 
@@ -123,8 +143,7 @@ describe("PushService pre-ticket P0 retry contract", () => {
     await vi.runAllTimersAsync();
     await sendPromise;
 
-    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
-    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(4);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("retries HTTP 429 after a positive delay and then succeeds", async () => {
