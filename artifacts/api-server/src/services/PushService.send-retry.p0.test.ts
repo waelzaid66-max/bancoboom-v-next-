@@ -89,10 +89,10 @@ describe("PushService pre-ticket P0 retry contract", () => {
     const attemptTwoBase = computeSendRetryDelayMs(2, () => 0);
     const attemptTwoMaxJitter = computeSendRetryDelayMs(2, () => 1);
 
-    expect(attemptOneBase).toBe(500);
-    expect(attemptOneMaxJitter).toBe(625);
-    expect(attemptTwoBase).toBe(1_000);
-    expect(attemptTwoMaxJitter).toBe(1_250);
+    expect(attemptOneBase).toBe(2_000);
+    expect(attemptOneMaxJitter).toBe(2_500);
+    expect(attemptTwoBase).toBe(4_000);
+    expect(attemptTwoMaxJitter).toBe(5_000);
     expect(attemptTwoBase).toBeGreaterThan(attemptOneMaxJitter);
 
     expect(computeSendRetryDelayMs(1, () => -10)).toBe(attemptOneBase);
