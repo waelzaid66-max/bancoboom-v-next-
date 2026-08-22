@@ -12,8 +12,9 @@ const mocked = vi.hoisted(() => {
     };
   });
   const deleteFn = vi.fn(() => ({ where: deleteWhere }));
+  const inArrayValues: string[][] = [];
 
-  return { selectQueue, deleteWhere, select, deleteFn };
+  return { selectQueue, deleteWhere, select, deleteFn, inArrayValues };
 });
 
 vi.mock("@workspace/db", () => ({
@@ -23,12 +24,26 @@ vi.mock("@workspace/db", () => ({
   },
 }));
 
+vi.mock("drizzle-orm", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("drizzle-orm")>();
+  return {
+    ...actual,
+    inArray: (column: unknown, values: unknown[]) => {
+      mocked.inArrayValues.push(values.map(String));
+      return actual.inArray(column as never, values as never);
+    },
+  };
+});
+
 import { sendPushToUser } from "./PushService";
 
 const TOKEN = "ExpoPushToken[push-send-p0-test]";
+const HEALTHY_TOKEN = "ExpoPushToken[push-send-p0-healthy]";
+const CREDENTIAL_TOKEN = "ExpoPushToken[push-send-p0-credential]";
+const DEAD_TOKEN = "ExpoPushToken[push-send-p0-dead]";
 
-function seedOneDevice(): void {
-  mocked.selectQueue.push([{ token: TOKEN }], [{ c: 1 }]);
+function seedDevices(tokens: string[] = [TOKEN]): void {
+  mocked.selectQueue.push(tokens.map((token) => ({ token })), [{ c: 1 }]);
 }
 
 function response(status: number, data: unknown = []): Response {
@@ -46,58 +61,91 @@ async function sendOnce(): Promise<void> {
   });
 }
 
+async function flushRetryTimers(sendPromise: Promise<void>): Promise<void> {
+  await vi.advanceTimersByTimeAsync(0);
+  await vi.runAllTimersAsync();
+  await sendPromise;
+}
+
 describe("PushService pre-ticket P0 retry contract", () => {
   beforeEach(() => {
     mocked.selectQueue.length = 0;
+    mocked.inArrayValues.length = 0;
     mocked.select.mockClear();
     mocked.deleteFn.mockClear();
     mocked.deleteWhere.mockClear();
+    vi.useRealTimers();
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
-  it("retries a transient network exception, but remains bounded", async () => {
-    seedOneDevice();
-    const fetchMock = vi.fn().mockRejectedValue(new Error("transient network"));
+  it("retries transient network failures with positive delay and a bounded attempt count", async () => {
+    vi.useFakeTimers();
+    seedDevices();
+    const attemptTimes: number[] = [];
+    let attempt = 0;
+    const fetchMock = vi.fn(async () => {
+      attemptTimes.push(Date.now());
+      attempt += 1;
+      if (attempt < 3) throw new Error("transient network");
+      return response(200);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
-    await sendOnce();
+    const sendPromise = sendOnce();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // A tight immediate retry loop is not acceptable backoff.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.runAllTimersAsync();
+    await sendPromise;
 
     expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
     expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(4);
-  }, 10_000);
+    expect(attemptTimes.slice(1).every((time, index) => time > attemptTimes[index])).toBe(true);
+  });
 
-  it("retries HTTP 429 and succeeds without an unbounded loop", async () => {
-    seedOneDevice();
+  it("retries HTTP 429 after a positive delay and then succeeds", async () => {
+    vi.useFakeTimers();
+    seedDevices();
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(response(429))
       .mockResolvedValueOnce(response(200));
     vi.stubGlobal("fetch", fetchMock);
 
-    await sendOnce();
+    const sendPromise = sendOnce();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
+    await flushRetryTimers(sendPromise);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-  }, 10_000);
+  });
 
-  it("retries HTTP 5xx and succeeds when Expo recovers", async () => {
-    seedOneDevice();
+  it("retries HTTP 5xx after a positive delay and succeeds when Expo recovers", async () => {
+    vi.useFakeTimers();
+    seedDevices();
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(response(503))
       .mockResolvedValueOnce(response(200));
     vi.stubGlobal("fetch", fetchMock);
 
-    await sendOnce();
+    const sendPromise = sendOnce();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
+    await flushRetryTimers(sendPromise);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-  }, 10_000);
+  });
 
   it("does not retry a permanent HTTP 4xx response", async () => {
-    seedOneDevice();
+    seedDevices();
     const fetchMock = vi.fn().mockResolvedValue(response(400));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -106,8 +154,9 @@ describe("PushService pre-ticket P0 retry contract", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("does not prune a healthy token for provider credential/project errors", async () => {
-    seedOneDevice();
+  it("surfaces provider credential/project ticket errors without pruning the token", async () => {
+    seedDevices([CREDENTIAL_TOKEN]);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fetchMock = vi.fn().mockResolvedValue(
       response(200, [
         {
@@ -122,12 +171,21 @@ describe("PushService pre-ticket P0 retry contract", () => {
     await sendOnce();
 
     expect(mocked.deleteFn).not.toHaveBeenCalled();
+    expect(mocked.inArrayValues).toEqual([]);
+    expect(errorSpy.mock.calls.flat().map(String).join(" ")).toContain("InvalidCredentials");
   });
 
-  it("prunes only the mapped token when Expo reports DeviceNotRegistered", async () => {
-    seedOneDevice();
+  it("prunes only the token mapped to DeviceNotRegistered in a mixed ticket batch", async () => {
+    seedDevices([HEALTHY_TOKEN, CREDENTIAL_TOKEN, DEAD_TOKEN]);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fetchMock = vi.fn().mockResolvedValue(
       response(200, [
+        { status: "ok" },
+        {
+          status: "error",
+          message: "credential mismatch",
+          details: { error: "InvalidCredentials" },
+        },
         {
           status: "error",
           message: "device is gone",
@@ -141,5 +199,6 @@ describe("PushService pre-ticket P0 retry contract", () => {
 
     expect(mocked.deleteFn).toHaveBeenCalledTimes(1);
     expect(mocked.deleteWhere).toHaveBeenCalledTimes(1);
+    expect(mocked.inArrayValues).toEqual([[DEAD_TOKEN]]);
   });
 });
