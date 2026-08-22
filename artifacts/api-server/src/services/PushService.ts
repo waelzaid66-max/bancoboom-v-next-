@@ -24,7 +24,7 @@ const EXPO_CHUNK_SIZE = 100;
 /** Expo docs: wait before fetching receipts; tickets are not receipts. */
 const RECEIPT_DELAY_MS = 15_000;
 const SEND_MAX_ATTEMPTS = 3;
-const SEND_RETRY_BASE_DELAY_MS = 500;
+const SEND_RETRY_BASE_DELAY_MS = 2_000;
 const SEND_RETRY_MAX_DELAY_MS = 4_000;
 const SEND_RETRY_JITTER_RATIO = 0.25;
 
