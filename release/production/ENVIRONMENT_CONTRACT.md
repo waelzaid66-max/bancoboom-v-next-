@@ -74,8 +74,9 @@ This document defines variable names and ownership only. Never place secret valu
 - `TRUST_PROXY_HOPS`
 - `COOLIFY_URL`
 - `COOLIFY_FQDN`
+- `RELEASE_SHA` (required; exact approved 40-character production source SHA)
 - `GIT_SHA`
 - `BUILD_ID`
 
 ## Release rule
-Every production deployment must record which variables are configured/missing by NAME only, without exposing values. Required variables must fail closed at startup/build. Optional provider variables must have a documented degraded mode.
+Every production deployment must record which variables are configured/missing by NAME only, without exposing values. `RELEASE_SHA` is mandatory and must equal the exact approved Git SHA pinned in Coolify; it has no fallback/default. Required variables must fail closed at startup/build. Optional provider variables must have a documented degraded mode.
