@@ -7,24 +7,61 @@ import { logger } from "../lib/logger";
 const router: IRouter = Router();
 
 const DB_CHECK_TIMEOUT_MS = 2000;
+const FULL_GIT_SHA = /^[0-9a-f]{40}$/i;
+
+function cleanEnv(name: string): string {
+  return process.env[name]?.trim() ?? "";
+}
 
 /**
- * Deploy pin for F1 production verification (which SHA/build is live).
- * Prefer build-injected GIT_SHA; fall back to common cloud env names.
- * Never invent a SHA — null when unset.
+ * Release identity is one authority in production: RELEASE_SHA.
+ * GIT_SHA/BUILD_ID are compatibility/reporting mirrors and must match it exactly.
+ * SOURCE_COMMIT is optional, but when supplied by the platform it must agree too.
+ * Non-production keeps historical cloud fallbacks so local/dev probes do not
+ * require release metadata.
  */
-function deployPin(): { gitSha: string | null; buildId: string | null } {
+function releaseIdentity(): {
+  gitSha: string | null;
+  buildId: string | null;
+  valid: boolean;
+} {
+  const releaseSha = cleanEnv("RELEASE_SHA");
+  const explicitGitSha = cleanEnv("GIT_SHA");
+  const explicitBuildId = cleanEnv("BUILD_ID");
+  const sourceCommit = cleanEnv("SOURCE_COMMIT");
+
+  if (process.env.NODE_ENV === "production") {
+    const valid =
+      FULL_GIT_SHA.test(releaseSha) &&
+      explicitGitSha === releaseSha &&
+      explicitBuildId === releaseSha &&
+      (!sourceCommit || sourceCommit === releaseSha);
+
+    return {
+      gitSha: explicitGitSha || releaseSha || null,
+      buildId: explicitBuildId || releaseSha || null,
+      valid,
+    };
+  }
+
   const rawSha =
-    process.env.GIT_SHA ||
-    process.env.COMMIT_SHA ||
-    process.env.SOURCE_VERSION ||
-    process.env.K_REVISION ||
-    "";
-  const rawBuild = process.env.BUILD_ID || process.env.CLOUD_BUILD_ID || "";
+    explicitGitSha ||
+    cleanEnv("COMMIT_SHA") ||
+    sourceCommit ||
+    cleanEnv("SOURCE_VERSION") ||
+    cleanEnv("K_REVISION");
+  const rawBuild = explicitBuildId || cleanEnv("CLOUD_BUILD_ID");
   return {
-    gitSha: rawSha.trim() || null,
-    buildId: rawBuild.trim() || null,
+    gitSha: rawSha || null,
+    buildId: rawBuild || null,
+    valid: true,
   };
+}
+
+/** Deploy pin retained for liveness/ops response compatibility. */
+function deployPin(): { gitSha: string | null; buildId: string | null } {
+  const identity = releaseIdentity();
+  return { gitSha: identity.gitSha, buildId: identity.buildId };
 }
 
 /**
@@ -55,16 +92,29 @@ router.get("/livez", (_req, res) => {
 
 /**
  * Readiness: should this instance receive traffic? Returns 200 only when the
- * database is actually reachable AND critical transactional tables exist;
- * otherwise 503 so load balancers stop routing to it. A bare `SELECT 1`
- * previously went green on an empty/migrated-wrong Postgres that could not
- * settle top-ups or retain queued message notifications.
+ * release identity is coherent, the database is reachable, and critical
+ * transactional tables exist. Production RELEASE_SHA/GIT_SHA/BUILD_ID drift is
+ * therefore traffic-blocking rather than an observability-only warning.
  * The DB probe is time-boxed so readiness never hangs.
- * Includes gitSha/buildId so ops can pin live traffic to a known commit (F1).
  */
 router.get("/readyz", async (_req, res) => {
   const checks: Record<string, "ok" | "down"> = {};
   let healthy = true;
+
+  const identity = releaseIdentity();
+  checks.release_identity = identity.valid ? "ok" : "down";
+  if (!identity.valid) {
+    healthy = false;
+    logger.error(
+      {
+        releaseShaPresent: Boolean(cleanEnv("RELEASE_SHA")),
+        gitShaPresent: Boolean(cleanEnv("GIT_SHA")),
+        buildIdPresent: Boolean(cleanEnv("BUILD_ID")),
+        sourceCommitPresent: Boolean(cleanEnv("SOURCE_COMMIT")),
+      },
+      "Readiness check failed: release identity missing, malformed, or inconsistent",
+    );
+  }
 
   try {
     await Promise.race([
@@ -133,13 +183,15 @@ router.get("/readyz", async (_req, res) => {
     }
   } else {
     checks.money_schema = "down";
+    checks.messaging_schema = "down";
     checks.upload_claims = "down";
   }
 
   res.status(healthy ? 200 : 503).json({
     status: healthy ? "ok" : "degraded",
     checks,
-    ...deployPin(),
+    gitSha: identity.gitSha,
+    buildId: identity.buildId,
   });
 });
 
