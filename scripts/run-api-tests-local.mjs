@@ -102,6 +102,9 @@ export function validateExternalAdminConfig(env = process.env) {
   if (parsed.protocol !== "postgresql:" && parsed.protocol !== "postgres:") {
     throw new Error("BANCO_API_TEST_ADMIN_URL must be a PostgreSQL URL.");
   }
+  if (parsed.search) {
+    throw new Error("BANCO_API_TEST_ADMIN_URL query parameters are unsupported; refusing ambiguous external PostgreSQL connection semantics.");
+  }
 
   const actualHost = parsed.hostname;
   const actualPort = parsed.port || "5432";
