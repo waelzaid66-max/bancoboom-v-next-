@@ -128,7 +128,7 @@ function AuthTokenBridge() {
     // the local session so the user is not stuck (NOTIF-03).
     setAuthFailureHandler(({ code }) => {
       if (code !== "ACCOUNT_DELETED") return;
-      void (async () => {
+      return (async () => {
         try {
           await prepareForSignOut();
         } catch (error) {
@@ -144,7 +144,7 @@ function AuthTokenBridge() {
         } catch {
           // Best-effort — still sign out.
         }
-        await signOut().catch(() => {});
+        await signOut();
       })();
     });
     return () => setAuthFailureHandler(null);

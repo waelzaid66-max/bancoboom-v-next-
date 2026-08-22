@@ -8,11 +8,11 @@ export type BodyType<T> = T;
 
 export type AuthTokenGetter = () => Promise<string | null> | string | null;
 
-/** Invoked once when the API reports a tombstoned account (401 ACCOUNT_DELETED). */
+/** Invoked when the API reports a tombstoned account (401 ACCOUNT_DELETED). */
 export type AuthFailureHandler = (info: {
   code: string;
   status: number;
-}) => void;
+}) => void | Promise<void>;
 
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
@@ -24,7 +24,8 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
 let _authFailureHandler: AuthFailureHandler | null = null;
-let _accountDeletedSignOutScheduled = false;
+let _authFailureGeneration = 0;
+let _accountDeletedTeardownInFlight: { generation: number } | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -55,10 +56,14 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
 /**
  * Register a handler for auth failures that require client session teardown
  * (today: soft-deleted account with a lingering Clerk JWT). Pass `null` to clear.
+ *
+ * Every replacement advances a generation so a Promise started by an older
+ * handler can never clear or otherwise mutate the new handler's in-flight state.
  */
 export function setAuthFailureHandler(handler: AuthFailureHandler | null): void {
+  _authFailureGeneration += 1;
   _authFailureHandler = handler;
-  if (!handler) _accountDeletedSignOutScheduled = false;
+  _accountDeletedTeardownInFlight = null;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -399,11 +404,26 @@ function extractErrorCode(data: unknown): string | undefined {
 function maybeNotifyAccountDeleted(status: number, data: unknown): void {
   if (status !== 401) return;
   if (extractErrorCode(data) !== "ACCOUNT_DELETED") return;
-  if (!_authFailureHandler || _accountDeletedSignOutScheduled) return;
-  _accountDeletedSignOutScheduled = true;
+
+  const handler = _authFailureHandler;
+  if (!handler || _accountDeletedTeardownInFlight) return;
+
+  const flight = { generation: _authFailureGeneration };
+  _accountDeletedTeardownInFlight = flight;
+
+  const finish = () => {
+    if (
+      _accountDeletedTeardownInFlight === flight &&
+      _authFailureGeneration === flight.generation
+    ) {
+      _accountDeletedTeardownInFlight = null;
+    }
+  };
+
   try {
-    _authFailureHandler({ code: "ACCOUNT_DELETED", status });
+    const result = handler({ code: "ACCOUNT_DELETED", status });
+    void Promise.resolve(result).then(finish, finish);
   } catch {
-    _accountDeletedSignOutScheduled = false;
+    finish();
   }
 }

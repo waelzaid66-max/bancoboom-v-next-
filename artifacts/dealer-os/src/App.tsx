@@ -118,7 +118,7 @@ function AuthFailureBridge() {
   useEffect(() => {
     setAuthFailureHandler(({ code }) => {
       if (code !== "ACCOUNT_DELETED") return;
-      void signOut().catch(() => {});
+      return signOut();
     });
     return () => setAuthFailureHandler(null);
   }, [signOut]);
