@@ -7,7 +7,7 @@ import { CreateListingSchema } from "../validators/schemas";
 import { createListing } from "./ListingService";
 import { getFeed } from "./FeedService";
 import { searchListings } from "./SearchService";
-import { cleanText } from "./NormalizationService";
+import { cleanText, detectSpamKeywords } from "./NormalizationService";
 
 const userIds: string[] = [];
 let locationInput = "Cairo";
@@ -44,11 +44,14 @@ afterAll(async () => {
 describe("Marketplace lifecycle token normalization regression", () => {
   it("RED: raw UUID-like token can diverge from the normalized persisted title and disappear from token search", async () => {
     const seller = await seedSeller();
-    const rawToken = "E2ECYCLE_550E8400-E29B-41D4-A716-446655440000";
+    const rawToken = "E2ECYCLE_550E8400-E29B-41D4-A716-AAAA1234BCDE";
     const normalizedToken = cleanText(rawToken);
 
     expect(normalizedToken).not.toBe(rawToken);
-    expect(normalizedToken).toBe("E2ECYCLE_550E8400-E29B-41D4-A716-44665544000");
+    expect(normalizedToken).toBe("E2ECYCLE_550E8400-E29B-41D4-A716-AAA1234BCDE");
+    expect(
+      detectSpamKeywords(`${normalizedToken} Toyota Corolla 2020`, "Clean, one owner, full service history."),
+    ).toEqual([]);
 
     const input = CreateListingSchema.parse({
       title: `${rawToken} Toyota Corolla 2020`,
