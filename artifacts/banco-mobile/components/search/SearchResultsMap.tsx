@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import type { WebViewMessageEvent } from "react-native-webview";
 
+import { AppText } from "@/components/AppText";
 import { apiCategoryFor } from "@/components/CategoryTabs";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
@@ -32,6 +33,8 @@ import { MapOverlayChrome, type MapPreviewCardProps } from "./MapOverlayChrome";
 
 const CLUSTER_DEBOUNCE_MS = 300;
 const CLUSTER_CACHE_MAX = 24;
+
+type MapBootstrapState = "loading" | "ready" | "failed";
 
 function clusterCacheKey(criteriaSig: string, viewport: MapViewport): string {
   return `${criteriaSig}:${viewport.max_lat.toFixed(3)}:${viewport.min_lat.toFixed(3)}:${viewport.max_lng.toFixed(3)}:${viewport.min_lng.toFixed(3)}:${viewport.zoom}`;
@@ -77,7 +80,7 @@ export function SearchResultsMap({
   const webRef = useRef<WebView>(null);
   const tileFailureShownRef = useRef(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
+  const [bootstrapState, setBootstrapState] = useState<MapBootstrapState>("loading");
   // Total in the visible viewport per the last server response (honest count);
   // null until the first response, when we fall back to the loaded-page count.
   const [serverTotal, setServerTotal] = useState<number | null>(null);
@@ -181,7 +184,7 @@ export function SearchResultsMap({
   // component does not remount, so reset load/selection/count ourselves and
   // invalidate any in-flight cluster fetch from the previous page.
   useEffect(() => {
-    setReady(false);
+    setBootstrapState("loading");
     setSelectedId(null);
     setServerTotal(null);
     vpSeqRef.current++;
@@ -325,10 +328,16 @@ export function SearchResultsMap({
     (event: WebViewMessageEvent) => {
       try {
         const msg = JSON.parse(event.nativeEvent.data) as MapBridgeMessage;
-        if (msg.type === "ready" || msg.type === "error") {
-          setReady(true);
+        if (msg.type === "ready") {
+          setBootstrapState("ready");
+        } else if (msg.type === "error") {
+          // Leaflet/bootstrap failure is terminal for this WebView instance.
+          // Fail closed: do not expose overlay controls over a dead/grey map.
+          setBootstrapState("failed");
         } else if (msg.type === "tile_error") {
-          setReady(true);
+          // A tile failure is a degraded ready map, not a bootstrap failure.
+          // Never let it revive an instance that already failed bootstrap.
+          setBootstrapState((current) => (current === "failed" ? current : "ready"));
           if (!tileFailureShownRef.current) {
             tileFailureShownRef.current = true;
             Alert.alert(
@@ -421,22 +430,48 @@ export function SearchResultsMap({
         style={styles.web}
       />
 
-      {!ready ? (
+      {bootstrapState === "loading" ? (
         <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : null}
 
-      <MapOverlayChrome
-        count={serverTotal ?? markers.length}
-        areaCount={areaTotal}
-        selected={selected}
-        onClose={() => setSelectedId(null)}
-        onOpenListing={onOpenListing}
-        onSave={onSave}
-        isSaved={isSaved}
-        CardComponent={CardComponent}
-      />
+      {bootstrapState === "failed" ? (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            styles.failure,
+            { backgroundColor: colors.card },
+          ]}
+          testID="search-map-bootstrap-failed"
+          accessibilityRole="alert"
+        >
+          <AppText style={[styles.failureTitle, { color: colors.foreground }]}>
+            {t("search.mapUnavailableTitle")}
+          </AppText>
+          <AppText
+            style={[
+              styles.failureBody,
+              { color: colors.mutedForeground, textAlign: isRTL ? "right" : "left" },
+            ]}
+          >
+            {t("search.mapUnavailableBody")}
+          </AppText>
+        </View>
+      ) : null}
+
+      {bootstrapState === "ready" ? (
+        <MapOverlayChrome
+          count={serverTotal ?? markers.length}
+          areaCount={areaTotal}
+          selected={selected}
+          onClose={() => setSelectedId(null)}
+          onOpenListing={onOpenListing}
+          onSave={onSave}
+          isSaved={isSaved}
+          CardComponent={CardComponent}
+        />
+      ) : null}
     </View>
   );
 }
@@ -444,4 +479,20 @@ export function SearchResultsMap({
 const styles = StyleSheet.create({
   web: { flex: 1, backgroundColor: "transparent" },
   center: { alignItems: "center", justifyContent: "center" },
+  failure: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 28,
+  },
+  failureTitle: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+  },
+  failureBody: {
+    maxWidth: 320,
+    fontSize: 13,
+    lineHeight: 19,
+  },
 });
