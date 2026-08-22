@@ -104,7 +104,13 @@ router.get("/readyz", async (_req, res) => {
 
     try {
       await Promise.race([
-        db.execute(sql`SELECT 1 FROM message_notification_outbox LIMIT 0`),
+        (async () => {
+          await db.execute(sql`SELECT 1 FROM message_notification_outbox LIMIT 0`);
+          // VNX-02 / migration 0006: a pre-journal database that is accidentally
+          // stamped past the historical adoption prefix must not receive traffic
+          // without the client idempotency column Messenger send relies on.
+          await db.execute(sql`SELECT client_message_id FROM messages LIMIT 0`);
+        })(),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error("messaging schema check timed out")), DB_CHECK_TIMEOUT_MS),
         ),
@@ -133,6 +139,7 @@ router.get("/readyz", async (_req, res) => {
     }
   } else {
     checks.money_schema = "down";
+    checks.messaging_schema = "down";
     checks.upload_claims = "down";
   }
 

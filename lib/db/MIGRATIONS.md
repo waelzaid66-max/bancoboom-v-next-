@@ -72,7 +72,7 @@ the SQL, commit both SQL and journal, and let `migrate` apply it.
 ### Fresh empty database
 
 A fresh empty database runs `migrate` directly. It must never be baselined,
-because baselining records the migrations without executing the statements that
+because baselining records migrations without executing the statements that
 create its schema.
 
 ```bash
@@ -84,14 +84,26 @@ DATABASE_URL=... pnpm --filter @workspace/db run migrate
 An existing pre-journal database may contain tables created by the historical
 schema-push flow but no `drizzle.__drizzle_migrations` history. Do not infer
 equivalence from a non-empty database. Before baseline, independently prove its
-live schema is equivalent to the exact committed schema represented by the
-release SHA and migration journal, and take the required production backup.
+live schema is equivalent to the exact historical adoption snapshot, inspect any
+newer objects/data state separately, and take the required production backup.
 
-This is a hard operator boundary: `src/baseline.ts` checks only that at least one
-public table exists, then stamps every current migration hash without executing
-its SQL. It does not compare tables, columns, enums, indexes, constraints, or
-data migrations. Therefore `baseline` is safe only after the independent schema
-comparison has succeeded.
+The historical adoption prefix is frozen to these four migration tags:
+
+- `0000_fantastic_warbird`
+- `0001_minor_stingray`
+- `0002_violet_miss_america`
+- `0003_typical_human_robot`
+
+These were the migration set already present when the push-built adoption path
+was verified. `src/baseline.ts` now validates that exact journal prefix and
+stamps **only those four hashes**. It deliberately does not stamp `0004+`.
+Those later migrations contain real lifecycle reconciliation, billing/outbox and
+Messenger idempotency/notification state and must remain executable work.
+
+This is still a hard operator boundary: `baseline` checks only that at least one
+public table exists; it does not itself compare every table, column, enum,
+index, constraint or data postcondition. Therefore it is safe only after the
+independent equivalence check of the historical adoption snapshot has succeeded.
 
 Then, and only then, stamp that existing database once:
 
@@ -99,12 +111,18 @@ Then, and only then, stamp that existing database once:
 DATABASE_URL=... pnpm --filter @workspace/db run baseline
 ```
 
-Immediately run the committed migration runner. It should apply only migrations
-that are genuinely newer than the proven baseline:
+Immediately run the committed migration runner:
 
 ```bash
 DATABASE_URL=... pnpm --filter @workspace/db run migrate
 ```
+
+`migrate` should apply migrations newer than the frozen adoption prefix that are
+not already recorded. If a pre-journal database already contains some newer
+objects because an old push flow touched them, do **not** extend the baseline
+cutoff just to make the error disappear. Stop, compare the live object/data
+state to that migration, reconcile explicitly, and only then repair the journal
+with reviewed evidence.
 
 If the schema comparison cannot prove equivalence, stop and reconcile the
 database. Never baseline or use schema push merely to bypass a migration error.
@@ -126,10 +144,11 @@ journalled migrations exist in Git.
 | `.github/workflows/deploy.yml` verification DB | `push-force` | `check` + `migrate` twice ✅ |
 | `scripts/run-api-tests-local.mjs` disposable DB | `push-force` | `check` + `migrate` twice ✅ |
 
-> An existing pre-journal database must complete independent schema-equivalence
-> proof before its one-time baseline. `migrate` on an un-stamped historical
-> database fails loudly on the first already-existing object; do not bypass that
-> signal. A fresh empty database needs no stamp and runs `migrate` directly.
+> An existing pre-journal database must complete independent adoption-snapshot
+> equivalence proof before its one-time baseline. `migrate` on an un-stamped
+> historical database fails loudly on the first already-existing object; do not
+> bypass that signal. A fresh empty database needs no stamp and runs `migrate`
+> directly.
 
 Note on blast radius, since it was mis-stated in the Phase 0 audit and corrected
 here: the Coolify `migrate` service is gated behind `profiles: ["migrate"]` and
