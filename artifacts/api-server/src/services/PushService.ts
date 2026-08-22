@@ -12,7 +12,7 @@ import { eq, inArray, and, isNull, sql } from "drizzle-orm";
  * DeviceNotRegistered (on send tickets OR later receipts) are pruned so dead
  * devices stop being targeted.
  *
- * NOTIF-04: after a successful ticket, we schedule a receipt check (~15s) so
+ * NOTIF-04: after a successful ticket, we schedule a receipt check (~15m) so
  * APNs/FCM delivery failures that only appear on receipts also prune tokens.
  * A durable cross-process retry queue is still tracked separately (ops / DB).
  */
@@ -22,7 +22,8 @@ const EXPO_RECEIPTS_ENDPOINT = "https://exp.host/--/api/v2/push/getReceipts";
 // Expo accepts up to 100 messages per request.
 const EXPO_CHUNK_SIZE = 100;
 /** Expo docs: wait before fetching receipts; tickets are not receipts. */
-const RECEIPT_DELAY_MS = 15_000;
+const RECEIPT_DELAY_MS = 15 * 60_000;
+const RECEIPT_MAX_ATTEMPTS = 3;
 const SEND_MAX_ATTEMPTS = 3;
 const SEND_RETRY_BASE_DELAY_MS = 2_000;
 const SEND_RETRY_MAX_DELAY_MS = 4_000;
@@ -127,41 +128,128 @@ function isDeadDeviceError(error?: string): boolean {
   return error === "DeviceNotRegistered";
 }
 
+function isRetryableReceiptStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+function isExpoReceipt(value: unknown): value is ExpoReceipt {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { status?: unknown }).status === "string"
+  );
+}
+
+function waitForReceiptRetry(attempt: number): Promise<void> {
+  // Keep receipt transport backoff aligned with the already-reviewed BANCO
+  // pre-ticket policy without changing the send path itself.
+  const delay = computeSendRetryDelayMs(attempt);
+  return new Promise((resolve) => setTimeout(resolve, delay));
+}
+
 /**
  * NOTIF-04: fetch Expo push receipts and prune tokens that failed at the
- * provider. Best-effort — never throws to callers.
+ * provider. Best-effort — never throws to callers. This P0 layer retries only
+ * in-process; durable cross-process receipt tracking remains a separate lane.
  */
 export async function processPushReceipts(
   ticketIds: string[],
   tokenByTicketId: Map<string, string>,
 ): Promise<void> {
   if (ticketIds.length === 0) return;
-  try {
-    const res = await fetch(EXPO_RECEIPTS_ENDPOINT, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ ids: ticketIds }),
-    });
+
+  let pendingTicketIds = [...new Set(ticketIds)];
+
+  for (let attempt = 1; attempt <= RECEIPT_MAX_ATTEMPTS; attempt += 1) {
+    let res: Response;
+    try {
+      res = await fetch(EXPO_RECEIPTS_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ids: pendingTicketIds }),
+      });
+    } catch (err) {
+      if (attempt >= RECEIPT_MAX_ATTEMPTS) {
+        console.error("[Push receipts]", err);
+        return;
+      }
+      await waitForReceiptRetry(attempt);
+      continue;
+    }
+
     if (!res.ok) {
+      if (isRetryableReceiptStatus(res.status) && attempt < RECEIPT_MAX_ATTEMPTS) {
+        await waitForReceiptRetry(attempt);
+        continue;
+      }
       console.error("[Push receipts] Expo responded", res.status);
       return;
     }
-    const json = (await res.json()) as {
-      data?: Record<string, ExpoReceipt>;
-    };
+
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch (err) {
+      console.error("[Push receipts] malformed response", err);
+      return;
+    }
+
+    if (!json || typeof json !== "object" || Array.isArray(json)) {
+      console.error("[Push receipts] malformed response");
+      return;
+    }
+
+    const data = (json as { data?: unknown }).data;
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      console.error("[Push receipts] malformed response data");
+      return;
+    }
+
+    const receiptData = data as Record<string, unknown>;
     const dead: string[] = [];
-    for (const [ticketId, receipt] of Object.entries(json.data ?? {})) {
-      if (receipt.status === "error" && isDeadDeviceError(receipt.details?.error)) {
-        const token = tokenByTicketId.get(ticketId);
-        if (token) dead.push(token);
+    const missing: string[] = [];
+
+    for (const ticketId of pendingTicketIds) {
+      const rawReceipt = receiptData[ticketId];
+      if (rawReceipt === undefined) {
+        missing.push(ticketId);
+        continue;
+      }
+
+      if (!isExpoReceipt(rawReceipt)) {
+        console.error("[Push receipts] malformed receipt", ticketId);
+        continue;
+      }
+
+      if (rawReceipt.status === "error") {
+        if (isDeadDeviceError(rawReceipt.details?.error)) {
+          const token = tokenByTicketId.get(ticketId);
+          if (token) dead.push(token);
+        } else {
+          console.error(
+            "[Push receipts] Expo receipt error",
+            rawReceipt.details?.error ?? "UnknownReceiptError",
+            rawReceipt.message ?? "",
+          );
+        }
+      } else if (rawReceipt.status !== "ok") {
+        console.error("[Push receipts] malformed receipt status", ticketId, rawReceipt.status);
       }
     }
+
     await pruneTokens(dead);
-  } catch (err) {
-    console.error("[Push receipts]", err);
+
+    if (missing.length === 0) return;
+    if (attempt >= RECEIPT_MAX_ATTEMPTS) {
+      console.error("[Push receipts] missing receipts after retry budget", missing.length);
+      return;
+    }
+
+    pendingTicketIds = missing;
+    await waitForReceiptRetry(attempt);
   }
 }
 
