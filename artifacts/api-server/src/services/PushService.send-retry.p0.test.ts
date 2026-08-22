@@ -111,7 +111,7 @@ describe("PushService pre-ticket P0 retry contract", () => {
   });
 
   it("stops after a bounded number of attempts when a transient network failure never recovers", async () => {
-    vi.useFakeTimers({ timerLimit: 20 });
+    vi.useFakeTimers();
     seedDevices();
     const fetchMock = vi.fn().mockRejectedValue(new Error("network remains unavailable"));
     vi.stubGlobal("fetch", fetchMock);
