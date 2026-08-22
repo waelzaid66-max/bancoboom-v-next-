@@ -29,6 +29,7 @@ import { CarPicker } from "@/components/CarPicker";
 import { LocationPicker } from "@/components/LocationPicker";
 import { SearchDiscover } from "@/components/SearchDiscover";
 import { SkeletonCard } from "@/components/SkeletonCard";
+import RecentSearchChips from "@/components/search/RecentSearchChips";
 import { SearchResultsSurface } from "@/components/search/SearchResultsSurface";
 import { SearchResultsMap } from "@/components/search/SearchResultsMap";
 import { FilterSheet } from "@/components/search/FilterSheet";
@@ -62,6 +63,7 @@ import { useSound } from "@/context/SoundContext";
 import { useAuthGate } from "@/hooks/useAuthGate";
 import { useColors } from "@/hooks/useColors";
 import { useSearchMiniApp } from "@/hooks/useSearchMiniApp";
+import shouldShowRecentSearches from "@/lib/recentSearchPolicy";
 import {
   DEFAULT_CRITERIA,
   SearchCriteria,
@@ -203,6 +205,7 @@ export default function SearchScreen() {
     isSearchSaved,
     cacheFeedItem,
     recordQuery,
+    recentQueries,
   } = useSession();
   const { requireAuth } = useAuthGate();
   // Match section mini-apps: real safe-area only — never a fake 67px web pad.
@@ -310,6 +313,7 @@ export default function SearchScreen() {
   // Live text input value (the only field that is debounced rather than
   // committed immediately). Price / year drafts live inside the FilterSheet.
   const [draftQuery, setDraftQuery] = useState("");
+  const [searchEngaged, setSearchEngaged] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -431,6 +435,12 @@ export default function SearchScreen() {
     setDraftQuery(s);
     setBrandValue(null);
     commitQueryNow(s);
+  }, [commitQueryNow]);
+
+  const handleRecentSearchTap = useCallback((query: string) => {
+    setDraftQuery(query);
+    setBrandValue(null);
+    commitQueryNow(query);
   }, [commitQueryNow]);
 
   const handleCardPress = useCallback(
@@ -575,6 +585,12 @@ export default function SearchScreen() {
 
   const rowDir = isRTL ? "row-reverse" : "row";
   const textAlign = isRTL ? "right" : "left";
+  const showRecentSearches = shouldShowRecentSearches({
+    draftQuery,
+    showSuggestions,
+    searchEngaged,
+    recentQueries,
+  });
 
   const locationLabel = criteria.location
     ? labelForValue(criteria.location, isRTL) || criteria.location
@@ -674,7 +690,10 @@ export default function SearchScreen() {
             value={draftQuery}
             onChangeText={handleQueryChange}
             onSubmitEditing={() => commitQueryNow(draftQuery)}
-            onFocus={() => playSound("tap")}
+            onFocus={() => {
+              setSearchEngaged(true);
+              playSound("tap");
+            }}
             placeholder={t("search.placeholder")}
             placeholderTextColor={colors.mutedForeground}
             style={[styles.input, { color: colors.foreground, textAlign }]}
@@ -754,6 +773,13 @@ export default function SearchScreen() {
           </Pressable>
         ) : null}
       </View>
+
+      {showRecentSearches ? (
+        <RecentSearchChips
+          queries={recentQueries}
+          onSelect={handleRecentSearchTap}
+        />
+      ) : null}
 
       {/* Catalogue chrome belongs to active Search browse — not Discover.
           Discover already routes sections via SECTION_ROUTE mini-apps; showing
