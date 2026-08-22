@@ -32,11 +32,14 @@ const DEFAULT_SERVER_URL =
 const EXTERNAL_CONFIRM = "CREATE_DROP_RANDOM_CHILD_DB";
 const CHILD_PREFIX = "banco_api_test_";
 
+export function commandExecutable(cmd, platform = process.platform) {
+  return platform === "win32" && cmd === "pnpm" ? "pnpm.cmd" : cmd;
+}
+
 function commandResult(cmd, args, options = {}) {
-  return spawnSync(cmd, args, {
+  return spawnSync(commandExecutable(cmd), args, {
     cwd: ROOT,
     encoding: "utf8",
-    shell: process.platform === "win32",
     ...options,
   });
 }
@@ -79,6 +82,27 @@ export function databaseUrlForChild(adminUrl, database) {
 
 export function makeChildDatabaseName(randomBytes = crypto.randomBytes) {
   return `${CHILD_PREFIX}${randomBytes(8).toString("hex")}`;
+}
+
+export function createCleanupController(cleanupTarget) {
+  let cleaned = false;
+  let cleaning = false;
+
+  return {
+    run() {
+      if (cleaned || cleaning) return;
+      cleaning = true;
+      try {
+        cleanupTarget();
+        cleaned = true;
+      } finally {
+        cleaning = false;
+      }
+    },
+    isCleaned() {
+      return cleaned;
+    },
+  };
 }
 
 export function validateExternalAdminConfig(env = process.env) {
@@ -305,12 +329,8 @@ export function main(env = process.env) {
     ? provisionExternalChild(external, childDatabase)
     : provisionDockerChild(childDatabase);
 
-  let cleaned = false;
-  const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-    provisioned.cleanup();
-  };
+  const cleanupController = createCleanupController(() => provisioned.cleanup());
+  const cleanup = () => cleanupController.run();
   const removeSignalHandlers = installSignalCleanup(cleanup);
 
   try {
