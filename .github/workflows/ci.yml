@@ -85,6 +85,8 @@ jobs:
           psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
       - name: Validate committed migration history
         run: pnpm --filter @workspace/db run check
+      - name: Prove legacy baseline adoption is fail-closed
+        run: pnpm --filter @workspace/db run test:baseline-adoption
       - name: Apply committed migrations to fresh PostgreSQL
         run: pnpm --filter @workspace/db run migrate
       - name: Prove migration replay is idempotent

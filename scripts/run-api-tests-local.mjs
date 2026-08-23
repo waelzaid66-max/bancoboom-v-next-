@@ -54,6 +54,9 @@ function main() {
   console.log("\nValidating committed migrations…");
   run("pnpm", ["--filter", "@workspace/db", "run", "check"], env);
 
+  console.log("\nRunning fail-closed legacy baseline adoption matrix…");
+  run("pnpm", ["--filter", "@workspace/db", "run", "test:baseline-adoption"], env);
+
   console.log("\nApplying committed migrations…");
   run("pnpm", ["--filter", "@workspace/db", "run", "migrate"], env);
 
