@@ -1442,7 +1442,22 @@ test("B-oom Car mounts CarsHomeHeader Stay-parity shell", () => {
     path.join(APP_ROOT, "components", "search", "car", "CarsHomeHeader.tsx"),
     "utf8",
   );
-  assert.match(header, /testID="cars-home-header"/);
+  // The header may set this testID from a ternary — `testID={slot === "scroll"
+  // ? "cars-hero-band" : "cars-home-header"}` — which never produces the literal
+  // `testID="cars-home-header"`. Matching that literal made this assertion pass
+  // on canonical only because a DOC COMMENT contained it, and fail on a correct
+  // refactor that deleted the comment (audit Correction #31, measured
+  // 2026-08-23). Assert the identifier is a real testID value in CODE instead:
+  // comments stripped, and either literal or ternary form accepted. The runtime
+  // proof lives in tests/render/CarsHomeHeader.render.test.tsx, which mounts it.
+  const headerCode = header
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+  assert.match(
+    headerCode,
+    /testID=(?:"cars-home-header"|\{[^}]*"cars-home-header"[^}]*\})/,
+    "CarsHomeHeader must render testID cars-home-header (literal or ternary), in code and not in a comment",
+  );
   assert.match(header, /carBrand|BOOM_LOGO/);
   // W8 D-W8-01: market/sort SoT is primary strip — header must not duplicate
   // section-sort-cycle (duplicate testID / dual-seat).

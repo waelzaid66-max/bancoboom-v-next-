@@ -130,18 +130,44 @@ test("CAR production host completes the unified dock migration", () => {
     "CAR market/sort/listing/engine/brand/origin axes must be physically injected into the unified dock",
   );
 
-  const primarySibling = section.match(
-    /\{!isRealEstateSection\s*&&\s*!isMaterialsSection[\s\S]*?testID="section-primary-strip"/,
-  )?.[0] ?? "";
-  assert.match(
-    primarySibling,
-    /!isCarSection/,
-    "historical primary strip must explicitly exclude CAR after the dock owns those controls",
+  // This used to scan forward from the first `{!isRealEstateSection &&
+  // !isMaterialsSection` to the first `testID="section-primary-strip"`, which
+  // silently matched NOTHING once the strip was correctly hoisted into
+  // `const primaryAxisStrip` ABOVE the historical seats — and `assert.match("",
+  // …)` then failed on code that was right (audit Correction, measured
+  // 2026-08-23). Check every historical seat instead, order-independently:
+  // each one must exclude CAR, because the dock now owns those controls.
+  const seats = section.match(/\{!isRealEstateSection\s*&&\s*!isMaterialsSection[^\n]*/g) ?? [];
+  assert.ok(
+    seats.length > 0,
+    "the historical non-CAR seats must still exist for the sections that have no dock",
   );
+  for (const seat of seats) {
+    assert.match(
+      seat,
+      /!isCarSection/,
+      `historical seat must explicitly exclude CAR after the dock owns those controls: ${seat.trim()}`,
+    );
+  }
 
-  assert.match(
-    section,
-    /showCarBrandStrip\s*&&\s*!isCarSection/,
-    "historical CAR brand/origin sibling row must be unreachable once those controls live in the dock",
+  // The requirement is that the CAR brand/origin controls are not rendered
+  // outside the dock. This used to demand the literal expression
+  // `showCarBrandStrip && !isCarSection` as its proof — but
+  // `showCarBrandStrip = category === "car" && !lockedEngine` and
+  // `isCarSection = category === "car"`, so that expression is ALWAYS FALSE:
+  // the guard was mandating an unreachable, empty element as evidence of
+  // unreachability, and failing any branch that simply DELETED the dead seat
+  // (measured 2026-08-23). Accept both proofs — removal, or an unreachable gate.
+  const brandSeats = section.match(/testID="car-brand-origin-strip"/g) ?? [];
+  const inDock = section.indexOf("const carBrandOriginStrip");
+  const outsideDock = brandSeats.length > 1 || inDock < 0;
+  const unreachableGate = /showCarBrandStrip\s*&&\s*!isCarSection/.test(section);
+  assert.ok(
+    !outsideDock || unreachableGate,
+    "CAR brand/origin controls must live only in the dock — delete the historical sibling seat or leave it provably unreachable",
+  );
+  assert.ok(
+    brandSeats.length >= 1,
+    "the CAR brand/origin strip must still exist somewhere — the dock owns it now",
   );
 });
