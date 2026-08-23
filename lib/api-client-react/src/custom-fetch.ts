@@ -8,11 +8,11 @@ export type BodyType<T> = T;
 
 export type AuthTokenGetter = () => Promise<string | null> | string | null;
 
-/** Invoked once when the API reports a tombstoned account (401 ACCOUNT_DELETED). */
+/** Invoked when the API reports a tombstoned account (401 ACCOUNT_DELETED). */
 export type AuthFailureHandler = (info: {
   code: string;
   status: number;
-}) => void;
+}) => void | Promise<void>;
 
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
@@ -24,7 +24,10 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
 let _authFailureHandler: AuthFailureHandler | null = null;
-let _accountDeletedSignOutScheduled = false;
+let _authFailureSessionId: string | null = null;
+let _authFailureGeneration = 0;
+type AccountDeletedTeardownState = "idle" | "in_flight" | "completed";
+let _accountDeletedTeardownState: AccountDeletedTeardownState = "idle";
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -54,11 +57,36 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
 
 /**
  * Register a handler for auth failures that require client session teardown
- * (today: soft-deleted account with a lingering Clerk JWT). Pass `null` to clear.
+ * (today: soft-deleted account with a lingering Clerk JWT).
+ *
+ * Clerk sessionId is the generation authority. Replacing/clearing a handler
+ * for the same session preserves IN_FLIGHT/COMPLETED teardown state; only a
+ * genuinely different session starts a fresh generation. `(null, null)` resets
+ * the module-level registration when no Clerk session exists.
  */
-export function setAuthFailureHandler(handler: AuthFailureHandler | null): void {
+export function setAuthFailureHandler(
+  sessionId: string | null,
+  handler: AuthFailureHandler | null,
+): void {
+  if (sessionId === null && handler === null) {
+    _authFailureGeneration += 1;
+    _authFailureSessionId = null;
+    _authFailureHandler = null;
+    _accountDeletedTeardownState = "idle";
+    return;
+  }
+
+  // Ignore cleanup from an already superseded Clerk session. This prevents a
+  // stale React effect cleanup from replacing the active session generation.
+  if (handler === null && sessionId !== _authFailureSessionId) return;
+
+  if (sessionId !== _authFailureSessionId) {
+    _authFailureGeneration += 1;
+    _authFailureSessionId = sessionId;
+    _accountDeletedTeardownState = "idle";
+  }
+
   _authFailureHandler = handler;
-  if (!handler) _accountDeletedSignOutScheduled = false;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -399,11 +427,31 @@ function extractErrorCode(data: unknown): string | undefined {
 function maybeNotifyAccountDeleted(status: number, data: unknown): void {
   if (status !== 401) return;
   if (extractErrorCode(data) !== "ACCOUNT_DELETED") return;
-  if (!_authFailureHandler || _accountDeletedSignOutScheduled) return;
-  _accountDeletedSignOutScheduled = true;
+
+  const handler = _authFailureHandler;
+  const sessionId = _authFailureSessionId;
+  if (!handler || !sessionId || _accountDeletedTeardownState !== "idle") return;
+
+  const generation = _authFailureGeneration;
+  _accountDeletedTeardownState = "in_flight";
+
+  const settle = (next: "idle" | "completed") => {
+    if (
+      _authFailureGeneration === generation &&
+      _authFailureSessionId === sessionId &&
+      _accountDeletedTeardownState === "in_flight"
+    ) {
+      _accountDeletedTeardownState = next;
+    }
+  };
+
   try {
-    _authFailureHandler({ code: "ACCOUNT_DELETED", status });
+    const result = handler({ code: "ACCOUNT_DELETED", status });
+    void Promise.resolve(result).then(
+      () => settle("completed"),
+      () => settle("idle"),
+    );
   } catch {
-    _accountDeletedSignOutScheduled = false;
+    settle("idle");
   }
 }
