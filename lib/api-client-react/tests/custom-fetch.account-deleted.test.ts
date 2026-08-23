@@ -105,6 +105,37 @@ test("concurrent same-session tombstones coalesce to one teardown", async () => 
   await Promise.resolve();
 });
 
+test("same-session cleanup and re-registration preserve an in-flight teardown", async () => {
+  const flight = deferred();
+  let firstCalls = 0;
+  let replacementCalls = 0;
+
+  setAuthFailureHandler(SESSION_A, () => {
+    firstCalls += 1;
+    return flight.promise;
+  });
+
+  await assert.rejects(tombstoneCall(), ApiError);
+  assert.equal(firstCalls, 1);
+
+  setAuthFailureHandler(SESSION_A, null);
+  setAuthFailureHandler(SESSION_A, () => {
+    replacementCalls += 1;
+  });
+
+  await assert.rejects(tombstoneCall(), ApiError);
+  assert.equal(firstCalls, 1);
+  assert.equal(replacementCalls, 0);
+
+  flight.resolve();
+  await flight.promise;
+  await Promise.resolve();
+  await Promise.resolve();
+
+  await assert.rejects(tombstoneCall(), ApiError);
+  assert.equal(replacementCalls, 0);
+});
+
 test("synchronous handler throw re-arms the same session", async () => {
   let calls = 0;
   setAuthFailureHandler(SESSION_A, () => {
