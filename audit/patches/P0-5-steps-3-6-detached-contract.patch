@@ -1,0 +1,550 @@
+From 09336e5014f0a6b72b7a00453f019c1e9f50e15e Mon Sep 17 00:00:00 2001
+From: BANCO audit <waelzaid66@gmail.com>
+Date: Sun, 23 Aug 2026 20:12:23 +0000
+Subject: [PATCH] proof: P0-5 steps 3-6 - the detached case reaches the
+ contract and the clients
+
+For verification only, on the audit proof branch. Completes the item whose
+migration and media reclamation landed in 4cefc2f.
+
+Four response types now say what the database does: BookingDTO,
+ConversationSummaryDTO, AdminLeadRow and ReportRow carry listing_id as
+nullable, because migration 0008 lets those rows survive their listing
+detached. Two joins that keyed on the id now drop the nulls rather than
+querying for them - a booking with no listing has no host to name, and a
+detached conversation has no thumbnail.
+
+The spec follows: five schemas gain nullable: true (Lead,
+ConversationSummary, Report, Booking, BookingListItem) and codegen carries
+that into the typed client and the zod schemas. Story and ImportOrder were
+already declared nullable and were left alone; Ad and Comment stay
+non-null because those tables still cascade.
+
+Client audit, measured rather than estimated: of the 98 references to
+listing_id across six surfaces, zero fail to typecheck and four needed a
+change - the booking card link on mobile and on both web surfaces built
+the href /listing/null, and the conversation row passed listingId: null
+into a route whose guards only test for presence, where it would serialise
+as the string "null". LeadsPanel was already guarded on both surfaces.
+admin-os now shows its own em-dash convention for a deleted listing.
+
+Two chain pins added, both mutation-tested: the schema shape (comments
+stripped, so prose cannot satisfy it) and the migration's registration at
+idx 8. Restoring the cascade on one table fails the first; unregistering
+the migration fails the second. Gate 245 to 247.
+
+pnpm run typecheck now exits 0 from the root. API suite 518 passed / 3
+skipped / 0 failed via the official runner on a database created for the
+run, Gate-4 6/6, chain 247/247, confidence 24/24, parity 40/40, both web
+packages 32/32.
+---
+ artifacts/admin-os/src/pages/reports.tsx      |  2 +-
+ .../api-server/src/services/AdminService.ts   |  5 +-
+ .../api-server/src/services/BookingService.ts | 16 +++++--
+ .../src/services/ConversationService.ts       | 13 +++--
+ .../api-server/src/services/ReportService.ts  |  7 ++-
+ .../banco-mobile/app/(tabs)/messages.tsx      |  6 ++-
+ artifacts/banco-mobile/app/bookings.tsx       |  8 +++-
+ .../components/workspace/BookingsPanel.tsx    | 16 +++++--
+ .../components/workspace/BookingsPanel.tsx    | 16 +++++--
+ .../src/generated/api.schemas.ts              | 10 ++--
+ lib/api-spec/openapi.yaml                     |  5 ++
+ lib/api-zod/src/generated/api.ts              | 20 ++++----
+ scripts/chain-integrity-gate.mjs              | 48 +++++++++++++++++--
+ 13 files changed, 134 insertions(+), 38 deletions(-)
+
+diff --git a/artifacts/admin-os/src/pages/reports.tsx b/artifacts/admin-os/src/pages/reports.tsx
+index 2df3f69..e95496a 100644
+--- a/artifacts/admin-os/src/pages/reports.tsx
++++ b/artifacts/admin-os/src/pages/reports.tsx
+@@ -72,7 +72,7 @@ export default function ReportsPage() {
+               reports.map((r: (typeof reports)[number]) => (
+                 <TableRow key={r.id}>
+                   <TableCell>
+-                    <div className="font-medium truncate max-w-[260px]">{r.listing_title ?? r.listing_id}</div>
++                    <div className="font-medium truncate max-w-[260px]">{r.listing_title ?? r.listing_id ?? "—"}</div>
+                     {r.details ? (
+                       <div className="text-xs text-muted-foreground truncate max-w-[260px]">{r.details}</div>
+                     ) : null}
+diff --git a/artifacts/api-server/src/services/AdminService.ts b/artifacts/api-server/src/services/AdminService.ts
+index 25a7e8e..ad74de1 100644
+--- a/artifacts/api-server/src/services/AdminService.ts
++++ b/artifacts/api-server/src/services/AdminService.ts
+@@ -615,7 +615,10 @@ export async function moderateListing(params: {
+ 
+ interface AdminLeadRow {
+   id: string;
+-  listing_id: string;
++  // Nullable since migration 0008: the row survives its listing detached, so
++  // the evidence is not destroyed when a seller erases a listing (Gate 4).
++  // A null here means "the listing this refers to is gone", never "unknown".
++  listing_id: string | null;
+   listing_title: string;
+   action_type: "whatsapp" | "call" | "chat" | "finance_request";
+   status: "new" | "contacted" | "closed";
+diff --git a/artifacts/api-server/src/services/BookingService.ts b/artifacts/api-server/src/services/BookingService.ts
+index 55a4570..8518e66 100644
+--- a/artifacts/api-server/src/services/BookingService.ts
++++ b/artifacts/api-server/src/services/BookingService.ts
+@@ -60,7 +60,10 @@ export async function getListingAvailability(listingId: string): Promise<Availab
+ 
+ export interface BookingDTO {
+   id: string;
+-  listing_id: string;
++  // Nullable since migration 0008: the row survives its listing detached, so
++  // the evidence is not destroyed when a seller erases a listing (Gate 4).
++  // A null here means "the listing this refers to is gone", never "unknown".
++  listing_id: string | null;
+   check_in: string;
+   check_out: string;
+   nights: number;
+@@ -295,7 +298,12 @@ export async function listBookings(
+       .where(
+         inArray(
+           listings.id,
+-          rows.map((r) => r.booking.listingId),
++          // A booking whose listing was deleted keeps the booking as evidence
++          // (migration 0008) but has no listing row and therefore no host to
++          // name. Drop the nulls rather than querying for them.
++          rows
++            .map((r) => r.booking.listingId)
++            .filter((id): id is string => id !== null),
+         ),
+       );
+     hostNames = new Map(ownerRows.map((o) => [o.listingId, o.ownerName ?? ""]));
+@@ -306,7 +314,9 @@ export async function listBookings(
+     listing_title: r.listingTitle ?? "",
+     listing_location: r.listingLocation ?? null,
+     counterparty_name:
+-      role === "host" ? r.guestName ?? null : hostNames.get(r.booking.listingId) ?? null,
++      role === "host"
++        ? r.guestName ?? null
++        : (r.booking.listingId === null ? null : hostNames.get(r.booking.listingId) ?? null),
+   }));
+ }
+ 
+diff --git a/artifacts/api-server/src/services/ConversationService.ts b/artifacts/api-server/src/services/ConversationService.ts
+index ed867ca..73699e8 100644
+--- a/artifacts/api-server/src/services/ConversationService.ts
++++ b/artifacts/api-server/src/services/ConversationService.ts
+@@ -35,7 +35,10 @@ function codedError(code: string, message: string): CodedError {
+ 
+ export interface ConversationSummaryDTO {
+   id: string;
+-  listing_id: string;
++  // Nullable since migration 0008: the row survives its listing detached, so
++  // the evidence is not destroyed when a seller erases a listing (Gate 4).
++  // A null here means "the listing this refers to is gone", never "unknown".
++  listing_id: string | null;
+   listing_title: string | null;
+   listing_thumb: string | null;
+   counterparty_id: string;
+@@ -346,7 +349,11 @@ export async function listConversations(
+     ]),
+   );
+ 
+-  const listingIds = Array.from(new Set(rows.map((r) => r.listingId)));
++  // A conversation whose listing was deleted survives detached (migration
++  // 0008): there is no listing row, so there is no thumbnail to fetch.
++  const listingIds = Array.from(
++    new Set(rows.map((r) => r.listingId).filter((id): id is string => id !== null)),
++  );
+   const thumbMap = await getThumbs(listingIds);
+ 
+   return rows.map((r) => {
+@@ -356,7 +363,7 @@ export async function listConversations(
+       id: r.id,
+       listing_id: r.listingId,
+       listing_title: r.listingTitle ?? null,
+-      listing_thumb: thumbMap.get(r.listingId) ?? null,
++      listing_thumb: r.listingId === null ? null : thumbMap.get(r.listingId) ?? null,
+       counterparty_id: cpId,
+       counterparty_name: nameMap.get(cpId) ?? "Unknown",
+       // sharesConversation is true by construction — every row here IS one of
+diff --git a/artifacts/api-server/src/services/ReportService.ts b/artifacts/api-server/src/services/ReportService.ts
+index 744e854..777d2ca 100644
+--- a/artifacts/api-server/src/services/ReportService.ts
++++ b/artifacts/api-server/src/services/ReportService.ts
+@@ -6,7 +6,10 @@ import { isUniqueViolation } from "../lib/billing";
+ 
+ type ReportRow = {
+   id: string;
+-  listing_id: string;
++  // Nullable since migration 0008: the row survives its listing detached, so
++  // the evidence is not destroyed when a seller erases a listing (Gate 4).
++  // A null here means "the listing this refers to is gone", never "unknown".
++  listing_id: string | null;
+   listing_title: string | null;
+   reason: "fake_price" | "wrong_data" | "scam" | "duplicate" | "other";
+   details: string | null;
+@@ -19,7 +22,7 @@ type ReportRow = {
+ 
+ function serializeReport(r: {
+   id: string;
+-  listingId: string;
++  listingId: string | null;
+   listingTitle: string | null;
+   reason: ReportRow["reason"];
+   details: string | null;
+diff --git a/artifacts/banco-mobile/app/(tabs)/messages.tsx b/artifacts/banco-mobile/app/(tabs)/messages.tsx
+index 7e5d697..b1ed154 100644
+--- a/artifacts/banco-mobile/app/(tabs)/messages.tsx
++++ b/artifacts/banco-mobile/app/(tabs)/messages.tsx
+@@ -185,7 +185,11 @@ export default function MessagesScreen() {
+             params: {
+               id: item.id,
+               name: item.counterparty_name,
+-              listingId: item.listing_id,
++              // A conversation outlives its listing detached (migration 0008).
++              // The thread screen gates on listingId being present, so the key
++              // is omitted rather than passed as null — a null param serialises
++              // into the route as the string "null" and passes those guards.
++              ...(item.listing_id ? { listingId: item.listing_id } : {}),
+               role: item.viewer_role,
+             },
+           })
+diff --git a/artifacts/banco-mobile/app/bookings.tsx b/artifacts/banco-mobile/app/bookings.tsx
+index 35e539e..19e2b6d 100644
+--- a/artifacts/banco-mobile/app/bookings.tsx
++++ b/artifacts/banco-mobile/app/bookings.tsx
+@@ -109,7 +109,13 @@ export default function BookingsScreen() {
+     return (
+       <Pressable
+         style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius }]}
+-        onPress={() => router.push(`/listing/${item.listing_id}`)}
++        // listing_id is null once the listing is deleted; the booking row stays
++        // as the guest's record of it, but there is nothing to open.
++        onPress={() => {
++          if (!item.listing_id) return;
++          router.push(`/listing/${item.listing_id}`);
++        }}
++        disabled={!item.listing_id}
+         testID={`booking-row-${item.id}`}
+       >
+         <View style={[styles.cardTop, { flexDirection: rowDir }]}>
+diff --git a/artifacts/banco-web/components/workspace/BookingsPanel.tsx b/artifacts/banco-web/components/workspace/BookingsPanel.tsx
+index fc17f6f..94b2906 100644
+--- a/artifacts/banco-web/components/workspace/BookingsPanel.tsx
++++ b/artifacts/banco-web/components/workspace/BookingsPanel.tsx
+@@ -71,7 +71,13 @@ function BookingCard({
+   onAction: (id: string, action: UpdateBookingBodyAction) => void;
+   pendingId: string | null;
+ }) {
+-  const listingHref = localizedPath(`/listing/${booking.listing_id}`, locale);
++  // A booking survives its listing detached (migration 0008), so listing_id is
++  // nullable. Interpolating null produced the href "/listing/null", which is a
++  // 404 dressed as a working button.
++  const listingHref =
++    booking.listing_id == null
++      ? null
++      : localizedPath(`/listing/${booking.listing_id}`, locale);
+   const busy = pendingId === booking.id;
+   const statusColor = BOOKING_STATUS_COLORS[booking.status] ?? BOOKING_STATUS_COLORS.requested;
+   const total = formatBookingMoney(booking.total_price, booking.currency);
+@@ -111,9 +117,11 @@ function BookingCard({
+ 
+       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.65rem", alignItems: "center" }}>
+         {total ? <strong>{total}</strong> : null}
+-        <Link href={listingHref} style={{ ...actionBtn, textDecoration: "none" }}>
+-          {copy.bookingsViewListing}
+-        </Link>
++        {listingHref ? (
++          <Link href={listingHref} style={{ ...actionBtn, textDecoration: "none" }}>
++            {copy.bookingsViewListing}
++          </Link>
++        ) : null}
+         {busy ? (
+           <span style={{ fontSize: "0.82rem", color: "var(--banco-muted)" }}>{copy.loading}</span>
+         ) : (
+diff --git a/artifacts/banco-website/components/workspace/BookingsPanel.tsx b/artifacts/banco-website/components/workspace/BookingsPanel.tsx
+index fc17f6f..94b2906 100644
+--- a/artifacts/banco-website/components/workspace/BookingsPanel.tsx
++++ b/artifacts/banco-website/components/workspace/BookingsPanel.tsx
+@@ -71,7 +71,13 @@ function BookingCard({
+   onAction: (id: string, action: UpdateBookingBodyAction) => void;
+   pendingId: string | null;
+ }) {
+-  const listingHref = localizedPath(`/listing/${booking.listing_id}`, locale);
++  // A booking survives its listing detached (migration 0008), so listing_id is
++  // nullable. Interpolating null produced the href "/listing/null", which is a
++  // 404 dressed as a working button.
++  const listingHref =
++    booking.listing_id == null
++      ? null
++      : localizedPath(`/listing/${booking.listing_id}`, locale);
+   const busy = pendingId === booking.id;
+   const statusColor = BOOKING_STATUS_COLORS[booking.status] ?? BOOKING_STATUS_COLORS.requested;
+   const total = formatBookingMoney(booking.total_price, booking.currency);
+@@ -111,9 +117,11 @@ function BookingCard({
+ 
+       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.65rem", alignItems: "center" }}>
+         {total ? <strong>{total}</strong> : null}
+-        <Link href={listingHref} style={{ ...actionBtn, textDecoration: "none" }}>
+-          {copy.bookingsViewListing}
+-        </Link>
++        {listingHref ? (
++          <Link href={listingHref} style={{ ...actionBtn, textDecoration: "none" }}>
++            {copy.bookingsViewListing}
++          </Link>
++        ) : null}
+         {busy ? (
+           <span style={{ fontSize: "0.82rem", color: "var(--banco-muted)" }}>{copy.loading}</span>
+         ) : (
+diff --git a/lib/api-client-react/src/generated/api.schemas.ts b/lib/api-client-react/src/generated/api.schemas.ts
+index 3eb84d3..5db6d3a 100644
+--- a/lib/api-client-react/src/generated/api.schemas.ts
++++ b/lib/api-client-react/src/generated/api.schemas.ts
+@@ -498,7 +498,7 @@ export const LeadStatus = {
+ 
+ export interface Lead {
+   id?: string;
+-  listing_id?: string;
++  listing_id?: string | null;
+   listing_title?: string;
+   action_type?: LeadActionType;
+   status?: LeadStatus;
+@@ -530,7 +530,7 @@ export const ConversationSummaryViewerRole = {
+ 
+ export interface ConversationSummary {
+   id: string;
+-  listing_id: string;
++  listing_id: string | null;
+   listing_title?: string | null;
+   listing_thumb?: string | null;
+   counterparty_id?: string;
+@@ -1330,7 +1330,7 @@ export const ReportStatus = {
+ 
+ export interface Report {
+   id?: string;
+-  listing_id?: string;
++  listing_id?: string | null;
+   listing_title?: string | null;
+   reason?: ReportReason;
+   details?: string | null;
+@@ -1789,7 +1789,7 @@ export interface AvailabilityRange {
+  */
+ export interface Booking {
+   id: string;
+-  listing_id: string;
++  listing_id: string | null;
+   check_in: string;
+   check_out: string;
+   nights: number;
+@@ -1815,7 +1815,7 @@ export interface CreateBookingBody {
+  */
+ export interface BookingListItem {
+   id: string;
+-  listing_id: string;
++  listing_id: string | null;
+   check_in: string;
+   check_out: string;
+   nights: number;
+diff --git a/lib/api-spec/openapi.yaml b/lib/api-spec/openapi.yaml
+index 82f182e..4488286 100644
+--- a/lib/api-spec/openapi.yaml
++++ b/lib/api-spec/openapi.yaml
+@@ -598,6 +598,7 @@ components:
+           type: string
+         listing_id:
+           type: string
++          nullable: true
+         listing_title:
+           type: string
+         action_type:
+@@ -623,6 +624,7 @@ components:
+           type: string
+         listing_id:
+           type: string
++          nullable: true
+         listing_title:
+           type: string
+           nullable: true
+@@ -1834,6 +1836,7 @@ components:
+           type: string
+         listing_id:
+           type: string
++          nullable: true
+         listing_title:
+           type: string
+           nullable: true
+@@ -2522,6 +2525,7 @@ components:
+           type: string
+         listing_id:
+           type: string
++          nullable: true
+         check_in:
+           type: string
+         check_out:
+@@ -2573,6 +2577,7 @@ components:
+           type: string
+         listing_id:
+           type: string
++          nullable: true
+         check_in:
+           type: string
+         check_out:
+diff --git a/lib/api-zod/src/generated/api.ts b/lib/api-zod/src/generated/api.ts
+index 9dd5447..b366cfb 100644
+--- a/lib/api-zod/src/generated/api.ts
++++ b/lib/api-zod/src/generated/api.ts
+@@ -785,7 +785,7 @@ export const CreateBookingBody = zod.object({
+ export const CreateBookingResponse = zod.object({
+   "data": zod.object({
+   "id": zod.string(),
+-  "listing_id": zod.string(),
++  "listing_id": zod.string().nullable(),
+   "check_in": zod.string(),
+   "check_out": zod.string(),
+   "nights": zod.number(),
+@@ -821,7 +821,7 @@ export const ListBookingsQueryParams = zod.object({
+ export const ListBookingsResponse = zod.object({
+   "data": zod.array(zod.object({
+   "id": zod.string(),
+-  "listing_id": zod.string(),
++  "listing_id": zod.string().nullable(),
+   "check_in": zod.string(),
+   "check_out": zod.string(),
+   "nights": zod.number(),
+@@ -862,7 +862,7 @@ export const UpdateBookingBody = zod.object({
+ export const UpdateBookingResponse = zod.object({
+   "data": zod.object({
+   "id": zod.string(),
+-  "listing_id": zod.string(),
++  "listing_id": zod.string().nullable(),
+   "check_in": zod.string(),
+   "check_out": zod.string(),
+   "nights": zod.number(),
+@@ -1604,7 +1604,7 @@ export const GetSavedListingsResponse = zod.object({
+ export const ListConversationsResponse = zod.object({
+   "data": zod.array(zod.object({
+   "id": zod.string(),
+-  "listing_id": zod.string(),
++  "listing_id": zod.string().nullable(),
+   "listing_title": zod.string().nullish(),
+   "listing_thumb": zod.string().nullish(),
+   "counterparty_id": zod.string().optional(),
+@@ -1637,7 +1637,7 @@ export const CreateConversationBody = zod.object({
+ export const CreateConversationResponse = zod.object({
+   "data": zod.object({
+   "id": zod.string(),
+-  "listing_id": zod.string(),
++  "listing_id": zod.string().nullable(),
+   "listing_title": zod.string().nullish(),
+   "listing_thumb": zod.string().nullish(),
+   "counterparty_id": zod.string().optional(),
+@@ -2595,7 +2595,7 @@ export const GetDealerLeadsQueryParams = zod.object({
+ export const GetDealerLeadsResponse = zod.object({
+   "data": zod.array(zod.object({
+   "id": zod.string().optional(),
+-  "listing_id": zod.string().optional(),
++  "listing_id": zod.string().nullish(),
+   "listing_title": zod.string().optional(),
+   "action_type": zod.enum(['whatsapp', 'call', 'chat', 'finance_request']).optional(),
+   "status": zod.enum(['new', 'contacted', 'closed']).optional(),
+@@ -2641,7 +2641,7 @@ export const CreateReportBody = zod.object({
+ export const CreateReportResponse = zod.object({
+   "data": zod.object({
+   "id": zod.string().optional(),
+-  "listing_id": zod.string().optional(),
++  "listing_id": zod.string().nullish(),
+   "listing_title": zod.string().nullish(),
+   "reason": zod.enum(['fake_price', 'wrong_data', 'scam', 'duplicate', 'other']).optional(),
+   "details": zod.string().nullish(),
+@@ -3608,7 +3608,7 @@ export const GetAdminLeadsQueryParams = zod.object({
+ export const GetAdminLeadsResponse = zod.object({
+   "data": zod.array(zod.object({
+   "id": zod.string().optional(),
+-  "listing_id": zod.string().optional(),
++  "listing_id": zod.string().nullish(),
+   "listing_title": zod.string().optional(),
+   "action_type": zod.enum(['whatsapp', 'call', 'chat', 'finance_request']).optional(),
+   "status": zod.enum(['new', 'contacted', 'closed']).optional(),
+@@ -4068,7 +4068,7 @@ export const GetAdminReportsQueryParams = zod.object({
+ export const GetAdminReportsResponse = zod.object({
+   "data": zod.array(zod.object({
+   "id": zod.string().optional(),
+-  "listing_id": zod.string().optional(),
++  "listing_id": zod.string().nullish(),
+   "listing_title": zod.string().nullish(),
+   "reason": zod.enum(['fake_price', 'wrong_data', 'scam', 'duplicate', 'other']).optional(),
+   "details": zod.string().nullish(),
+@@ -4105,7 +4105,7 @@ export const ResolveReportBody = zod.object({
+ export const ResolveReportResponse = zod.object({
+   "data": zod.object({
+   "id": zod.string().optional(),
+-  "listing_id": zod.string().optional(),
++  "listing_id": zod.string().nullish(),
+   "listing_title": zod.string().nullish(),
+   "reason": zod.enum(['fake_price', 'wrong_data', 'scam', 'duplicate', 'other']).optional(),
+   "details": zod.string().nullish(),
+diff --git a/scripts/chain-integrity-gate.mjs b/scripts/chain-integrity-gate.mjs
+index 2b0c401..5ea9a3e 100644
+--- a/scripts/chain-integrity-gate.mjs
++++ b/scripts/chain-integrity-gate.mjs
+@@ -2222,6 +2222,48 @@ const CHECKS = [
+     },
+     why: "The root build must serialize workspaces because repeated parallel runs reproduce Next export ENOTEMPTY while isolated and sequential builds pass",
+   },
++  {
++    id: "P-listing-delete-detaches-evidence",
++    file: "lib/db/src/schema/index.ts",
++    test: (s) => {
++      // Comments are stripped first: this asserts a code shape, and a sentence
++      // describing the shape must not be able to satisfy it.
++      const code = s
++        .replace(/\/\*[\s\S]*?\*\//g, "")
++        .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
++      // conversations, bookings, reports and lead_history are the seller's and
++      // the buyer's record that a listing existed. Deleting the listing must
++      // detach them, never destroy them (Gate 4). listing_media stays CASCADE
++      // on purpose — the contract requires those rows gone.
++      const tables = ["leadHistory", "conversations", "reports", "bookings"];
++      return tables.every((table) => {
++        const start = code.indexOf(`export const ${table} = pgTable(`);
++        if (start < 0) return false;
++        const next = code.indexOf("\nexport const ", start + 1);
++        const block = code.slice(start, next < 0 ? code.length : next);
++        const at = block.indexOf('listingId: uuid("listing_id")');
++        if (at < 0) return false;
++        // The declaration ends at the next column, which starts on its own line.
++        const decl = block.slice(at, block.indexOf("\n    ", at + 40));
++        return /onDelete:\s*"set null"/.test(decl) && !/\.notNull\(\)/.test(decl);
++      });
++    },
++    why: "Deleting a listing must detach its conversations, bookings, reports and leads (ON DELETE SET NULL, nullable) rather than erase the evidence that it existed",
++  },
++  {
++    id: "P-migration-0008-detach-listing-evidence-registered",
++    file: "lib/db/migrations/meta/_journal.json",
++    test: (s) => {
++      const journal = JSON.parse(s);
++      const entry = (journal.entries ?? []).find(
++        (e) => e.tag === "0008_detach_listing_evidence",
++      );
++      // Registered AND in its committed position: renumbering it would replay
++      // the cascade drop on a database that already ran it under another index.
++      return Boolean(entry) && entry.idx === 8;
++    },
++    why: "The migration that converts the four listing foreign keys to ON DELETE SET NULL must stay registered at idx 8; unregistering it silently restores the cascade on every fresh deploy",
++  },
+   {
+     id: "P-next-build-export-cleanup-aws-docker",
+     file: "deploy/aws/Dockerfile.banco-web",
+@@ -2238,11 +2280,11 @@ const CHECKS = [
+ function main() {
+   console.log("BANCO chain-integrity-gate (source markers only)\n");
+   // The summary below prints `${CHECKS.length - failed}/${CHECKS.length}`, so the
+-  // denominator is its own source: deleting an assertion turns 245/245 into
+-  // 244/244 and still reads "passed" with exit 0. Declaring the expected size
++  // denominator is its own source: deleting an assertion turns 247/247 into
++  // 246/246 and still reads "passed" with exit 0. Declaring the expected size
+   // makes removing a protection a deliberate two-line change instead of a silent
+   // one. Raise this number in the same commit that adds an assertion.
+-  const EXPECTED_CHECKS = 245;
++  const EXPECTED_CHECKS = 247;
+   if (CHECKS.length !== EXPECTED_CHECKS) {
+     console.error(
+       `[FAIL] chain gate declares ${EXPECTED_CHECKS} checks but has ${CHECKS.length}. ` +
+-- 
+2.43.0
+

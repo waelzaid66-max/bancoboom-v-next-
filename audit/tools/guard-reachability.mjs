@@ -56,10 +56,29 @@ const files = git(`ls-tree -r --name-only ${ref}`).split("\n")
 
 const named = new Set();          // basenames explicitly named by some command
 const globbing = [];              // [dir, kind] for vitest/jest style runners
+const nodeTestGlobs = [];         // [dir, RegExp] for `node --test <glob>` runners
 for (const [dir, cmd] of commands) {
   for (const m of cmd.matchAll(/[\w./-]+\.(?:test|spec)\.\w+/g)) named.add(m[0].split("/").pop());
   if (/\bvitest\b/.test(cmd)) globbing.push([dir, "vitest"]);
   if (/\bjest\b/.test(cmd)) globbing.push([dir, "jest"]);
+  // `node --import tsx --test tests/*.test.mjs` is a real runner and reaches
+  // real files. Before 2026-08-23 this census only understood vitest and jest,
+  // so it reported seven live test files as UNREACHABLE — a wrong denominator
+  // in the very tool built to find wrong denominators (Correction #43).
+  for (const m of cmd.matchAll(/\bnode\b[^&|]*?--test\s+([^&|]*)/g)) {
+    for (const token of m[1].trim().split(/\s+/)) {
+      if (!token || token.startsWith("-")) continue;
+      const rx = new RegExp(
+        "^" +
+          token
+            .split("*")
+            .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+            .join("[^/]*") +
+          "$",
+      );
+      nodeTestGlobs.push([dir, rx]);
+    }
+  }
 }
 
 const reachable = (f) => {
@@ -68,6 +87,11 @@ const reachable = (f) => {
     if (!f.startsWith(dir ? dir + "/" : "")) continue;
     if (kind === "vitest" && /\.test\.(ts|tsx|mts)$/.test(f) && f.startsWith(`${dir}/src/`)) return true;
     if (kind === "jest" && /\/tests\/render\//.test(f)) return true;
+  }
+  for (const [dir, rx] of nodeTestGlobs) {
+    const prefix = dir ? dir + "/" : "";
+    if (!f.startsWith(prefix)) continue;
+    if (rx.test(f.slice(prefix.length))) return true;
   }
   return false;
 };
