@@ -28,6 +28,24 @@ log()  { echo "▶ $*"; }
 ok()   { echo "✅ $*"; }
 warn() { echo "⚠  $*"; }
 
+# ── Guard: nginx runtime ──────────────────────────────────────────────────────
+# Replit provides nginx through Nix. Resolve the executable first, then derive
+# mime.types from that exact installation instead of assuming a system /etc path.
+NGINX_BIN="${NGINX_BIN:-$(command -v nginx || true)}"
+if [ -z "$NGINX_BIN" ]; then
+  echo "REPLIT_ROUTER_INVALID: nginx executable not found" >&2
+  exit 1
+fi
+NGINX_BIN="$(readlink -f "$NGINX_BIN")"
+NGINX_INSTALL_PREFIX="$(dirname "$(dirname "$NGINX_BIN")")"
+NGINX_MIME_TYPES="${NGINX_MIME_TYPES:-$NGINX_INSTALL_PREFIX/conf/mime.types}"
+if [ ! -f "$NGINX_MIME_TYPES" ]; then
+  echo "REPLIT_ROUTER_INVALID: nginx MIME types file not found: $NGINX_MIME_TYPES" >&2
+  exit 1
+fi
+NGINX_RUNTIME_PREFIX="${NGINX_RUNTIME_PREFIX:-/tmp/banco-nginx}"
+mkdir -p "$NGINX_RUNTIME_PREFIX"
+
 # ── Guard: DATABASE_URL ───────────────────────────────────────────────────────
 if [ -z "${DATABASE_URL:-}" ]; then
   warn "DATABASE_URL not set — api-server will refuse to start"
@@ -97,7 +115,7 @@ events { worker_connections 1024; }
 
 http {
   access_log  /tmp/nginx-access.log;
-  include     /etc/nginx/mime.types;
+  include     $NGINX_MIME_TYPES;
   default_type application/octet-stream;
   sendfile    on;
   tcp_nopush  on;
@@ -264,7 +282,7 @@ sleep 4
 # ── 7. Signal handling ───────────────────────────────────────────────────────
 cleanup() {
   echo "Shutting down all services..."
-  nginx -c "$NGINX_CONF" -s stop 2>/dev/null || true
+  "$NGINX_BIN" -p "$NGINX_RUNTIME_PREFIX" -c "$NGINX_CONF" -s stop 2>/dev/null || true
   kill "$API_PID" "$WEB_PID" "$MOBILE_PID" 2>/dev/null || true
   exit 0
 }
@@ -278,7 +296,7 @@ log "  /admin/       → admin-os SPA"
 log "  /api/         → api-server :8080"
 log "  /banco-mobile/ → mobile (Expo web / QR) :3000"
 
-nginx -c "$NGINX_CONF" -g "daemon off;"
+"$NGINX_BIN" -p "$NGINX_RUNTIME_PREFIX" -c "$NGINX_CONF" -g "daemon off;"
 
 # nginx exited — tear down everything
 warn "nginx exited unexpectedly"
