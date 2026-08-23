@@ -185,12 +185,14 @@ test("after_identity fault is placed after exact DB identity verification and be
   );
   const verifyIndex = source.indexOf("const connectedDatabase = provisioned.verify();");
   const identityErrorIndex = source.indexOf("Disposable database identity verification failed");
+  const childLogIndex = source.indexOf("API integration test database: ${childDatabase}");
   const faultIndex = source.indexOf("if (faultInjection === FAULT_AFTER_IDENTITY)");
   const extensionsIndex = source.indexOf("provisioned.enableExtensions();");
 
   assert.ok(verifyIndex >= 0, "identity verification call must exist");
   assert.ok(identityErrorIndex > verifyIndex, "exact identity mismatch guard must follow verification");
-  assert.ok(faultIndex > identityErrorIndex, "fault must fire only after exact identity verification");
+  assert.ok(childLogIndex > identityErrorIndex, "sanitized child identity must be observable after verification");
+  assert.ok(faultIndex > childLogIndex, "fault must fire only after the verified child identity is observable");
   assert.ok(extensionsIndex > faultIndex, "fault must fire before extension/migration/seed/API work");
 
   const faultBlock = source.slice(faultIndex, extensionsIndex);

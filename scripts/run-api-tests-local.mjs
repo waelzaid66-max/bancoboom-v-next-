@@ -387,13 +387,14 @@ export function main(env = process.env) {
       );
     }
 
+    console.log(`\nAPI integration test database: ${childDatabase}`);
+    console.log(`Isolation: ${provisioned.className}`);
+
     if (faultInjection === FAULT_AFTER_IDENTITY) {
       throw new Error("Injected API test DB failure after identity verification.");
     }
 
     provisioned.enableExtensions();
-    console.log(`\nAPI integration test database: ${childDatabase}`);
-    console.log(`Isolation: ${provisioned.className}`);
 
     const testEnv = {
       ...env,
