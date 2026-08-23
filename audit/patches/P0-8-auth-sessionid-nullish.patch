@@ -1,0 +1,94 @@
+diff --git a/artifacts/admin-os/src/App.tsx b/artifacts/admin-os/src/App.tsx
+index 35c1bf9..d31b93c 100644
+--- a/artifacts/admin-os/src/App.tsx
++++ b/artifacts/admin-os/src/App.tsx
+@@ -120,11 +120,11 @@ function ClerkQueryClientCacheInvalidator() {
+ function AuthFailureBridge() {
+   const { sessionId, signOut } = useAuth();
+   useEffect(() => {
+-    setAuthFailureHandler(sessionId, ({ code }) => {
++    setAuthFailureHandler(sessionId ?? null, ({ code }) => {
+       if (code !== "ACCOUNT_DELETED") return;
+       return signOut();
+     });
+-    return () => setAuthFailureHandler(sessionId, null);
++    return () => setAuthFailureHandler(sessionId ?? null, null);
+   }, [sessionId, signOut]);
+   return null;
+ }
+diff --git a/artifacts/banco-mobile/app/_layout.tsx b/artifacts/banco-mobile/app/_layout.tsx
+index 932f7a5..d4f5829 100644
+--- a/artifacts/banco-mobile/app/_layout.tsx
++++ b/artifacts/banco-mobile/app/_layout.tsx
+@@ -126,7 +126,7 @@ function AuthTokenBridge() {
+     // Soft-deleted accounts reject with 401 ACCOUNT_DELETED while Clerk JWT
+     // may still exist — unregister push while auth may still work, then clear
+     // the local session so the user is not stuck (NOTIF-03).
+-    setAuthFailureHandler(sessionId, ({ code }) => {
++    setAuthFailureHandler(sessionId ?? null, ({ code }) => {
+       if (code !== "ACCOUNT_DELETED") return;
+       return (async () => {
+         try {
+@@ -147,7 +147,7 @@ function AuthTokenBridge() {
+         await signOut();
+       })();
+     });
+-    return () => setAuthFailureHandler(sessionId, null);
++    return () => setAuthFailureHandler(sessionId ?? null, null);
+   }, [prepareForSignOut, sessionId, signOut]);
+ 
+   return null;
+diff --git a/artifacts/banco-web/components/ClerkAppProvider.tsx b/artifacts/banco-web/components/ClerkAppProvider.tsx
+index 692e053..89ccbd5 100644
+--- a/artifacts/banco-web/components/ClerkAppProvider.tsx
++++ b/artifacts/banco-web/components/ClerkAppProvider.tsx
+@@ -60,11 +60,11 @@ function AuthTokenBridgeInner() {
+     // Soft-deleted accounts reject with 401 ACCOUNT_DELETED while Clerk JWT
+     // may still exist — clear the local session once so the user is not stuck.
+     // Mirrors artifacts/banco-mobile/app/_layout.tsx AuthTokenBridge.
+-    setAuthFailureHandler(sessionId, ({ code }) => {
++    setAuthFailureHandler(sessionId ?? null, ({ code }) => {
+       if (code !== "ACCOUNT_DELETED") return;
+       return signOut();
+     });
+-    return () => setAuthFailureHandler(sessionId, null);
++    return () => setAuthFailureHandler(sessionId ?? null, null);
+   }, [sessionId, signOut]);
+ 
+   return null;
+diff --git a/artifacts/banco-website/components/ClerkAppProvider.tsx b/artifacts/banco-website/components/ClerkAppProvider.tsx
+index ab297b3..e52c1ae 100644
+--- a/artifacts/banco-website/components/ClerkAppProvider.tsx
++++ b/artifacts/banco-website/components/ClerkAppProvider.tsx
+@@ -60,11 +60,11 @@ function AuthTokenBridgeInner() {
+     // Soft-deleted accounts reject with 401 ACCOUNT_DELETED while Clerk JWT
+     // may still exist — clear the local session once so the user is not stuck.
+     // Mirrors artifacts/banco-mobile/app/_layout.tsx AuthTokenBridge.
+-    setAuthFailureHandler(sessionId, ({ code }) => {
++    setAuthFailureHandler(sessionId ?? null, ({ code }) => {
+       if (code !== "ACCOUNT_DELETED") return;
+       return signOut();
+     });
+-    return () => setAuthFailureHandler(sessionId, null);
++    return () => setAuthFailureHandler(sessionId ?? null, null);
+   }, [sessionId, signOut]);
+ 
+   return null;
+diff --git a/artifacts/dealer-os/src/App.tsx b/artifacts/dealer-os/src/App.tsx
+index 4e4c29c..d51445f 100644
+--- a/artifacts/dealer-os/src/App.tsx
++++ b/artifacts/dealer-os/src/App.tsx
+@@ -116,11 +116,11 @@ function ClerkQueryClientCacheInvalidator() {
+ function AuthFailureBridge() {
+   const { sessionId, signOut } = useAuth();
+   useEffect(() => {
+-    setAuthFailureHandler(sessionId, ({ code }) => {
++    setAuthFailureHandler(sessionId ?? null, ({ code }) => {
+       if (code !== "ACCOUNT_DELETED") return;
+       return signOut();
+     });
+-    return () => setAuthFailureHandler(sessionId, null);
++    return () => setAuthFailureHandler(sessionId ?? null, null);
+   }, [sessionId, signOut]);
+   return null;
+ }

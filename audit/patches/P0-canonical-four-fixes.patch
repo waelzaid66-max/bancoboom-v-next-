@@ -1,0 +1,115 @@
+From 9b03e10340ac898ace8b934585523480aa13e7ef Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 23 Aug 2026 11:47:49 +0000
+Subject: [PATCH] proof: four specified P0 fixes, applied for verification only
+
+- lib/db/src/migrate.ts: CREATE EXTENSION pg_trgm before migrate()
+- ListingService: price_cash = Number(base_price_cash) instead of a typeof guard
+- chain-integrity-gate: EXPECTED_CHECKS = 245 declared and enforced
+- root package.json + ci.yml: recursive workspace test
+
+Not a merge candidate. Each change exists to produce a measurement.
+---
+ .github/workflows/ci.yml                           |  6 ++++++
+ .../api-server/src/services/ListingService.ts      |  7 ++++++-
+ lib/db/src/migrate.ts                              |  9 +++++++++
+ package.json                                       |  1 +
+ scripts/chain-integrity-gate.mjs                   | 14 ++++++++++++++
+ 5 files changed, 36 insertions(+), 1 deletion(-)
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 2e5b0cb..5424529 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -141,6 +141,12 @@ jobs:
+       - name: Demo seed production guard (static)
+         run: pnpm --filter @workspace/api-server run test:seed-guard
+ 
++      # Recursive workspace tests. build and typecheck are recursive; test was not,
++      # so any guard outside api-server and banco-mobile could never execute no
++      # matter how correctly it was wired.
++      - name: Workspace tests (recursive)
++        run: pnpm run test
++
+   # The mobile pack above reads source files as TEXT and matches patterns; not
+   # one of its tests imports a renderer. That means a screen can fail to bundle
+   # — a bad import, a missing module, a syntax error past the regex — and every
+diff --git a/artifacts/api-server/src/services/ListingService.ts b/artifacts/api-server/src/services/ListingService.ts
+index dc47a3b..b803a4f 100644
+--- a/artifacts/api-server/src/services/ListingService.ts
++++ b/artifacts/api-server/src/services/ListingService.ts
+@@ -758,8 +758,13 @@ export async function getListingDetail(listingId: string, viewerClerkId?: string
+     // Additive: the raw numeric cash price. For furnished/daily rentals it is the
+     // per-night rate the booking widget multiplies by the night count for a
+     // pre-booking estimate (the server stays authoritative on the real total).
++    //
++    // The driver returns numeric/decimal as a STRING — formatEGP above takes it
++    // as one. A `typeof === "number"` guard therefore made this field null on
++    // every response since the initial import, which forced clients to parse
++    // price_display and divide M-band prices by a million on edit.
+     price_cash:
+-      typeof listing.base_price_cash === "number" ? listing.base_price_cash : null,
++      listing.base_price_cash == null ? null : Number(listing.base_price_cash),
+     location: listing.location,
+     status: listing.status,
+     created_at: listing.created_at?.toISOString() ?? new Date().toISOString(),
+diff --git a/lib/db/src/migrate.ts b/lib/db/src/migrate.ts
+index 01ed90b..701ab02 100644
+--- a/lib/db/src/migrate.ts
++++ b/lib/db/src/migrate.ts
+@@ -51,6 +51,15 @@ async function main(): Promise<void> {
+   try {
+     const db = drizzle(client);
+     const startedAt = Date.now();
++
++    // pg_trgm must exist before 0000 creates its gin_trgm_ops indexes. Without
++    // it a fresh database fails with 42704 (ResolveOpClass) and rolls back to
++    // zero tables. This cannot be a forward migration: the journal runs 0000
++    // first and 0000 is what fails. It cannot be an edit to 0000 either, because
++    // baseline.ts hashes applied migrations. Idempotent, so it is safe on every
++    // deploy including one that changed nothing.
++    await client.query("CREATE EXTENSION IF NOT EXISTS pg_trgm;");
++
+     console.log(`[migrate] applying migrations from ${MIGRATIONS_FOLDER}`);
+ 
+     // Drizzle records applied migrations in drizzle.__drizzle_migrations and
+diff --git a/package.json b/package.json
+index 17cc291..46b14e8 100644
+--- a/package.json
++++ b/package.json
+@@ -9,6 +9,7 @@
+     "build": "pnpm run typecheck && pnpm -r --workspace-concurrency=1 --if-present run build",
+     "typecheck:libs": "tsc --build",
+     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
++    "test": "pnpm -r --if-present run test",
+     "typecheck:website": "pnpm --filter @workspace/design-tokens run typecheck && pnpm --filter @workspace/search-contract run typecheck && pnpm --filter @workspace/landing run typecheck && pnpm --filter @workspace/banco-web run typecheck && pnpm --filter @workspace/banco-website run typecheck",
+     "lint": "eslint scripts --max-warnings 0",
+     "lint:website": "eslint artifacts/banco-web artifacts/banco-website artifacts/landing --max-warnings 0",
+diff --git a/scripts/chain-integrity-gate.mjs b/scripts/chain-integrity-gate.mjs
+index 58d772b..2b0c401 100644
+--- a/scripts/chain-integrity-gate.mjs
++++ b/scripts/chain-integrity-gate.mjs
+@@ -2237,6 +2237,20 @@ const CHECKS = [
+ 
+ function main() {
+   console.log("BANCO chain-integrity-gate (source markers only)\n");
++  // The summary below prints `${CHECKS.length - failed}/${CHECKS.length}`, so the
++  // denominator is its own source: deleting an assertion turns 245/245 into
++  // 244/244 and still reads "passed" with exit 0. Declaring the expected size
++  // makes removing a protection a deliberate two-line change instead of a silent
++  // one. Raise this number in the same commit that adds an assertion.
++  const EXPECTED_CHECKS = 245;
++  if (CHECKS.length !== EXPECTED_CHECKS) {
++    console.error(
++      `[FAIL] chain gate declares ${EXPECTED_CHECKS} checks but has ${CHECKS.length}. ` +
++        `Adding or removing an assertion must update EXPECTED_CHECKS in the same commit.`,
++    );
++    process.exit(1);
++  }
++
+   const failed = [];
+   for (const c of CHECKS) {
+     const full = path.join(ROOT, c.file);
+-- 
+2.43.0
+
