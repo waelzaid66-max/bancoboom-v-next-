@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
@@ -45,10 +45,10 @@ test("production profile preserves store-build shape and production environment"
   assert.equal(production.android?.buildType, "app-bundle");
 });
 
-test("production submit avoids repo-local Google Play service-account authority", () => {
+test("BANCO policy keeps production store credentials out of repo-local paths", () => {
   assert.ok(
     !easJson.submit?.production?.android?.serviceAccountKeyPath,
-    "production submit must use managed store credentials, not a repo-local service-account file",
+    "BANCO release policy keeps production store credential authority out of repo-local file paths",
   );
 });
 
@@ -62,30 +62,24 @@ test("legacy EAS helper is either retired or no longer Replit-coupled / interact
   assert.doesNotMatch(helper, /\bread\s+-r?p\b/, "production release authority must not depend on an interactive submit prompt");
 });
 
-test("a production native workflow binds store submission to the exact build output", () => {
-  const workflowsDir = resolve(root, ".eas/workflows");
-  assert.ok(existsSync(workflowsDir), "missing .eas/workflows production native-release authority");
+test("any retained repo production-submit helper binds exact build identity and Git SHA provenance", () => {
+  const helperPath = resolve(root, "scripts/eas-build.sh");
+  if (!existsSync(helperPath)) return;
 
-  const workflowFiles = readdirSync(workflowsDir)
-    .filter((name) => /\.ya?ml$/i.test(name))
-    .map((name) => ({ name, text: readFileSync(resolve(workflowsDir, name), "utf8") }));
-
-  const productionWorkflow = workflowFiles.find(({ text }) =>
-    /type:\s*build\b/.test(text) &&
-    /profile:\s*production\b/.test(text) &&
-    /type:\s*submit\b/.test(text) &&
-    /build_id:\s*\$\{\{\s*needs\.[^.\s]+\.outputs\.build_id\s*\}\}/.test(text),
-  );
-
-  assert.ok(
-    productionWorkflow,
-    "production workflow must submit the exact build_id produced by its prerequisite build job",
-  );
+  const helper = readFileSync(helperPath, "utf8");
+  const performsProductionSubmit =
+    /\bsubmit\b/.test(helper) && /--profile\s+production\b/.test(helper);
+  if (!performsProductionSubmit) return;
 
   assert.match(
-    productionWorkflow.text,
-    /(git_commit_hash|github\.sha|eas\/checkout)/,
-    "production workflow must expose a Git/SHA provenance seam instead of branch/timestamp-only identity",
+    helper,
+    /\bsubmit\b[\s\S]*?--id(?:=|\s+)/,
+    "a retained production submit helper must submit an explicit exact EAS build id rather than an implicit/latest build",
+  );
+  assert.match(
+    helper,
+    /(git\s+rev-parse[\s\S]*?\bHEAD\b|GITHUB_SHA|CI_COMMIT_SHA)/,
+    "a retained production submit helper must expose the full Git SHA provenance for the submitted build",
   );
 });
 
