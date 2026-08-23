@@ -120,11 +120,11 @@ function ClerkQueryClientCacheInvalidator() {
 function AuthFailureBridge() {
   const { sessionId, signOut } = useAuth();
   useEffect(() => {
-    setAuthFailureHandler(sessionId, ({ code }) => {
+    setAuthFailureHandler(sessionId ?? null, ({ code }) => {
       if (code !== "ACCOUNT_DELETED") return;
       return signOut();
     });
-    return () => setAuthFailureHandler(sessionId, null);
+    return () => setAuthFailureHandler(sessionId ?? null, null);
   }, [sessionId, signOut]);
   return null;
 }

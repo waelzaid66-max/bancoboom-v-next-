@@ -126,7 +126,7 @@ function AuthTokenBridge() {
     // Soft-deleted accounts reject with 401 ACCOUNT_DELETED while Clerk JWT
     // may still exist — unregister push while auth may still work, then clear
     // the local session so the user is not stuck (NOTIF-03).
-    setAuthFailureHandler(sessionId, ({ code }) => {
+    setAuthFailureHandler(sessionId ?? null, ({ code }) => {
       if (code !== "ACCOUNT_DELETED") return;
       return (async () => {
         try {
@@ -147,7 +147,7 @@ function AuthTokenBridge() {
         await signOut();
       })();
     });
-    return () => setAuthFailureHandler(sessionId, null);
+    return () => setAuthFailureHandler(sessionId ?? null, null);
   }, [prepareForSignOut, sessionId, signOut]);
 
   return null;
