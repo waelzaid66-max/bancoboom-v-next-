@@ -273,6 +273,64 @@ test("old-session Promise settlement cannot mutate a newer session generation", 
   assert.equal(newCalls, 2, "session B rejection must re-arm session B only");
 });
 
+test("late old-session rejection cannot re-arm or mutate the current session", async () => {
+  const oldFlight = deferred();
+  const newFlight = deferred();
+  let oldCalls = 0;
+  let newCalls = 0;
+
+  setAuthFailureHandler(SESSION_A, () => {
+    oldCalls += 1;
+    return oldFlight.promise;
+  });
+  await assert.rejects(tombstoneCall(), ApiError);
+  assert.equal(oldCalls, 1);
+
+  setAuthFailureHandler(SESSION_B, () => {
+    newCalls += 1;
+    return newFlight.promise;
+  });
+  await assert.rejects(tombstoneCall(), ApiError);
+  assert.equal(newCalls, 1);
+
+  oldFlight.reject(new Error("late session A teardown failure"));
+  await assert.rejects(oldFlight.promise);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  await assert.rejects(tombstoneCall(), ApiError);
+  assert.equal(newCalls, 1, "late Session-A rejection must not clear or re-arm Session B");
+
+  newFlight.resolve();
+  await newFlight.promise;
+  await Promise.resolve();
+  await Promise.resolve();
+  await assert.rejects(tombstoneCall(), ApiError);
+  assert.equal(newCalls, 1, "Session B must remain completed after Session A rejects late");
+});
+
+test("stale old-session cleanup cannot clear the current session registration", async () => {
+  let sessionACalls = 0;
+  let sessionBCalls = 0;
+
+  setAuthFailureHandler(SESSION_A, () => {
+    sessionACalls += 1;
+  });
+  setAuthFailureHandler(SESSION_B, () => {
+    sessionBCalls += 1;
+  });
+
+  setAuthFailureHandler(SESSION_A, null);
+
+  await assert.rejects(tombstoneCall(), ApiError);
+  await Promise.resolve();
+  await Promise.resolve();
+  await assert.rejects(tombstoneCall(), ApiError);
+
+  assert.equal(sessionACalls, 0, "stale Session-A cleanup must not reactivate Session A");
+  assert.equal(sessionBCalls, 1, "stale Session-A cleanup must leave Session B registered exactly once");
+});
+
 test("non-tombstone responses never invoke the auth failure handler", async () => {
   let calls = 0;
   setAuthFailureHandler(SESSION_A, () => {
