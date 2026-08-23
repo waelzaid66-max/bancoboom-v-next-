@@ -855,6 +855,7 @@ export function MessageOutboxProvider({ children }: { children: React.ReactNode 
   }, [clearTimer]);
 
   const resumeAfterAccountDeletionFailure = useCallback(() => {
+    if (purgingRef.current) return;
     purgingRef.current = false;
     suspendedRef.current = false;
     scheduleDrain();
