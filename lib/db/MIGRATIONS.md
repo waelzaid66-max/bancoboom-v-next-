@@ -88,6 +88,12 @@ DATABASE_URL=... pnpm --filter @workspace/db run migrate
 
 ### Existing historical pre-journal database
 
+There are exactly two cases, and they are handled differently. A fresh empty
+database runs every migration through `migrate` and is never baselined. An
+existing pre-journal database — one built by `drizzle-kit push`, whose objects
+exist without `drizzle.__drizzle_migrations` rows — is the only kind that may
+be baselined, and only after the proof below.
+
 The real-database cutover from schema push to committed migrations occurred at
 commit:
 
@@ -151,6 +157,12 @@ DATABASE_URL='postgresql://...' pnpm --filter @workspace/db run migrate
 
 A second baseline invocation is an error. A database with any Drizzle schema is
 not automatically repaired by baseline; inspect and reconcile it explicitly.
+Before baselining an existing pre-journal database you must independently
+prove that its live schema is equivalent to the schema the historical
+migrations produce. `baseline` does this by executing the prefix into a
+reference schema and comparing; an operator who cannot reproduce that result
+independently must not proceed.
+
 If executable equivalence cannot be proven, stop. Never baseline or use schema
 push merely to bypass a migration error.
 
