@@ -48,7 +48,8 @@
     "test:android-release-compliance": "node --test tests/android-release-compliance-guard.test.mjs",
     "test:recent-search-chrome": "node --test tests/recent-search-chrome-guard.test.mjs",
     "test:discover-portals": "node --test tests/discover-portal-polish-guard.test.mjs",
-    "test:car-dock-zero-loss": "node --test tests/car-dock-zero-loss-guard.test.mjs"
+    "test:car-dock-zero-loss": "node --test tests/car-dock-zero-loss-guard.test.mjs",
+    "test:red:profile-role": "node --test tests/profile-visible-role-authority-guard.test.mjs"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

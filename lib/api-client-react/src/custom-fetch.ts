@@ -65,9 +65,16 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
  * the module-level registration when no Clerk session exists.
  */
 export function setAuthFailureHandler(
-  sessionId: string | null,
+  // Clerk's useAuth() types sessionId as `string | null | undefined`, and every
+  // one of the five consumers passes it straight through — which is what
+  // tests/auth-failure-consumers.test.mjs asserts, character for character.
+  // Narrowing at the five call sites (`sessionId ?? null`) type-checks and
+  // breaks that guard; widening here fixes the same error once, at the source,
+  // and leaves the call sites exactly as written. Measured 2026-08-23.
+  sessionIdInput: string | null | undefined,
   handler: AuthFailureHandler | null,
 ): void {
+  const sessionId = sessionIdInput ?? null;
   if (sessionId === null && handler === null) {
     _authFailureGeneration += 1;
     _authFailureSessionId = null;

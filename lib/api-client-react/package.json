@@ -7,7 +7,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test:account-deleted-auth": "node --experimental-strip-types --test tests/custom-fetch.account-deleted.test.ts tests/auth-failure-consumers.test.mjs"
+    "test:account-deleted-auth": "node --experimental-strip-types --test tests/custom-fetch.account-deleted.test.ts tests/auth-failure-consumers.test.mjs",
+    "test": "pnpm run test:account-deleted-auth"
   },
   "dependencies": {
     "@tanstack/react-query": "catalog:"
