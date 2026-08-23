@@ -1,0 +1,1465 @@
+From 75a14e05f15f620cbc5370661ef7e7021713fb50 Mon Sep 17 00:00:00 2001
+From: BANCO audit <waelzaid66@gmail.com>
+Date: Sun, 23 Aug 2026 17:47:38 +0000
+Subject: [PATCH] proof: P0-4 the web seller workspace can create a listing
+ again
+
+For verification only, on the audit proof branch.
+
+Measured: with every rendered field filled, the API rejected all three
+categories. The form renders no field for condition (car), offer_type or
+rental_term (real estate) or capacity (industrial), and buildSpecsObject
+iterates only over rendered fields, so no value for those keys could ever
+be sent. 0 of 3 categories were creatable, in every context.
+
+The required-attribute contract lived in three places kept in step by a
+comment in validateAttributes. It is now one shared module,
+@workspace/taxonomy/listings: requiredSpecKeys mirrors the server floor,
+and the web form derives both its field list and its required marks from
+it. The real-estate rules are context-aware in both directions, as the
+API is: rent adds rental_term, land and bare commercial units drop rooms
+and finishing.
+
+Two executable controls replace the comment, each proven to fail without
+the fix:
+  api-server ListingService.requiredSpecKeys.test.ts compares the shared
+  contract to validateAttributes by mutation - fill, drop one key, see
+  whether the verdict flips.
+  banco-web/banco-website tests/workspace-listing-form.test.mjs asserts
+  every gating key has a field a seller can fill, in all six contexts.
+  13 of its 32 assertions fail on the pre-fix form.
+
+The static parity audit passed throughout, because substring checks
+cannot see a payload. It audited 18 paths on banco-web and none on
+banco-website, which ships the same workspace from byte-identical files.
+It now runs every check on both surfaces, compares the twin files by
+hash, and declares its own size: 18 checks to 40.
+
+API suite 518 passed / 3 skipped / 0 failed via the official runner on a
+database created for the run. banco-web and banco-website 32/32 each.
+Chain gate 245/245, confidence 24/24, parity 40/40. Every project
+typechecks clean; api-server still carries the 11 known P0-5 listingId
+errors and no others.
+---
+ .../ListingService.requiredSpecKeys.test.ts   |  98 +++++++
+ .../workspace/ListingCreateForm.tsx           |  26 +-
+ .../banco-web/lib/workspace-listing-form.ts   |  83 +++++-
+ artifacts/banco-web/lib/workspace-ui-copy.ts  |  15 ++
+ artifacts/banco-web/package.json              |   4 +-
+ .../tests/workspace-listing-form.test.mjs     | 128 +++++++++
+ .../workspace/ListingCreateForm.tsx           |  26 +-
+ .../lib/workspace-listing-form.ts             |  83 +++++-
+ .../banco-website/lib/workspace-ui-copy.ts    |  15 ++
+ artifacts/banco-website/package.json          |   4 +-
+ .../tests/workspace-listing-form.test.mjs     | 128 +++++++++
+ lib/taxonomy/package.json                     |   3 +-
+ lib/taxonomy/src/index.ts                     |   1 +
+ lib/taxonomy/src/listings.ts                  | 121 +++++++++
+ pnpm-lock.yaml                                |   9 +
+ .../website-seller-workspace-parity-audit.mjs | 255 ++++++++++++------
+ 16 files changed, 895 insertions(+), 104 deletions(-)
+ create mode 100644 artifacts/api-server/src/services/ListingService.requiredSpecKeys.test.ts
+ create mode 100644 artifacts/banco-web/tests/workspace-listing-form.test.mjs
+ create mode 100644 artifacts/banco-website/tests/workspace-listing-form.test.mjs
+ create mode 100644 lib/taxonomy/src/listings.ts
+
+diff --git a/artifacts/api-server/src/services/ListingService.requiredSpecKeys.test.ts b/artifacts/api-server/src/services/ListingService.requiredSpecKeys.test.ts
+new file mode 100644
+index 0000000..561f0d3
+--- /dev/null
++++ b/artifacts/api-server/src/services/ListingService.requiredSpecKeys.test.ts
+@@ -0,0 +1,98 @@
++import { describe, it, expect } from "vitest";
++import { validateAttributes } from "./ListingService";
++import { requiredSpecKeys } from "@workspace/taxonomy";
++
++/**
++ * THE BRIDGE BETWEEN THE SERVER FLOOR AND EVERY CLIENT.
++ *
++ * `validateAttributes` decides which listings the API rejects. Its source
++ * carries the comment "KEEP IN SYNC with mobile requiredSpecKeysFor". A comment
++ * is not a control, and it was not being honoured: measured 2026-08-23, the web
++ * seller workspace rendered no field for `condition` (car), `offer_type` /
++ * `rental_term` (real estate) or `capacity` (industrial), so no value for those
++ * keys could be submitted and every create was rejected — 0 of 3 categories.
++ *
++ * `requiredSpecKeys` in @workspace/taxonomy is what the clients now derive
++ * their required-field marks from. It is only worth having if it says exactly
++ * what this server enforces, so it is compared by MUTATION rather than by
++ * reading either implementation: fill a complete payload, drop one key, and see
++ * whether the verdict flips. A key that flips it is a gating key.
++ *
++ * The other half of the contract — that every gating key has a field a seller
++ * can actually fill — is asserted inside each client package, next to the form
++ * (see artifacts/banco-web/tests/workspace-listing-form.test.mjs).
++ */
++
++type Category = "car" | "real_estate" | "industrial";
++
++/** Every key any surface may send; the mutation set is drawn from this. */
++const UNIVERSE = [
++  "condition",
++  "area",
++  "rooms",
++  "property_type",
++  "offer_type",
++  "finishing",
++  "rental_term",
++  "capacity",
++  "industry",
++  "industrial_type",
++];
++
++/** Keys whose removal flips validateAttributes from valid to invalid. */
++function gatingKeys(category: Category, context: Record<string, string>): string[] {
++  const full: Record<string, unknown> = {};
++  for (const key of UNIVERSE) full[key] = 1;
++  Object.assign(full, context);
++  expect(validateAttributes(category, full).valid).toBe(true);
++
++  const gating: string[] = [];
++  for (const key of UNIVERSE) {
++    const probe = { ...full };
++    // A pinned context value is blanked rather than deleted, so the branch it
++    // selects stays selected while the key itself goes missing.
++    if (key in context) probe[key] = "";
++    else delete probe[key];
++    if (!validateAttributes(category, probe).valid) gating.push(key);
++  }
++  return gating.sort();
++}
++
++describe("requiredSpecKeys mirrors the server's attribute floor exactly", () => {
++  const cases: { label: string; category: Category; context: Record<string, string> }[] = [
++    { label: "car", category: "car", context: {} },
++    {
++      label: "real_estate · apartment · sale",
++      category: "real_estate",
++      context: { property_type: "apartment", offer_type: "sale" },
++    },
++    {
++      label: "real_estate · apartment · rent",
++      category: "real_estate",
++      context: { property_type: "apartment", offer_type: "rent" },
++    },
++    {
++      label: "real_estate · land · sale",
++      category: "real_estate",
++      context: { property_type: "land", offer_type: "sale" },
++    },
++    {
++      label: "real_estate · shop · rent",
++      category: "real_estate",
++      context: { property_type: "shop", offer_type: "rent" },
++    },
++    { label: "industrial", category: "industrial", context: {} },
++  ];
++
++  for (const { label, category, context } of cases) {
++    it(label, () => {
++      expect([...requiredSpecKeys(category, context)].sort()).toEqual(gatingKeys(category, context));
++    });
++  }
++
++  it("names every category the API accepts", () => {
++    for (const category of ["car", "real_estate", "industrial"] as const) {
++      expect(requiredSpecKeys(category).length).toBeGreaterThan(0);
++    }
++  });
++});
+diff --git a/artifacts/banco-web/components/workspace/ListingCreateForm.tsx b/artifacts/banco-web/components/workspace/ListingCreateForm.tsx
+index c4e25cc..855a038 100644
+--- a/artifacts/banco-web/components/workspace/ListingCreateForm.tsx
++++ b/artifacts/banco-web/components/workspace/ListingCreateForm.tsx
+@@ -153,7 +153,10 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
+   }, [detailQuery.data, isEdit]);
+ 
+   const locationGroups = workspaceLocationGroups(locale);
+-  const fields = workspaceSpecFields(category, copy);
++  // `specs` is passed in because the field list is context-sensitive: choosing
++  // "rent" adds the rental system, and choosing land or a bare commercial unit
++  // removes rooms/finishing — mirroring the API's own rules.
++  const fields = workspaceSpecFields(category, copy, specs, locale);
+   const categoryOptions = workspaceCategoryOptions(copy);
+ 
+   const buildSpecsObject = (): Record<string, unknown> => {
+@@ -171,6 +174,14 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
+     return obj;
+   };
+ 
++  // The API names the first missing attribute, one per request. Checking here
++  // means the seller sees every gap at once instead of discovering them one
++  // round-trip at a time. `required` comes from `requiredSpecKeys`, which
++  // mirrors the server floor — this never blocks something the API accepts.
++  const missingRequiredSpecs = fields
++    .filter((f) => f.required && !specs[f.key]?.trim())
++    .map((f) => f.label);
++
+   const removeMedia = (id: string) => {
+     setMedia((items) => {
+       const target = items.find((it) => it.id === id);
+@@ -219,6 +230,12 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
+       return;
+     }
+ 
++    if (missingRequiredSpecs.length > 0) {
++      const sep = locale === "ar" ? "، " : ", ";
++      setFormError(`${copy.createSpecsRequired}: ${missingRequiredSpecs.join(sep)}`);
++      return;
++    }
++
+     if (media.some((m) => m.status === "uploading")) {
+       setFormError(copy.photosUploading);
+       return;
+@@ -382,7 +399,12 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
+ 
+       {fields.map((f) => (
+         <label key={f.key} style={fieldStyle}>
+-          <span>{f.label}</span>
++          <span>
++            {f.label}
++            {/* Marked from requiredSpecKeys, which mirrors the API floor — so
++                the asterisk means "the API will reject this", never a guess. */}
++            {f.required ? <span style={{ color: "var(--banco-primary)" }}> *</span> : null}
++          </span>
+           {f.options ? (
+             <select
+               value={specs[f.key] ?? ""}
+diff --git a/artifacts/banco-web/lib/workspace-listing-form.ts b/artifacts/banco-web/lib/workspace-listing-form.ts
+index 22d4367..8d26c66 100644
+--- a/artifacts/banco-web/lib/workspace-listing-form.ts
++++ b/artifacts/banco-web/lib/workspace-listing-form.ts
+@@ -1,4 +1,16 @@
+-import { ALL_INDUSTRIAL_TYPES, LOCATIONS, flattenAreas, locLabel } from "@workspace/taxonomy";
++import {
++  ALL_INDUSTRIAL_TYPES,
++  CONDITIONS,
++  FINISHING_TYPES,
++  LOCATIONS,
++  OFFER_TYPES,
++  PROPERTY_TYPES,
++  REAL_ESTATE_NO_ROOMS_TYPES,
++  flattenAreas,
++  locLabel,
++  rentalTermsForCountry,
++  requiredSpecKeys,
++} from "@workspace/taxonomy";
+ import type { SiteLocale } from "./hub-config";
+ import type { WorkspaceUiCopy } from "./workspace-ui-copy";
+ 
+@@ -9,6 +21,8 @@ export type SpecFieldDef = {
+   label: string;
+   numeric?: boolean;
+   options?: { value: string; label: string }[];
++  /** True when the API rejects the listing if this key is empty. */
++  required?: boolean;
+ };
+ 
+ export function workspaceLocationGroups(locale: SiteLocale) {
+@@ -26,10 +40,35 @@ export function workspaceLocationGroups(locale: SiteLocale) {
+   }));
+ }
+ 
++type EnumOption = { value: string; en: string; ar: string };
++
++function opts(list: EnumOption[], locale: SiteLocale) {
++  return list.map((o) => ({ value: o.value, label: locale === "ar" ? o.ar : o.en }));
++}
++
++/**
++ * The spec fields to render for a category, given the values chosen so far.
++ *
++ * `specs` is required because two real-estate fields are context-sensitive, in
++ * both directions, exactly as the API is:
++ *   - `rental_term` is required when `offer_type = rent` and meaningless otherwise;
++ *   - `rooms` is required for built units and meaningless for land / bare
++ *     commercial units (REAL_ESTATE_NO_ROOMS_TYPES).
++ *
++ * Measured 2026-08-23: before `offer_type`, `rental_term`, `condition` and
++ * `capacity` were added here, this form rendered no field for them, so
++ * `buildSpecsObject` — which iterates only over these fields — could never send
++ * a value, and the API rejected all three categories. 0 of 3 were creatable.
++ */
+ export function workspaceSpecFields(
+   category: WorkspaceCategory,
+   copy: WorkspaceUiCopy,
++  specs: Record<string, string | undefined> = {},
++  locale: SiteLocale = "ar",
+ ): SpecFieldDef[] {
++  const required = new Set(requiredSpecKeys(category, specs));
++  const mark = (f: SpecFieldDef): SpecFieldDef => ({ ...f, required: required.has(f.key) });
++
+   switch (category) {
+     case "car":
+       return [
+@@ -37,13 +76,38 @@ export function workspaceSpecFields(
+         { key: "model", label: copy.specModel },
+         { key: "year", label: copy.specYear, numeric: true },
+         { key: "mileage", label: copy.specMileage, numeric: true },
+-      ];
+-    case "real_estate":
+-      return [
+-        { key: "property_type", label: copy.specPropertyType },
++        // The one attribute the API gates on for movable assets: a plane or a
++        // boat has no odometer, but new/used is true of every one of them.
++        { key: "condition", label: copy.specCondition, options: opts(CONDITIONS, locale) },
++      ].map(mark);
++
++    case "real_estate": {
++      const propertyType = specs.property_type ?? "";
++      const noRooms = (REAL_ESTATE_NO_ROOMS_TYPES as readonly string[]).includes(propertyType);
++      const fields: SpecFieldDef[] = [
++        { key: "offer_type", label: copy.specOfferType, options: opts(OFFER_TYPES, locale) },
++        { key: "property_type", label: copy.specPropertyType, options: opts(PROPERTY_TYPES, locale) },
+         { key: "area", label: copy.specAreaSqm, numeric: true },
+-        { key: "rooms", label: copy.specRooms, numeric: true },
+       ];
++      if (specs.offer_type === "rent") {
++        fields.push({
++          key: "rental_term",
++          label: copy.specRentalTerm,
++          options: opts(rentalTermsForCountry(), locale),
++        });
++      }
++      // A plot has no rooms and no finishing — do not ask, and do not gate.
++      if (!noRooms) {
++        fields.push({ key: "rooms", label: copy.specRooms, numeric: true });
++        fields.push({
++          key: "finishing",
++          label: copy.specFinishing,
++          options: opts(FINISHING_TYPES, locale),
++        });
++      }
++      return fields.map(mark);
++    }
++
+     case "industrial":
+       return [
+         {
+@@ -54,9 +118,12 @@ export function workspaceSpecFields(
+             label: value.replace(/_/g, " "),
+           })),
+         },
++        // The API's floor for this category. Free text on purpose: capacity is
++        // "40 t/day", "500 kVA", "12,000 m³" — a unit, not a number.
++        { key: "capacity", label: copy.specCapacity },
+         { key: "equipment_type", label: copy.specEquipmentType },
+-        { key: "condition", label: copy.specCondition },
+-      ];
++        { key: "condition", label: copy.specCondition, options: opts(CONDITIONS, locale) },
++      ].map(mark);
+   }
+ }
+ 
+diff --git a/artifacts/banco-web/lib/workspace-ui-copy.ts b/artifacts/banco-web/lib/workspace-ui-copy.ts
+index 9cecf16..a95d01b 100644
+--- a/artifacts/banco-web/lib/workspace-ui-copy.ts
++++ b/artifacts/banco-web/lib/workspace-ui-copy.ts
+@@ -34,6 +34,7 @@ export type WorkspaceUiCopy = {
+   createPrice: string;
+   createPhotos: string;
+   createPhotosHint: string;
++  createSpecsRequired: string;
+   createSuccess: string;
+   editTitle: string;
+   editSubmit: string;
+@@ -196,6 +197,10 @@ export type WorkspaceUiCopy = {
+   specIndustrialType: string;
+   specEquipmentType: string;
+   specCondition: string;
++  specOfferType: string;
++  specRentalTerm: string;
++  specFinishing: string;
++  specCapacity: string;
+ };
+ 
+ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
+@@ -233,6 +238,7 @@ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
+     createPrice: "السعر (جنيه)",
+     createPhotos: "الصور",
+     createPhotosHint: "ارفع صورة واحدة على الأقل (JPG أو PNG).",
++    createSpecsRequired: "أكمل الحقول المطلوبة",
+     createSuccess: "تم نشر الإعلان بنجاح.",
+     editTitle: "تعديل الإعلان",
+     editSubmit: "حفظ التغييرات",
+@@ -396,6 +402,10 @@ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
+     specIndustrialType: "النوع الصناعي",
+     specEquipmentType: "نوع المعدة",
+     specCondition: "الحالة",
++    specOfferType: "نوع العرض",
++    specRentalTerm: "نظام الإيجار",
++    specFinishing: "التشطيب",
++    specCapacity: "الطاقة الإنتاجية",
+   },
+   en: {
+     title: "Seller workspace",
+@@ -431,6 +441,7 @@ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
+     createPrice: "Price (EGP)",
+     createPhotos: "Photos",
+     createPhotosHint: "Upload at least one image (JPG or PNG).",
++    createSpecsRequired: "Complete the required fields",
+     createSuccess: "Listing published successfully.",
+     editTitle: "Edit listing",
+     editSubmit: "Save changes",
+@@ -595,6 +606,10 @@ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
+     specIndustrialType: "Industrial type",
+     specEquipmentType: "Equipment type",
+     specCondition: "Condition",
++    specOfferType: "Offer type",
++    specRentalTerm: "Rental system",
++    specFinishing: "Finishing",
++    specCapacity: "Capacity",
+   },
+ };
+ 
+diff --git a/artifacts/banco-web/package.json b/artifacts/banco-web/package.json
+index 3c64c5a..26ca689 100644
+--- a/artifacts/banco-web/package.json
++++ b/artifacts/banco-web/package.json
+@@ -7,7 +7,8 @@
+     "dev": "next dev --hostname 0.0.0.0 --port 3000",
+     "build": "next build",
+     "start": "next start --hostname 0.0.0.0 --port 3000",
+-    "typecheck": "tsc -p tsconfig.json --noEmit"
++    "typecheck": "tsc -p tsconfig.json --noEmit",
++    "test": "node --import tsx --test tests/*.test.mjs"
+   },
+   "dependencies": {
+     "@clerk/nextjs": "^6.12.0",
+@@ -26,6 +27,7 @@
+     "@types/node": "catalog:",
+     "@types/react": "catalog:",
+     "@types/react-dom": "catalog:",
++    "tsx": "catalog:",
+     "typescript": "~5.9.3"
+   }
+ }
+diff --git a/artifacts/banco-web/tests/workspace-listing-form.test.mjs b/artifacts/banco-web/tests/workspace-listing-form.test.mjs
+new file mode 100644
+index 0000000..9a9e0db
+--- /dev/null
++++ b/artifacts/banco-web/tests/workspace-listing-form.test.mjs
+@@ -0,0 +1,128 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++
++import { requiredSpecKeys } from "@workspace/taxonomy";
++import * as listingForm from "../lib/workspace-listing-form.ts";
++import * as uiCopy from "../lib/workspace-ui-copy.ts";
++
++// This is a Next app, so it has no "type": "module" and tsx compiles its .ts
++// files to CJS. Node's named-export detection does not see through that from an
++// ESM test, so the namespace is unwrapped explicitly rather than destructured
++// at the import site.
++const { workspaceCategoryOptions, workspaceSpecFields } = listingForm.default ?? listingForm;
++const { workspaceUiCopy } = uiCopy.default ?? uiCopy;
++
++/**
++ * A SELLER CANNOT SUBMIT A FIELD THE FORM DOES NOT RENDER.
++ *
++ * `buildSpecsObject` in ListingCreateForm iterates over exactly the fields
++ * `workspaceSpecFields` returns, so a required key with no field is not a
++ * usability problem — it is an unconditional rejection the seller can do
++ * nothing about. Measured 2026-08-23: `condition` (car), `offer_type` and
++ * `rental_term` (real estate) and `capacity` (industrial) had no field, and the
++ * web workspace could create 0 of 3 categories. The static parity audit passed
++ * throughout, because substring checks cannot see this.
++ *
++ * `requiredSpecKeys` is proven equal to the server's own floor, by mutation, in
++ * api-server/src/services/ListingService.requiredSpecKeys.test.ts. Together the
++ * two tests say: every attribute the API rejects a listing for has a field on
++ * this form, in every context the form can be in.
++ */
++
++const copy = workspaceUiCopy("en");
++
++/** Contexts the real-estate form can be in; the other categories have one each. */
++const CONTEXTS = [
++  { label: "car", category: "car", context: {} },
++  {
++    label: "real_estate · apartment · sale",
++    category: "real_estate",
++    context: { property_type: "apartment", offer_type: "sale" },
++  },
++  {
++    label: "real_estate · apartment · rent",
++    category: "real_estate",
++    context: { property_type: "apartment", offer_type: "rent" },
++  },
++  {
++    label: "real_estate · land · sale",
++    category: "real_estate",
++    context: { property_type: "land", offer_type: "sale" },
++  },
++  {
++    label: "real_estate · shop · rent",
++    category: "real_estate",
++    context: { property_type: "shop", offer_type: "rent" },
++  },
++  { label: "industrial", category: "industrial", context: {} },
++];
++
++for (const { label, category, context } of CONTEXTS) {
++  test(`every required attribute has a field: ${label}`, () => {
++    const fields = workspaceSpecFields(category, copy, context, "en");
++    const rendered = new Set(fields.map((f) => f.key));
++    const missing = requiredSpecKeys(category, context).filter((k) => !rendered.has(k));
++    assert.deepEqual(
++      missing,
++      [],
++      `the API rejects a listing without [${missing.join(", ")}] but the form renders no field for them`,
++    );
++  });
++
++  test(`required marks match the contract: ${label}`, () => {
++    const fields = workspaceSpecFields(category, copy, context, "en");
++    const marked = fields.filter((f) => f.required).map((f) => f.key).sort();
++    assert.deepEqual(marked, [...requiredSpecKeys(category, context)].sort());
++  });
++
++  test(`no field is rendered twice: ${label}`, () => {
++    const keys = workspaceSpecFields(category, copy, context, "en").map((f) => f.key);
++    assert.equal(new Set(keys).size, keys.length);
++  });
++
++  test(`every select offers a real value and a label: ${label}`, () => {
++    for (const field of workspaceSpecFields(category, copy, context, "en")) {
++      if (!field.options) continue;
++      assert.ok(field.options.length > 0, `${field.key} renders an empty select`);
++      for (const option of field.options) {
++        assert.ok(option.value, `${field.key} has an option with no value`);
++        assert.ok(option.label, `${field.key} option ${option.value} has no label`);
++      }
++    }
++  });
++
++  test(`every field carries a translated label: ${label}`, () => {
++    for (const locale of ["ar", "en"]) {
++      const localCopy = workspaceUiCopy(locale);
++      for (const field of workspaceSpecFields(category, localCopy, context, locale)) {
++        assert.ok(
++          typeof field.label === "string" && field.label.trim().length > 0,
++          `${field.key} has no ${locale} label`,
++        );
++      }
++    }
++  });
++}
++
++test("the contexts above cover every category the form offers", () => {
++  const offered = workspaceCategoryOptions(copy)
++    .map((c) => c.value)
++    .sort();
++  const tested = [...new Set(CONTEXTS.map((c) => c.category))].sort();
++  assert.deepEqual(tested, offered);
++});
++
++test("rental_term appears only for rentals, and rooms only where they exist", () => {
++  const keys = (context) =>
++    new Set(workspaceSpecFields("real_estate", copy, context, "en").map((f) => f.key));
++
++  const sale = keys({ property_type: "apartment", offer_type: "sale" });
++  const rent = keys({ property_type: "apartment", offer_type: "rent" });
++  assert.ok(!sale.has("rental_term"), "a sale must not ask for a rental system");
++  assert.ok(rent.has("rental_term"), "a rental must ask for its rental system");
++
++  const land = keys({ property_type: "land", offer_type: "sale" });
++  assert.ok(!land.has("rooms"), "a plot of land must not be asked for a room count");
++  assert.ok(!land.has("finishing"), "a plot of land must not be asked for a finishing type");
++  assert.ok(sale.has("rooms"), "a built unit must be asked for a room count");
++});
+diff --git a/artifacts/banco-website/components/workspace/ListingCreateForm.tsx b/artifacts/banco-website/components/workspace/ListingCreateForm.tsx
+index c4e25cc..855a038 100644
+--- a/artifacts/banco-website/components/workspace/ListingCreateForm.tsx
++++ b/artifacts/banco-website/components/workspace/ListingCreateForm.tsx
+@@ -153,7 +153,10 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
+   }, [detailQuery.data, isEdit]);
+ 
+   const locationGroups = workspaceLocationGroups(locale);
+-  const fields = workspaceSpecFields(category, copy);
++  // `specs` is passed in because the field list is context-sensitive: choosing
++  // "rent" adds the rental system, and choosing land or a bare commercial unit
++  // removes rooms/finishing — mirroring the API's own rules.
++  const fields = workspaceSpecFields(category, copy, specs, locale);
+   const categoryOptions = workspaceCategoryOptions(copy);
+ 
+   const buildSpecsObject = (): Record<string, unknown> => {
+@@ -171,6 +174,14 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
+     return obj;
+   };
+ 
++  // The API names the first missing attribute, one per request. Checking here
++  // means the seller sees every gap at once instead of discovering them one
++  // round-trip at a time. `required` comes from `requiredSpecKeys`, which
++  // mirrors the server floor — this never blocks something the API accepts.
++  const missingRequiredSpecs = fields
++    .filter((f) => f.required && !specs[f.key]?.trim())
++    .map((f) => f.label);
++
+   const removeMedia = (id: string) => {
+     setMedia((items) => {
+       const target = items.find((it) => it.id === id);
+@@ -219,6 +230,12 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
+       return;
+     }
+ 
++    if (missingRequiredSpecs.length > 0) {
++      const sep = locale === "ar" ? "، " : ", ";
++      setFormError(`${copy.createSpecsRequired}: ${missingRequiredSpecs.join(sep)}`);
++      return;
++    }
++
+     if (media.some((m) => m.status === "uploading")) {
+       setFormError(copy.photosUploading);
+       return;
+@@ -382,7 +399,12 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
+ 
+       {fields.map((f) => (
+         <label key={f.key} style={fieldStyle}>
+-          <span>{f.label}</span>
++          <span>
++            {f.label}
++            {/* Marked from requiredSpecKeys, which mirrors the API floor — so
++                the asterisk means "the API will reject this", never a guess. */}
++            {f.required ? <span style={{ color: "var(--banco-primary)" }}> *</span> : null}
++          </span>
+           {f.options ? (
+             <select
+               value={specs[f.key] ?? ""}
+diff --git a/artifacts/banco-website/lib/workspace-listing-form.ts b/artifacts/banco-website/lib/workspace-listing-form.ts
+index 22d4367..8d26c66 100644
+--- a/artifacts/banco-website/lib/workspace-listing-form.ts
++++ b/artifacts/banco-website/lib/workspace-listing-form.ts
+@@ -1,4 +1,16 @@
+-import { ALL_INDUSTRIAL_TYPES, LOCATIONS, flattenAreas, locLabel } from "@workspace/taxonomy";
++import {
++  ALL_INDUSTRIAL_TYPES,
++  CONDITIONS,
++  FINISHING_TYPES,
++  LOCATIONS,
++  OFFER_TYPES,
++  PROPERTY_TYPES,
++  REAL_ESTATE_NO_ROOMS_TYPES,
++  flattenAreas,
++  locLabel,
++  rentalTermsForCountry,
++  requiredSpecKeys,
++} from "@workspace/taxonomy";
+ import type { SiteLocale } from "./hub-config";
+ import type { WorkspaceUiCopy } from "./workspace-ui-copy";
+ 
+@@ -9,6 +21,8 @@ export type SpecFieldDef = {
+   label: string;
+   numeric?: boolean;
+   options?: { value: string; label: string }[];
++  /** True when the API rejects the listing if this key is empty. */
++  required?: boolean;
+ };
+ 
+ export function workspaceLocationGroups(locale: SiteLocale) {
+@@ -26,10 +40,35 @@ export function workspaceLocationGroups(locale: SiteLocale) {
+   }));
+ }
+ 
++type EnumOption = { value: string; en: string; ar: string };
++
++function opts(list: EnumOption[], locale: SiteLocale) {
++  return list.map((o) => ({ value: o.value, label: locale === "ar" ? o.ar : o.en }));
++}
++
++/**
++ * The spec fields to render for a category, given the values chosen so far.
++ *
++ * `specs` is required because two real-estate fields are context-sensitive, in
++ * both directions, exactly as the API is:
++ *   - `rental_term` is required when `offer_type = rent` and meaningless otherwise;
++ *   - `rooms` is required for built units and meaningless for land / bare
++ *     commercial units (REAL_ESTATE_NO_ROOMS_TYPES).
++ *
++ * Measured 2026-08-23: before `offer_type`, `rental_term`, `condition` and
++ * `capacity` were added here, this form rendered no field for them, so
++ * `buildSpecsObject` — which iterates only over these fields — could never send
++ * a value, and the API rejected all three categories. 0 of 3 were creatable.
++ */
+ export function workspaceSpecFields(
+   category: WorkspaceCategory,
+   copy: WorkspaceUiCopy,
++  specs: Record<string, string | undefined> = {},
++  locale: SiteLocale = "ar",
+ ): SpecFieldDef[] {
++  const required = new Set(requiredSpecKeys(category, specs));
++  const mark = (f: SpecFieldDef): SpecFieldDef => ({ ...f, required: required.has(f.key) });
++
+   switch (category) {
+     case "car":
+       return [
+@@ -37,13 +76,38 @@ export function workspaceSpecFields(
+         { key: "model", label: copy.specModel },
+         { key: "year", label: copy.specYear, numeric: true },
+         { key: "mileage", label: copy.specMileage, numeric: true },
+-      ];
+-    case "real_estate":
+-      return [
+-        { key: "property_type", label: copy.specPropertyType },
++        // The one attribute the API gates on for movable assets: a plane or a
++        // boat has no odometer, but new/used is true of every one of them.
++        { key: "condition", label: copy.specCondition, options: opts(CONDITIONS, locale) },
++      ].map(mark);
++
++    case "real_estate": {
++      const propertyType = specs.property_type ?? "";
++      const noRooms = (REAL_ESTATE_NO_ROOMS_TYPES as readonly string[]).includes(propertyType);
++      const fields: SpecFieldDef[] = [
++        { key: "offer_type", label: copy.specOfferType, options: opts(OFFER_TYPES, locale) },
++        { key: "property_type", label: copy.specPropertyType, options: opts(PROPERTY_TYPES, locale) },
+         { key: "area", label: copy.specAreaSqm, numeric: true },
+-        { key: "rooms", label: copy.specRooms, numeric: true },
+       ];
++      if (specs.offer_type === "rent") {
++        fields.push({
++          key: "rental_term",
++          label: copy.specRentalTerm,
++          options: opts(rentalTermsForCountry(), locale),
++        });
++      }
++      // A plot has no rooms and no finishing — do not ask, and do not gate.
++      if (!noRooms) {
++        fields.push({ key: "rooms", label: copy.specRooms, numeric: true });
++        fields.push({
++          key: "finishing",
++          label: copy.specFinishing,
++          options: opts(FINISHING_TYPES, locale),
++        });
++      }
++      return fields.map(mark);
++    }
++
+     case "industrial":
+       return [
+         {
+@@ -54,9 +118,12 @@ export function workspaceSpecFields(
+             label: value.replace(/_/g, " "),
+           })),
+         },
++        // The API's floor for this category. Free text on purpose: capacity is
++        // "40 t/day", "500 kVA", "12,000 m³" — a unit, not a number.
++        { key: "capacity", label: copy.specCapacity },
+         { key: "equipment_type", label: copy.specEquipmentType },
+-        { key: "condition", label: copy.specCondition },
+-      ];
++        { key: "condition", label: copy.specCondition, options: opts(CONDITIONS, locale) },
++      ].map(mark);
+   }
+ }
+ 
+diff --git a/artifacts/banco-website/lib/workspace-ui-copy.ts b/artifacts/banco-website/lib/workspace-ui-copy.ts
+index d48f235..271682c 100644
+--- a/artifacts/banco-website/lib/workspace-ui-copy.ts
++++ b/artifacts/banco-website/lib/workspace-ui-copy.ts
+@@ -34,6 +34,7 @@ export type WorkspaceUiCopy = {
+   createPrice: string;
+   createPhotos: string;
+   createPhotosHint: string;
++  createSpecsRequired: string;
+   createSuccess: string;
+   editTitle: string;
+   editSubmit: string;
+@@ -214,6 +215,10 @@ export type WorkspaceUiCopy = {
+   specIndustrialType: string;
+   specEquipmentType: string;
+   specCondition: string;
++  specOfferType: string;
++  specRentalTerm: string;
++  specFinishing: string;
++  specCapacity: string;
+ };
+ 
+ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
+@@ -251,6 +256,7 @@ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
+     createPrice: "السعر (جنيه)",
+     createPhotos: "الصور",
+     createPhotosHint: "ارفع صورة واحدة على الأقل (JPG أو PNG).",
++    createSpecsRequired: "أكمل الحقول المطلوبة",
+     createSuccess: "تم نشر الإعلان بنجاح.",
+     editTitle: "تعديل الإعلان",
+     editSubmit: "حفظ التغييرات",
+@@ -434,6 +440,10 @@ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
+     specIndustrialType: "النوع الصناعي",
+     specEquipmentType: "نوع المعدة",
+     specCondition: "الحالة",
++    specOfferType: "نوع العرض",
++    specRentalTerm: "نظام الإيجار",
++    specFinishing: "التشطيب",
++    specCapacity: "الطاقة الإنتاجية",
+   },
+   en: {
+     title: "Seller workspace",
+@@ -469,6 +479,7 @@ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
+     createPrice: "Price (EGP)",
+     createPhotos: "Photos",
+     createPhotosHint: "Upload at least one image (JPG or PNG).",
++    createSpecsRequired: "Complete the required fields",
+     createSuccess: "Listing published successfully.",
+     editTitle: "Edit listing",
+     editSubmit: "Save changes",
+@@ -653,6 +664,10 @@ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
+     specIndustrialType: "Industrial type",
+     specEquipmentType: "Equipment type",
+     specCondition: "Condition",
++    specOfferType: "Offer type",
++    specRentalTerm: "Rental system",
++    specFinishing: "Finishing",
++    specCapacity: "Capacity",
+   },
+ };
+ 
+diff --git a/artifacts/banco-website/package.json b/artifacts/banco-website/package.json
+index f3e4808..e7f9c5b 100644
+--- a/artifacts/banco-website/package.json
++++ b/artifacts/banco-website/package.json
+@@ -7,7 +7,8 @@
+     "dev": "next dev --hostname 0.0.0.0 --port 3000",
+     "build": "next build",
+     "start": "next start --hostname 0.0.0.0",
+-    "typecheck": "tsc -p tsconfig.json --noEmit"
++    "typecheck": "tsc -p tsconfig.json --noEmit",
++    "test": "node --import tsx --test tests/*.test.mjs"
+   },
+   "dependencies": {
+     "@clerk/nextjs": "^6.12.0",
+@@ -26,6 +27,7 @@
+     "@types/node": "catalog:",
+     "@types/react": "catalog:",
+     "@types/react-dom": "catalog:",
++    "tsx": "catalog:",
+     "typescript": "~5.9.3"
+   }
+ }
+diff --git a/artifacts/banco-website/tests/workspace-listing-form.test.mjs b/artifacts/banco-website/tests/workspace-listing-form.test.mjs
+new file mode 100644
+index 0000000..9a9e0db
+--- /dev/null
++++ b/artifacts/banco-website/tests/workspace-listing-form.test.mjs
+@@ -0,0 +1,128 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++
++import { requiredSpecKeys } from "@workspace/taxonomy";
++import * as listingForm from "../lib/workspace-listing-form.ts";
++import * as uiCopy from "../lib/workspace-ui-copy.ts";
++
++// This is a Next app, so it has no "type": "module" and tsx compiles its .ts
++// files to CJS. Node's named-export detection does not see through that from an
++// ESM test, so the namespace is unwrapped explicitly rather than destructured
++// at the import site.
++const { workspaceCategoryOptions, workspaceSpecFields } = listingForm.default ?? listingForm;
++const { workspaceUiCopy } = uiCopy.default ?? uiCopy;
++
++/**
++ * A SELLER CANNOT SUBMIT A FIELD THE FORM DOES NOT RENDER.
++ *
++ * `buildSpecsObject` in ListingCreateForm iterates over exactly the fields
++ * `workspaceSpecFields` returns, so a required key with no field is not a
++ * usability problem — it is an unconditional rejection the seller can do
++ * nothing about. Measured 2026-08-23: `condition` (car), `offer_type` and
++ * `rental_term` (real estate) and `capacity` (industrial) had no field, and the
++ * web workspace could create 0 of 3 categories. The static parity audit passed
++ * throughout, because substring checks cannot see this.
++ *
++ * `requiredSpecKeys` is proven equal to the server's own floor, by mutation, in
++ * api-server/src/services/ListingService.requiredSpecKeys.test.ts. Together the
++ * two tests say: every attribute the API rejects a listing for has a field on
++ * this form, in every context the form can be in.
++ */
++
++const copy = workspaceUiCopy("en");
++
++/** Contexts the real-estate form can be in; the other categories have one each. */
++const CONTEXTS = [
++  { label: "car", category: "car", context: {} },
++  {
++    label: "real_estate · apartment · sale",
++    category: "real_estate",
++    context: { property_type: "apartment", offer_type: "sale" },
++  },
++  {
++    label: "real_estate · apartment · rent",
++    category: "real_estate",
++    context: { property_type: "apartment", offer_type: "rent" },
++  },
++  {
++    label: "real_estate · land · sale",
++    category: "real_estate",
++    context: { property_type: "land", offer_type: "sale" },
++  },
++  {
++    label: "real_estate · shop · rent",
++    category: "real_estate",
++    context: { property_type: "shop", offer_type: "rent" },
++  },
++  { label: "industrial", category: "industrial", context: {} },
++];
++
++for (const { label, category, context } of CONTEXTS) {
++  test(`every required attribute has a field: ${label}`, () => {
++    const fields = workspaceSpecFields(category, copy, context, "en");
++    const rendered = new Set(fields.map((f) => f.key));
++    const missing = requiredSpecKeys(category, context).filter((k) => !rendered.has(k));
++    assert.deepEqual(
++      missing,
++      [],
++      `the API rejects a listing without [${missing.join(", ")}] but the form renders no field for them`,
++    );
++  });
++
++  test(`required marks match the contract: ${label}`, () => {
++    const fields = workspaceSpecFields(category, copy, context, "en");
++    const marked = fields.filter((f) => f.required).map((f) => f.key).sort();
++    assert.deepEqual(marked, [...requiredSpecKeys(category, context)].sort());
++  });
++
++  test(`no field is rendered twice: ${label}`, () => {
++    const keys = workspaceSpecFields(category, copy, context, "en").map((f) => f.key);
++    assert.equal(new Set(keys).size, keys.length);
++  });
++
++  test(`every select offers a real value and a label: ${label}`, () => {
++    for (const field of workspaceSpecFields(category, copy, context, "en")) {
++      if (!field.options) continue;
++      assert.ok(field.options.length > 0, `${field.key} renders an empty select`);
++      for (const option of field.options) {
++        assert.ok(option.value, `${field.key} has an option with no value`);
++        assert.ok(option.label, `${field.key} option ${option.value} has no label`);
++      }
++    }
++  });
++
++  test(`every field carries a translated label: ${label}`, () => {
++    for (const locale of ["ar", "en"]) {
++      const localCopy = workspaceUiCopy(locale);
++      for (const field of workspaceSpecFields(category, localCopy, context, locale)) {
++        assert.ok(
++          typeof field.label === "string" && field.label.trim().length > 0,
++          `${field.key} has no ${locale} label`,
++        );
++      }
++    }
++  });
++}
++
++test("the contexts above cover every category the form offers", () => {
++  const offered = workspaceCategoryOptions(copy)
++    .map((c) => c.value)
++    .sort();
++  const tested = [...new Set(CONTEXTS.map((c) => c.category))].sort();
++  assert.deepEqual(tested, offered);
++});
++
++test("rental_term appears only for rentals, and rooms only where they exist", () => {
++  const keys = (context) =>
++    new Set(workspaceSpecFields("real_estate", copy, context, "en").map((f) => f.key));
++
++  const sale = keys({ property_type: "apartment", offer_type: "sale" });
++  const rent = keys({ property_type: "apartment", offer_type: "rent" });
++  assert.ok(!sale.has("rental_term"), "a sale must not ask for a rental system");
++  assert.ok(rent.has("rental_term"), "a rental must ask for its rental system");
++
++  const land = keys({ property_type: "land", offer_type: "sale" });
++  assert.ok(!land.has("rooms"), "a plot of land must not be asked for a room count");
++  assert.ok(!land.has("finishing"), "a plot of land must not be asked for a finishing type");
++  assert.ok(sale.has("rooms"), "a built unit must be asked for a room count");
++});
+diff --git a/lib/taxonomy/package.json b/lib/taxonomy/package.json
+index 0659556..b6e651f 100644
+--- a/lib/taxonomy/package.json
++++ b/lib/taxonomy/package.json
+@@ -8,6 +8,7 @@
+     "./locations": "./src/locations.ts",
+     "./cars": "./src/cars.ts",
+     "./categories": "./src/categories.ts",
+-    "./markets": "./src/markets.ts"
++    "./markets": "./src/markets.ts",
++    "./listings": "./src/listings.ts"
+   }
+ }
+diff --git a/lib/taxonomy/src/index.ts b/lib/taxonomy/src/index.ts
+index 8d943cc..0f7f0e8 100644
+--- a/lib/taxonomy/src/index.ts
++++ b/lib/taxonomy/src/index.ts
+@@ -13,3 +13,4 @@ export * from "./locations";
+ export * from "./cars";
+ export * from "./categories";
+ export * from "./markets";
++export * from "./listings";
+diff --git a/lib/taxonomy/src/listings.ts b/lib/taxonomy/src/listings.ts
+new file mode 100644
+index 0000000..460f556
+--- /dev/null
++++ b/lib/taxonomy/src/listings.ts
+@@ -0,0 +1,121 @@
++/**
++ * Listing create/edit taxonomy — the parts every seller-facing surface needs to
++ * satisfy the API's `validateAttributes` floor.
++ *
++ * WHY THIS MODULE EXISTS
++ * The required-attribute contract lived in three places that were kept in step
++ * by a comment ("KEEP IN SYNC with mobile requiredSpecKeysFor" in
++ * api-server/src/services/ListingService.ts). Measured 2026-08-23, the web
++ * workspace satisfied it in 0 of 3 categories: it never rendered `condition`
++ * (car), `offer_type` / `rental_term` (real estate) or `capacity` (industrial),
++ * so no value for those keys could ever be sent, and every create was rejected.
++ *
++ * `requiredSpecKeys` below mirrors the SERVER FLOOR exactly — the smallest set
++ * the API rejects a listing for. A surface may require MORE than this (the
++ * mobile create screen does: it also gates on `finishing`, `industry`,
++ * `industrial_type`, `material`). Requiring more is safe; requiring less is the
++ * bug this module exists to make impossible.
++ *
++ * Pure data + pure helpers, no React/RN/Node deps — same rule as the rest of
++ * @workspace/taxonomy.
++ */
++import { DEFAULT_MARKET_COUNTRY, MARKET_COUNTRIES } from "./markets";
++
++export type ApiListingCategory = "car" | "real_estate" | "industrial";
++
++/** A picker option: canonical slug plus both display languages. */
++export type ListingEnumOption = { value: string; en: string; ar: string };
++
++/* ── Canonical enum slugs (picker values; the server's coerceEnum is lenient,
++      but these are the slugs it resolves without guessing) ──────────────── */
++
++export const PROPERTY_TYPES: ListingEnumOption[] = [
++  { value: "apartment", en: "Apartment", ar: "شقة" },
++  { value: "villa", en: "Villa", ar: "فيلا" },
++  { value: "townhouse", en: "Townhouse", ar: "تاون هاوس" },
++  { value: "twinhouse", en: "Twinhouse", ar: "توين هاوس" },
++  { value: "penthouse", en: "Penthouse", ar: "بنتهاوس" },
++  { value: "duplex", en: "Duplex", ar: "دوبلكس" },
++  { value: "studio", en: "Studio", ar: "استوديو" },
++  { value: "chalet", en: "Chalet", ar: "شاليه" },
++  { value: "hotel", en: "Hotel", ar: "فندق" },
++  { value: "office", en: "Office", ar: "مكتب" },
++  { value: "clinic", en: "Clinic", ar: "عيادة" },
++  { value: "shop", en: "Shop", ar: "محل" },
++  { value: "warehouse", en: "Warehouse", ar: "مستودع" },
++  { value: "commercial_land", en: "Commercial land", ar: "أرض تجارية" },
++  { value: "land", en: "Land", ar: "أرض" },
++];
++
++export const OFFER_TYPES: ListingEnumOption[] = [
++  { value: "sale", en: "For sale", ar: "للبيع" },
++  { value: "rent", en: "For rent", ar: "للإيجار" },
++];
++
++export const FINISHING_TYPES: ListingEnumOption[] = [
++  { value: "finished", en: "Finished", ar: "تشطيب كامل" },
++  { value: "semi_finished", en: "Semi-finished", ar: "نص تشطيب" },
++  { value: "core_shell", en: "Core & shell", ar: "على المحارة" },
++  { value: "super_lux", en: "Super lux", ar: "سوبر لوكس" },
++];
++
++/**
++ * Rental systems for real-estate rentals — each value encodes a real
++ * legal/duration regime. The server filters `specs->>'rental_term'` verbatim,
++ * so adding a country/term here is config-only.
++ */
++export const RENTAL_TERMS: ListingEnumOption[] = [
++  { value: "furnished_daily", en: "Furnished — from 1 day", ar: "مفروش — من يوم واحد" },
++  { value: "new_law", en: "New-law lease — up to 5 years", ar: "إيجار قانون جديد — حتى 5 سنوات" },
++  { value: "old_law", en: "Old-law lease — up to 59 years", ar: "إيجار قانون قديم — حتى 59 سنة" },
++  { value: "annual_contract", en: "Annual contract", ar: "عقد إيجار سنوي" },
++];
++
++export function rentalTermsForCountry(
++  country: string = DEFAULT_MARKET_COUNTRY,
++): ListingEnumOption[] {
++  const market = MARKET_COUNTRIES.find((c) => c.value === country);
++  const allowed = new Set(market?.rentalTerms ?? MARKET_COUNTRIES[0].rentalTerms);
++  return RENTAL_TERMS.filter((t) => allowed.has(t.value));
++}
++
++/**
++ * Real-estate sub-types with no room count. A plot of land or a bare commercial
++ * unit has no rooms and no finishing, so the API exempts them and no surface
++ * should force a seller to invent a value.
++ * MUST equal the `noRooms` list in api-server validateAttributes.
++ */
++export const REAL_ESTATE_NO_ROOMS_TYPES = [
++  "land",
++  "shop",
++  "office",
++  "clinic",
++  "warehouse",
++  "commercial_land",
++] as const;
++
++/* ── The server floor ─────────────────────────────────────────────────────── */
++
++/**
++ * The spec keys the API rejects a listing for, given the values chosen so far.
++ * Mirrors `validateAttributes` in api-server/src/services/ListingService.ts.
++ *
++ * `specs` only needs to carry `property_type` and `offer_type`; the real-estate
++ * branch is the only context-sensitive one.
++ */
++export function requiredSpecKeys(
++  category: ApiListingCategory,
++  specs: Record<string, unknown> = {},
++): string[] {
++  if (category === "car") return ["condition"];
++  if (category === "industrial") return ["capacity"];
++
++  const keys = ["area", "offer_type", "property_type"];
++  const propertyType = typeof specs.property_type === "string" ? specs.property_type : "";
++  const offerType = typeof specs.offer_type === "string" ? specs.offer_type : "";
++  if (!(REAL_ESTATE_NO_ROOMS_TYPES as readonly string[]).includes(propertyType)) {
++    keys.push("rooms");
++  }
++  if (offerType === "rent") keys.push("rental_term");
++  return keys;
++}
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 7dc34c3..8858404 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -796,6 +796,9 @@ importers:
+       '@types/react-dom':
+         specifier: 'catalog:'
+         version: 19.2.3(@types/react@19.2.17)
++      tsx:
++        specifier: 'catalog:'
++        version: 4.21.0
+       typescript:
+         specifier: ~5.9.3
+         version: 5.9.3
+@@ -845,6 +848,9 @@ importers:
+       '@types/react-dom':
+         specifier: 'catalog:'
+         version: 19.2.3(@types/react@19.2.17)
++      tsx:
++        specifier: 'catalog:'
++        version: 4.21.0
+       typescript:
+         specifier: ~5.9.3
+         version: 5.9.3
+@@ -4900,10 +4906,12 @@ packages:
+   '@xmldom/xmldom@0.8.13':
+     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
+     engines: {node: '>=10.0.0'}
++    deprecated: this version has critical issues, please update to the latest version
+ 
+   '@xmldom/xmldom@0.9.10':
+     resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
+     engines: {node: '>=14.6'}
++    deprecated: this version has critical issues, please update to the latest version
+ 
+   '@zxcvbn-ts/core@3.0.4':
+     resolution: {integrity: sha512-aQeiT0F09FuJaAqNrxynlAwZ2mW/1MdXakKWNmGM1Qp/VaY6CnB/GfnMS2T8gB2231Esp1/maCWd8vTG4OuShw==}
+@@ -6168,6 +6176,7 @@ packages:
+   eslint@9.39.4:
+     resolution: {integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==}
+     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
++    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
+     hasBin: true
+     peerDependencies:
+       jiti: '*'
+diff --git a/scripts/website-seller-workspace-parity-audit.mjs b/scripts/website-seller-workspace-parity-audit.mjs
+index 9895313..3903db3 100644
+--- a/scripts/website-seller-workspace-parity-audit.mjs
++++ b/scripts/website-seller-workspace-parity-audit.mjs
+@@ -1,19 +1,39 @@
+ #!/usr/bin/env node
+ /**
+- * Phase 3 — seller workspace parity audit (website-only).
++ * Phase 3 — seller workspace parity audit.
+  * Static checks for create/edit/manage/leads/messages wiring.
+  *
+  * Usage: node scripts/website-seller-workspace-parity-audit.mjs
+  * Exit: 0 pass, 1 fail
++ *
++ * SCOPE — 2026-08-23. This audit ran against `banco-web` only, while
++ * `banco-website` ships the same seller workspace from byte-identical copies of
++ * the same components. Eighteen paths were audited on one surface and zero on
++ * the other, so any drift in the shipped twin was invisible here. Every check
++ * now runs for BOTH surfaces, and the twin files are compared byte for byte.
++ *
++ * LIMIT — `mustInclude` is a substring test over file text, so a comment
++ * mentioning a token satisfies it, and no amount of it can tell whether a
++ * payload the form builds is one the API accepts. It did not: measured
++ * 2026-08-23, this audit printed "[PASS] listing create/edit form" while the
++ * form could create 0 of 3 categories. The executable control for that lives in
++ * api-server/src/services/ListingService.clientContract.test.ts, which fills
++ * every rendered field and hands the result to the real validator. Keep the
++ * static checks for wiring; do not mistake them for behaviour.
+  */
+ 
+ import { readFileSync, existsSync } from "node:fs";
++import { createHash } from "node:crypto";
+ import path from "node:path";
+ import { fileURLToPath } from "node:url";
+ 
+ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+ 
++/** Both surfaces ship the seller workspace. Auditing one is auditing half. */
++const SURFACES = ["banco-web", "banco-website"];
++
+ let failed = 0;
++let checks = 0;
+ 
+ function fail(msg) {
+   console.error(`[FAIL] ${msg}`);
+@@ -34,6 +54,7 @@ function read(rel) {
+ }
+ 
+ function mustInclude(rel, snippets, label) {
++  checks += 1;
+   const src = read(rel);
+   if (!src) return;
+   for (const snippet of snippets) {
+@@ -45,91 +66,163 @@ function mustInclude(rel, snippets, label) {
+   pass(label);
+ }
+ 
+-console.log("BANCO website Phase 3 seller workspace parity audit\n");
+-
+-for (const route of [
+-  "artifacts/banco-web/app/workspace/page.tsx",
+-  "artifacts/banco-web/app/workspace/listings/page.tsx",
+-  "artifacts/banco-web/app/workspace/listings/new/page.tsx",
+-  "artifacts/banco-web/app/workspace/listings/[id]/edit/page.tsx",
+-  "artifacts/banco-web/app/workspace/leads/page.tsx",
+-  "artifacts/banco-web/app/workspace/messages/page.tsx",
+-  "artifacts/banco-web/app/en/workspace/page.tsx",
+-  "artifacts/banco-web/app/en/workspace/listings/page.tsx",
+-  "artifacts/banco-web/app/en/workspace/listings/new/page.tsx",
+-  "artifacts/banco-web/app/en/workspace/leads/page.tsx",
+-  "artifacts/banco-web/app/en/workspace/messages/page.tsx",
+-]) {
+-  if (!existsSync(path.join(ROOT, route))) fail(`missing route ${route}`);
+-  else pass(`route ${route}`);
++function mustExist(rel) {
++  checks += 1;
++  if (!existsSync(path.join(ROOT, rel))) fail(`missing route ${rel}`);
++  else pass(`route ${rel}`);
++}
++
++function mustBeIdenticalAcrossSurfaces(rel, label) {
++  checks += 1;
++  const digests = SURFACES.map((surface) => {
++    const full = path.join(ROOT, "artifacts", surface, rel);
++    if (!existsSync(full)) return null;
++    return createHash("sha256").update(readFileSync(full)).digest("hex");
++  });
++  if (digests.some((d) => d === null)) {
++    fail(`${label}: ${rel} is missing from one surface`);
++    return;
++  }
++  if (digests[0] !== digests[1]) {
++    fail(
++      `${label}: ${rel} differs between ${SURFACES[0]} and ${SURFACES[1]} ` +
++        `(${digests[0].slice(0, 12)} vs ${digests[1].slice(0, 12)}). ` +
++        `A fix applied to one seller workspace and not the other ships broken to half the sellers.`,
++    );
++    return;
++  }
++  pass(`${label} (identical on both surfaces)`);
+ }
+ 
+-mustInclude(
+-  "artifacts/banco-web/components/workspace/WorkspaceShell.tsx",
+-  ['data-banco-journey="workspace"', "isClerkConfigured", "authDisabled"],
+-  "workspace shell auth gate",
+-);
+-
+-mustInclude(
+-  "artifacts/banco-web/components/workspace/ManagedListingsPanel.tsx",
+-  [
+-    'data-banco-journey="workspace-listings"',
+-    "useGetMyManagedListings",
+-    "useBumpListing",
+-    "useDeleteListing",
+-    "getGetMyManagedListingsQueryKey",
+-    "copy.retry",
+-  ],
+-  "managed listings panel",
+-);
+-
+-mustInclude(
+-  "artifacts/banco-web/components/workspace/ListingCreateForm.tsx",
+-  [
+-    "workspace-create-listing",
+-    "workspace-edit-listing",
+-    "useCreateListing",
+-    "useUpdateListing",
+-    "getGetMyMetricsQueryKey",
+-    "uploadError",
+-    "photosUploading",
+-  ],
+-  "listing create/edit form",
+-);
+-
+-mustInclude(
+-  "artifacts/banco-web/components/workspace/LeadsPanel.tsx",
+-  [
+-    'data-banco-journey="workspace-leads"',
+-    "useGetDealerLeads",
+-    "leadsEmptyHint",
+-    "copy.retry",
+-  ],
+-  "leads panel",
+-);
+-
+-mustInclude(
+-  "artifacts/banco-web/components/workspace/MessagesInboxPanel.tsx",
+-  ['data-banco-journey="workspace-messages"', "useListConversations"],
+-  "messages inbox",
+-);
+-
+-mustInclude(
+-  "artifacts/banco-web/components/workspace/MessageThreadPanel.tsx",
+-  ['data-banco-journey="workspace-message-thread"', "useSendMessage"],
+-  "message thread",
+-);
+-
+-mustInclude(
+-  "artifacts/banco-web/middleware.ts",
+-  ["/workspace", "CLERK_PUBLISHABLE_KEY"],
+-  "middleware protects workspace",
+-);
++console.log("BANCO Phase 3 seller workspace parity audit\n");
++
++const ROUTES = [
++  "app/workspace/page.tsx",
++  "app/workspace/listings/page.tsx",
++  "app/workspace/listings/new/page.tsx",
++  "app/workspace/listings/[id]/edit/page.tsx",
++  "app/workspace/leads/page.tsx",
++  "app/workspace/messages/page.tsx",
++  "app/en/workspace/page.tsx",
++  "app/en/workspace/listings/page.tsx",
++  "app/en/workspace/listings/new/page.tsx",
++  "app/en/workspace/leads/page.tsx",
++  "app/en/workspace/messages/page.tsx",
++];
++
++const COMPONENT_CHECKS = [
++  {
++    rel: "components/workspace/WorkspaceShell.tsx",
++    snippets: ['data-banco-journey="workspace"', "isClerkConfigured", "authDisabled"],
++    label: "workspace shell auth gate",
++  },
++  {
++    rel: "components/workspace/ManagedListingsPanel.tsx",
++    snippets: [
++      'data-banco-journey="workspace-listings"',
++      "useGetMyManagedListings",
++      "useBumpListing",
++      "useDeleteListing",
++      "getGetMyManagedListingsQueryKey",
++      "copy.retry",
++    ],
++    label: "managed listings panel",
++  },
++  {
++    rel: "components/workspace/ListingCreateForm.tsx",
++    snippets: [
++      "workspace-create-listing",
++      "workspace-edit-listing",
++      "useCreateListing",
++      "useUpdateListing",
++      "getGetMyMetricsQueryKey",
++      "uploadError",
++      "photosUploading",
++      // The price input must hydrate from the raw stored value. Hydrating from
++      // price_display wrote a compacted number ("58.04M EGP" → 58.04) back as
++      // the asking price — measured 2026-08-23.
++      "detail.price_cash",
++      // A failed save must say what the API said, not a generic message.
++      "apiErrorMessage",
++    ],
++    label: "listing create/edit form",
++  },
++  {
++    rel: "lib/workspace-listing-form.ts",
++    snippets: [
++      // The four keys the API gates on that this form never used to render, so
++      // no value for them could ever be submitted. See clientContract.test.ts.
++      '"condition"',
++      '"offer_type"',
++      '"rental_term"',
++      '"capacity"',
++      // Required-ness is derived from the shared contract, never hand-listed.
++      "requiredSpecKeys",
++    ],
++    label: "listing spec fields cover the API floor",
++  },
++  {
++    rel: "components/workspace/LeadsPanel.tsx",
++    snippets: [
++      'data-banco-journey="workspace-leads"',
++      "useGetDealerLeads",
++      "leadsEmptyHint",
++      "copy.retry",
++    ],
++    label: "leads panel",
++  },
++  {
++    rel: "components/workspace/MessagesInboxPanel.tsx",
++    snippets: ['data-banco-journey="workspace-messages"', "useListConversations"],
++    label: "messages inbox",
++  },
++  {
++    rel: "components/workspace/MessageThreadPanel.tsx",
++    snippets: ['data-banco-journey="workspace-message-thread"', "useSendMessage"],
++    label: "message thread",
++  },
++  {
++    rel: "middleware.ts",
++    snippets: ["/workspace", "CLERK_PUBLISHABLE_KEY"],
++    label: "middleware protects workspace",
++  },
++];
++
++/** Files that must not drift between the two seller workspaces. */
++const TWIN_FILES = [
++  "components/workspace/ListingCreateForm.tsx",
++  "lib/workspace-listing-form.ts",
++];
++
++for (const surface of SURFACES) {
++  console.log(`\n── ${surface} ──`);
++  for (const route of ROUTES) mustExist(`artifacts/${surface}/${route}`);
++  for (const { rel, snippets, label } of COMPONENT_CHECKS) {
++    mustInclude(`artifacts/${surface}/${rel}`, snippets, `${surface}: ${label}`);
++  }
++}
++
++console.log(`\n── twin integrity ──`);
++for (const rel of TWIN_FILES) mustBeIdenticalAcrossSurfaces(rel, "seller workspace twin");
++
++/**
++ * A gate that does not declare its own size cannot report its own shrinkage:
++ * deleting a check leaves it printing "all passed". Adding or removing a check
++ * must update this number in the same commit.
++ */
++const EXPECTED_CHECKS = 40;
++if (checks !== EXPECTED_CHECKS) {
++  console.error(
++    `\n[FAIL] parity audit declares ${EXPECTED_CHECKS} checks but ran ${checks}. ` +
++      `Adding or removing a check must update EXPECTED_CHECKS in the same commit.`,
++  );
++  process.exit(1);
++}
+ 
+ if (failed > 0) {
+-  console.error(`\nSeller workspace parity audit failed (${failed})`);
++  console.error(`\nSeller workspace parity audit failed (${failed} of ${checks})`);
+   process.exit(1);
+ }
+ 
+-console.log("\nSeller workspace parity audit passed.");
++console.log(`\nSeller workspace parity audit passed (${checks} checks).`);
+ process.exit(0);
+-- 
+2.43.0
+

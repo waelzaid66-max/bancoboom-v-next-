@@ -24,6 +24,8 @@ chain gate EXPECTED_CHECKS pin     0      ← denominators still self-reported
 
 > **Nine ordered fixes. Zero applied. Two defects have grown since being filed.**
 
+**⚠️ §0 is the snapshot taken that morning and is now historical.** *By the end of 2026-08-23 eight of the nine carried measurements and applicable patches on the audit proof branch — see §7. Canonical itself is unchanged: nothing here has been pushed to `canonical/vnext-assembly`.*
+
 ---
 
 # §1 · THE CONDITIONS — unchanged, and they bind me too
@@ -55,15 +57,15 @@ security 0 blocking · mobile 127/127 · API 527+/527+ against a real PostgreSQL
 
 | # | Item | Evidence | Owner | DONE |
 |---|---|---|---|---|
-| **P0-1** | **`DEPLOY-01`** — fresh deploy fails, 0 tables | reproduced: `42704 ResolveOpClass`, then 414 ms / 74 tables with the extension | **A** | drop the DB, recreate empty, `run migrate` with no manual `CREATE EXTENSION` → **74 tables** |
+| **P0-1** ✅ | **`DEPLOY-01`** — fresh deploy fails, 0 tables | reproduced: `42704 ResolveOpClass`, then 414 ms / 74 tables with the extension | **A** | drop the DB, recreate empty, `run migrate` with no manual `CREATE EXTENSION` → **74 tables** |
 | **P0-2** ✅ | **`price_cash` always null** — **scope corrected 2026-08-23: 4 defects, 3 surfaces** | driver returns `"58039215.00"` typeof **string**; guard is `=== "number"` → `null` on every response. Casualties measured: web workaround corrupts the price · mobile edit field empty, save blocked · booking rate + estimate hidden on all three clients | **C** | `getListingDetail` returns `price_cash` as the exact stored integer **and** `p0-2-casualty-chain.mts` exits 0 |
 | **P0-3** ✅ | **web edit divides price by up to 10⁶** | measured: `45,398,169 → "45.40M EGP" → submits 45.4`. **Blocked on `P0-2`** — hydrating from `price_cash` on canonical yields an empty field | **B** | round-trip: hydrate then submit preserves the stored value **4/4**, both twins byte-identical, both typecheck 0 |
-| **P0-4** | **web workspace cannot create a listing** | all three categories rejected; the form discards the API's message | **B** | each category's payload passes `validateAttributes` from a mounted form |
-| **P0-5** | **deletion erases thread, booking, report, leads** | measured blast radius: `1·2·1·1·3·2 → 0·0·0·0·0·0` | **C** | Gate-4 matrix green **with no edit to the test file** |
-| **P0-6** | **`A-0a` root recursive `test`** | 0 of 75 branches; CI runs 3 test commands | **A** | `guard-reachability` returns **UNREACHABLE: 0** on the trunk candidate |
+| **P0-4** ✅ | **web workspace cannot create a listing** | **0 of 3 categories, 0 of 7 contexts** — no field rendered for `condition` / `offer_type` / `rental_term` / `capacity`, and `buildSpecsObject` can only send rendered keys. The static parity audit printed `[PASS]` throughout | **B** | every gating key has a field (32/32 on both surfaces, 13/32 fail without the fix) **and** the shared `requiredSpecKeys` equals `validateAttributes` by mutation (7/7) |
+| **P0-5** 🟠 | **deletion erases thread, booking, report, leads** | measured blast radius: `1·2·1·1·3·2 → 0·0·0·0·0·0` | **C** | Gate-4 matrix green **with no edit to the test file** |
+| **P0-6** ✅ | **`A-0a` root recursive `test`** | 0 of 75 branches; CI runs 3 test commands | **A** | `guard-reachability` returns **UNREACHABLE: 0** on the trunk candidate |
 | **P0-7** ✅ | **public API dies on an auth secret** | measured: bad key → 500 on `/api/v1/listings`, `/sitemap.xml`, `/robots.txt`; probes stay 200 | **C** | ~~`/api/readyz` returns 503~~ — **superseded by Correction #38**: `readyz` stays **200** and names `clerk_config: "down"`; public routes 200, protected routes **401**, `health.test.ts` unedited |
-| **P0-8** | **`fix/auth-account-deleted-retry` red** | **8 unguarded sites** across 4 surfaces; 3 commits added since filing | **D** | `pnpm run typecheck` exits 0 from the root |
-| **P0-9** | **no gate declares its size** | delete one check → `23/23 passed` exit 0; delete one assertion → `244/244 passed` exit 0 | **A** | remove any one check → the gate **fails** |
+| **P0-8** ✅ | **`fix/auth-account-deleted-retry` red** | ~~8 sites across 4 surfaces~~ — **Correction #36: 10 across 5**; the fifth is `banco-mobile/app/_layout.tsx` | **D** | `pnpm run typecheck` exits 0 from the root |
+| **P0-9** ✅ | **no gate declares its size** | delete one check → `23/23 passed` exit 0; delete one assertion → `244/244 passed` exit 0 | **A** | remove any one check → the gate **fails** |
 
 ---
 
@@ -178,8 +180,8 @@ plus a chain assertion **on the confidence gate**, which today it does not menti
 
 # §7 · STANDING
 
-**Register: 32 classes · 9 at P0 · 39 corrections published.**
-**Seven fully proven and patched: `P0-1 P0-2 P0-3 P0-6 P0-7 P0-8 P0-9`. `P0-5` behaviourally proven, patched for steps 1–2 only — 4 DTOs and 98 client references still open. `P0-4` specified, unproven. Five patches in `audit/patches/`, each `git apply --check` clean against a pristine tree.**
+**Register: 32 classes · 9 at P0 · 41 corrections published.**
+**Eight fully proven and patched: `P0-1 P0-2 P0-3 P0-4 P0-6 P0-7 P0-8 P0-9`. `P0-5` behaviourally proven, patched for steps 1–2 only — 4 DTOs, 38 OpenAPI touchpoints and 98 client references still open. Six patches in `audit/patches/`, each `git apply --check` clean against a pristine pre-fix tree.**
 **Sequencing: `P0-3` must not land without `P0-2` — alone it converts a wrong price into an empty one.**
 **Trunk candidate: `local/owner-assembly-20260822-r2` — 16 inputs, 135 commits, eight gates green, API 527 passed.**
 **Production: `NO-GO`.**
