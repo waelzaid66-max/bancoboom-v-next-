@@ -61,6 +61,39 @@ type ListingCreateFormProps = {
   listingId?: string;
 };
 
+/**
+ * The API names exactly which attribute is missing ("Missing required attribute
+ * for car: condition"). Discarding it left the seller with a completed form, a
+ * failed save, and a message that says nothing — measured 2026-08-23, the reason
+ * the web workspace defect went unnoticed for three weeks.
+ *
+ * The shape is read from `ApiError` in api-client-react/custom-fetch.ts: the
+ * parsed body is on `.data`, NOT on `.response` (which is a raw `Response`).
+ * The server envelope is `{ data, error: { code, message }, meta }`.
+ * `ApiError` is not exported from the package index, so this reads structurally.
+ *
+ * `err.message` is built by `buildErrorMessage`, which looks for top-level
+ * `title`/`detail`/`message`/`error` STRINGS. Our envelope's `error` is an
+ * object, so for a BANCO API error that message degrades to the bare
+ * "HTTP 400 Bad Request" prefix — an English HTTP status is worse for a seller
+ * than the localized generic copy, so the bare prefix is rejected here and only
+ * a message the fetch layer actually enriched (prefix + ": " + server text) is
+ * shown.
+ */
+function apiErrorMessage(err: unknown): string | null {
+  const e = err as { data?: { error?: { message?: unknown } }; message?: unknown };
+
+  const fromBody = e?.data?.error?.message;
+  if (typeof fromBody === "string" && fromBody.trim()) return fromBody.trim();
+
+  const message = typeof e?.message === "string" ? e.message.trim() : "";
+  // "HTTP 400 Bad Request" carries nothing the generic copy does not;
+  // "HTTP 400 Bad Request: <server text>" does.
+  if (message && !/^HTTP \d{3}[^:]*$/.test(message)) return message;
+
+  return null;
+}
+
 export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
   const isEdit = Boolean(listingId);
   const router = useRouter();
@@ -96,8 +129,13 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
     setTitle(detail.title ?? "");
     setDescription(detail.description ?? "");
     setLocation(detail.location ?? "");
-    const rawPrice = detail.price_display ?? "";
-    setPrice(String(rawPrice).replace(/[^\d.]/g, ""));
+    // Hydrate from the raw numeric price, never from price_display.
+    // price_display is compacted for humans ("58.04M EGP"), so stripping its
+    // non-digits produced 58.04 and the next save wrote that back — measured
+    // 2026-08-23: a listing stored at 58,039,215 EGP submitted as 58.04.
+    // price_cash carries the exact stored value.
+    const rawPrice = detail.price_cash;
+    setPrice(rawPrice == null ? "" : String(rawPrice));
     const specStrings: Record<string, string> = {};
     const rawSpecs = (detail.specs ?? {}) as Record<string, unknown>;
     for (const [k, v] of Object.entries(rawSpecs)) {
@@ -115,7 +153,10 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
   }, [detailQuery.data, isEdit]);
 
   const locationGroups = workspaceLocationGroups(locale);
-  const fields = workspaceSpecFields(category, copy);
+  // `specs` is passed in because the field list is context-sensitive: choosing
+  // "rent" adds the rental system, and choosing land or a bare commercial unit
+  // removes rooms/finishing — mirroring the API's own rules.
+  const fields = workspaceSpecFields(category, copy, specs, locale);
   const categoryOptions = workspaceCategoryOptions(copy);
 
   const buildSpecsObject = (): Record<string, unknown> => {
@@ -132,6 +173,14 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
     }
     return obj;
   };
+
+  // The API names the first missing attribute, one per request. Checking here
+  // means the seller sees every gap at once instead of discovering them one
+  // round-trip at a time. `required` comes from `requiredSpecKeys`, which
+  // mirrors the server floor — this never blocks something the API accepts.
+  const missingRequiredSpecs = fields
+    .filter((f) => f.required && !specs[f.key]?.trim())
+    .map((f) => f.label);
 
   const removeMedia = (id: string) => {
     setMedia((items) => {
@@ -181,6 +230,12 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
       return;
     }
 
+    if (missingRequiredSpecs.length > 0) {
+      const sep = locale === "ar" ? "، " : ", ";
+      setFormError(`${copy.createSpecsRequired}: ${missingRequiredSpecs.join(sep)}`);
+      return;
+    }
+
     if (media.some((m) => m.status === "uploading")) {
       setFormError(copy.photosUploading);
       return;
@@ -226,7 +281,7 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
             invalidate(listingId);
             router.push(`${prefix}/listings`);
           },
-          onError: () => setFormError(copy.errorGeneric),
+          onError: (err) => setFormError(apiErrorMessage(err) ?? copy.errorGeneric),
         },
       );
       return;
@@ -253,7 +308,7 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
             newId ? localizedPath(`/listing/${newId}`, locale) : `${prefix}/listings`,
           );
         },
-        onError: () => setFormError(copy.errorGeneric),
+        onError: (err) => setFormError(apiErrorMessage(err) ?? copy.errorGeneric),
       },
     );
   };
@@ -344,7 +399,12 @@ export function ListingCreateForm({ listingId }: ListingCreateFormProps) {
 
       {fields.map((f) => (
         <label key={f.key} style={fieldStyle}>
-          <span>{f.label}</span>
+          <span>
+            {f.label}
+            {/* Marked from requiredSpecKeys, which mirrors the API floor — so
+                the asterisk means "the API will reject this", never a guess. */}
+            {f.required ? <span style={{ color: "var(--banco-primary)" }}> *</span> : null}
+          </span>
           {f.options ? (
             <select
               value={specs[f.key] ?? ""}

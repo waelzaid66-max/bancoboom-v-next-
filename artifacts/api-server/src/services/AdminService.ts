@@ -615,7 +615,10 @@ export async function moderateListing(params: {
 
 interface AdminLeadRow {
   id: string;
-  listing_id: string;
+  // Nullable since migration 0008: the row survives its listing detached, so
+  // the evidence is not destroyed when a seller erases a listing (Gate 4).
+  // A null here means "the listing this refers to is gone", never "unknown".
+  listing_id: string | null;
   listing_title: string;
   action_type: "whatsapp" | "call" | "chat" | "finance_request";
   status: "new" | "contacted" | "closed";

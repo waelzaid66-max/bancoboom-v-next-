@@ -35,7 +35,10 @@ function codedError(code: string, message: string): CodedError {
 
 export interface ConversationSummaryDTO {
   id: string;
-  listing_id: string;
+  // Nullable since migration 0008: the row survives its listing detached, so
+  // the evidence is not destroyed when a seller erases a listing (Gate 4).
+  // A null here means "the listing this refers to is gone", never "unknown".
+  listing_id: string | null;
   listing_title: string | null;
   listing_thumb: string | null;
   counterparty_id: string;
@@ -346,7 +349,11 @@ export async function listConversations(
     ]),
   );
 
-  const listingIds = Array.from(new Set(rows.map((r) => r.listingId)));
+  // A conversation whose listing was deleted survives detached (migration
+  // 0008): there is no listing row, so there is no thumbnail to fetch.
+  const listingIds = Array.from(
+    new Set(rows.map((r) => r.listingId).filter((id): id is string => id !== null)),
+  );
   const thumbMap = await getThumbs(listingIds);
 
   return rows.map((r) => {
@@ -356,7 +363,7 @@ export async function listConversations(
       id: r.id,
       listing_id: r.listingId,
       listing_title: r.listingTitle ?? null,
-      listing_thumb: thumbMap.get(r.listingId) ?? null,
+      listing_thumb: r.listingId === null ? null : thumbMap.get(r.listingId) ?? null,
       counterparty_id: cpId,
       counterparty_name: nameMap.get(cpId) ?? "Unknown",
       // sharesConversation is true by construction — every row here IS one of

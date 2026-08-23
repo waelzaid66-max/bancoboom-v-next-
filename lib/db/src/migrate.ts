@@ -51,6 +51,15 @@ async function main(): Promise<void> {
   try {
     const db = drizzle(client);
     const startedAt = Date.now();
+
+    // pg_trgm must exist before 0000 creates its gin_trgm_ops indexes. Without
+    // it a fresh database fails with 42704 (ResolveOpClass) and rolls back to
+    // zero tables. This cannot be a forward migration: the journal runs 0000
+    // first and 0000 is what fails. It cannot be an edit to 0000 either, because
+    // baseline.ts hashes applied migrations. Idempotent, so it is safe on every
+    // deploy including one that changed nothing.
+    await client.query("CREATE EXTENSION IF NOT EXISTS pg_trgm;");
+
     console.log(`[migrate] applying migrations from ${MIGRATIONS_FOLDER}`);
 
     // Drizzle records applied migrations in drizzle.__drizzle_migrations and

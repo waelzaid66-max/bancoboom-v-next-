@@ -185,7 +185,11 @@ export default function MessagesScreen() {
             params: {
               id: item.id,
               name: item.counterparty_name,
-              listingId: item.listing_id,
+              // A conversation outlives its listing detached (migration 0008).
+              // The thread screen gates on listingId being present, so the key
+              // is omitted rather than passed as null — a null param serialises
+              // into the route as the string "null" and passes those guards.
+              ...(item.listing_id ? { listingId: item.listing_id } : {}),
               role: item.viewer_role,
             },
           })

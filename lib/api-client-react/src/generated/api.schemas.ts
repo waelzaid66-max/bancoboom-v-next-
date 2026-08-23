@@ -498,7 +498,7 @@ export const LeadStatus = {
 
 export interface Lead {
   id?: string;
-  listing_id?: string;
+  listing_id?: string | null;
   listing_title?: string;
   action_type?: LeadActionType;
   status?: LeadStatus;
@@ -530,7 +530,7 @@ export const ConversationSummaryViewerRole = {
 
 export interface ConversationSummary {
   id: string;
-  listing_id: string;
+  listing_id: string | null;
   listing_title?: string | null;
   listing_thumb?: string | null;
   counterparty_id?: string;
@@ -1330,7 +1330,7 @@ export const ReportStatus = {
 
 export interface Report {
   id?: string;
-  listing_id?: string;
+  listing_id?: string | null;
   listing_title?: string | null;
   reason?: ReportReason;
   details?: string | null;
@@ -1789,7 +1789,7 @@ export interface AvailabilityRange {
  */
 export interface Booking {
   id: string;
-  listing_id: string;
+  listing_id: string | null;
   check_in: string;
   check_out: string;
   nights: number;
@@ -1815,7 +1815,7 @@ export interface CreateBookingBody {
  */
 export interface BookingListItem {
   id: string;
-  listing_id: string;
+  listing_id: string | null;
   check_in: string;
   check_out: string;
   nights: number;

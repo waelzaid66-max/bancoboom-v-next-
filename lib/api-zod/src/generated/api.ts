@@ -785,7 +785,7 @@ export const CreateBookingBody = zod.object({
 export const CreateBookingResponse = zod.object({
   "data": zod.object({
   "id": zod.string(),
-  "listing_id": zod.string(),
+  "listing_id": zod.string().nullable(),
   "check_in": zod.string(),
   "check_out": zod.string(),
   "nights": zod.number(),
@@ -821,7 +821,7 @@ export const ListBookingsQueryParams = zod.object({
 export const ListBookingsResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.string(),
-  "listing_id": zod.string(),
+  "listing_id": zod.string().nullable(),
   "check_in": zod.string(),
   "check_out": zod.string(),
   "nights": zod.number(),
@@ -862,7 +862,7 @@ export const UpdateBookingBody = zod.object({
 export const UpdateBookingResponse = zod.object({
   "data": zod.object({
   "id": zod.string(),
-  "listing_id": zod.string(),
+  "listing_id": zod.string().nullable(),
   "check_in": zod.string(),
   "check_out": zod.string(),
   "nights": zod.number(),
@@ -1604,7 +1604,7 @@ export const GetSavedListingsResponse = zod.object({
 export const ListConversationsResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.string(),
-  "listing_id": zod.string(),
+  "listing_id": zod.string().nullable(),
   "listing_title": zod.string().nullish(),
   "listing_thumb": zod.string().nullish(),
   "counterparty_id": zod.string().optional(),
@@ -1637,7 +1637,7 @@ export const CreateConversationBody = zod.object({
 export const CreateConversationResponse = zod.object({
   "data": zod.object({
   "id": zod.string(),
-  "listing_id": zod.string(),
+  "listing_id": zod.string().nullable(),
   "listing_title": zod.string().nullish(),
   "listing_thumb": zod.string().nullish(),
   "counterparty_id": zod.string().optional(),
@@ -2595,7 +2595,7 @@ export const GetDealerLeadsQueryParams = zod.object({
 export const GetDealerLeadsResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.string().optional(),
-  "listing_id": zod.string().optional(),
+  "listing_id": zod.string().nullish(),
   "listing_title": zod.string().optional(),
   "action_type": zod.enum(['whatsapp', 'call', 'chat', 'finance_request']).optional(),
   "status": zod.enum(['new', 'contacted', 'closed']).optional(),
@@ -2641,7 +2641,7 @@ export const CreateReportBody = zod.object({
 export const CreateReportResponse = zod.object({
   "data": zod.object({
   "id": zod.string().optional(),
-  "listing_id": zod.string().optional(),
+  "listing_id": zod.string().nullish(),
   "listing_title": zod.string().nullish(),
   "reason": zod.enum(['fake_price', 'wrong_data', 'scam', 'duplicate', 'other']).optional(),
   "details": zod.string().nullish(),
@@ -3608,7 +3608,7 @@ export const GetAdminLeadsQueryParams = zod.object({
 export const GetAdminLeadsResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.string().optional(),
-  "listing_id": zod.string().optional(),
+  "listing_id": zod.string().nullish(),
   "listing_title": zod.string().optional(),
   "action_type": zod.enum(['whatsapp', 'call', 'chat', 'finance_request']).optional(),
   "status": zod.enum(['new', 'contacted', 'closed']).optional(),
@@ -4068,7 +4068,7 @@ export const GetAdminReportsQueryParams = zod.object({
 export const GetAdminReportsResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.string().optional(),
-  "listing_id": zod.string().optional(),
+  "listing_id": zod.string().nullish(),
   "listing_title": zod.string().nullish(),
   "reason": zod.enum(['fake_price', 'wrong_data', 'scam', 'duplicate', 'other']).optional(),
   "details": zod.string().nullish(),
@@ -4105,7 +4105,7 @@ export const ResolveReportBody = zod.object({
 export const ResolveReportResponse = zod.object({
   "data": zod.object({
   "id": zod.string().optional(),
-  "listing_id": zod.string().optional(),
+  "listing_id": zod.string().nullish(),
   "listing_title": zod.string().nullish(),
   "reason": zod.enum(['fake_price', 'wrong_data', 'scam', 'duplicate', 'other']).optional(),
   "details": zod.string().nullish(),

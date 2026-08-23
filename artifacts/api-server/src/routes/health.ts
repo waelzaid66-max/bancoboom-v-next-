@@ -136,6 +136,42 @@ router.get("/readyz", async (_req, res) => {
     checks.upload_claims = "down";
   }
 
+  // A misconfigured Clerk key takes down every authenticated route while the
+  // database is perfectly healthy. Readiness that ignores it reports "ok" for a
+  // process that cannot serve a signed-in user — measured 2026-08-23. A
+  // publishable key is `pk_test_`/`pk_live_` + base64("domain$"); anything else
+  // makes @clerk/backend throw "Publishable key not valid."
+  {
+    const pk = (process.env.CLERK_PUBLISHABLE_KEY ?? "").trim();
+    const sk = (process.env.CLERK_SECRET_KEY ?? "").trim();
+    const shapeOk =
+      /^pk_(test|live)_[A-Za-z0-9+/=]+$/.test(pk) &&
+      /^sk_(test|live)_/.test(sk) &&
+      (() => {
+        try {
+          return Buffer.from(pk.slice(pk.indexOf("_", 3) + 1), "base64")
+            .toString("utf8")
+            .endsWith("$");
+        } catch {
+          return false;
+        }
+      })();
+    if (shapeOk) {
+      checks.clerk_config = "ok";
+    } else {
+      // Reported, but deliberately NOT a readiness failure. The public
+      // marketplace, search and the crawler routes all serve correctly without
+      // Clerk — verified 2026-08-23 — so a 503 here would take a working public
+      // site out of rotation because sign-in is misconfigured. An operator sees
+      // the named check; the orchestrator keeps routing what still works.
+      checks.clerk_config = "down";
+      logger.error(
+        { hasPublishable: pk.length > 0, hasSecret: sk.length > 0 },
+        "Clerk keys missing or malformed — authenticated routes will answer 401 until this is fixed",
+      );
+    }
+  }
+
   res.status(healthy ? 200 : 503).json({
     status: healthy ? "ok" : "degraded",
     checks,

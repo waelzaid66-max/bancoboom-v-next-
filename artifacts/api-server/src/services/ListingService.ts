@@ -758,8 +758,13 @@ export async function getListingDetail(listingId: string, viewerClerkId?: string
     // Additive: the raw numeric cash price. For furnished/daily rentals it is the
     // per-night rate the booking widget multiplies by the night count for a
     // pre-booking estimate (the server stays authoritative on the real total).
+    //
+    // The driver returns numeric/decimal as a STRING — formatEGP above takes it
+    // as one. A `typeof === "number"` guard therefore made this field null on
+    // every response since the initial import, which forced clients to parse
+    // price_display and divide M-band prices by a million on edit.
     price_cash:
-      typeof listing.base_price_cash === "number" ? listing.base_price_cash : null,
+      listing.base_price_cash == null ? null : Number(listing.base_price_cash),
     location: listing.location,
     status: listing.status,
     created_at: listing.created_at?.toISOString() ?? new Date().toISOString(),
@@ -1558,7 +1563,38 @@ export async function deleteListing(
 
   if (!listing) throw Object.assign(new Error("Listing not found or access denied"), { code: "NOT_FOUND" });
 
+  // Read the media identities BEFORE the delete: listing_media keeps ON DELETE
+  // CASCADE, so after the statement below these rows no longer exist and the
+  // stored objects would be unreachable — paid for, served to nobody.
+  const mediaRows = await db
+    .select({ url: listingMedia.url, thumbnailUrl: listingMedia.thumbnailUrl })
+    .from(listingMedia)
+    .where(eq(listingMedia.listingId, id));
+
   await db.delete(listings).where(eq(listings.id, id));
+
+  // Storage reclamation happens AFTER the DB delete has committed and never
+  // rolls it back. deleteServingUrls is idempotent, skips foreign URLs, and
+  // reports failures rather than throwing — a storage outage must not leave the
+  // seller with a listing they asked to remove.
+  const servingUrls = [
+    ...mediaRows.map((m) => m.url),
+    ...mediaRows.map((m) => m.thumbnailUrl),
+  ].filter((u): u is string => typeof u === "string" && u.length > 0);
+
+  if (servingUrls.length > 0) {
+    try {
+      const result = await objectStorageService.deleteServingUrls(servingUrls);
+      if (result.failed > 0) {
+        logger.error(
+          { listingId: id, ...result },
+          "Listing media reclamation reported failures",
+        );
+      }
+    } catch (error) {
+      logger.error({ err: error, listingId: id }, "Listing media reclamation failed");
+    }
+  }
 
   return { id, deleted: true };
 }

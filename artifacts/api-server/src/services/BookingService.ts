@@ -60,7 +60,10 @@ export async function getListingAvailability(listingId: string): Promise<Availab
 
 export interface BookingDTO {
   id: string;
-  listing_id: string;
+  // Nullable since migration 0008: the row survives its listing detached, so
+  // the evidence is not destroyed when a seller erases a listing (Gate 4).
+  // A null here means "the listing this refers to is gone", never "unknown".
+  listing_id: string | null;
   check_in: string;
   check_out: string;
   nights: number;
@@ -295,7 +298,12 @@ export async function listBookings(
       .where(
         inArray(
           listings.id,
-          rows.map((r) => r.booking.listingId),
+          // A booking whose listing was deleted keeps the booking as evidence
+          // (migration 0008) but has no listing row and therefore no host to
+          // name. Drop the nulls rather than querying for them.
+          rows
+            .map((r) => r.booking.listingId)
+            .filter((id): id is string => id !== null),
         ),
       );
     hostNames = new Map(ownerRows.map((o) => [o.listingId, o.ownerName ?? ""]));
@@ -306,7 +314,9 @@ export async function listBookings(
     listing_title: r.listingTitle ?? "",
     listing_location: r.listingLocation ?? null,
     counterparty_name:
-      role === "host" ? r.guestName ?? null : hostNames.get(r.booking.listingId) ?? null,
+      role === "host"
+        ? r.guestName ?? null
+        : (r.booking.listingId === null ? null : hostNames.get(r.booking.listingId) ?? null),
   }));
 }
 

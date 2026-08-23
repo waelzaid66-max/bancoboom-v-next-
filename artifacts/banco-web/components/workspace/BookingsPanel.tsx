@@ -71,7 +71,13 @@ function BookingCard({
   onAction: (id: string, action: UpdateBookingBodyAction) => void;
   pendingId: string | null;
 }) {
-  const listingHref = localizedPath(`/listing/${booking.listing_id}`, locale);
+  // A booking survives its listing detached (migration 0008), so listing_id is
+  // nullable. Interpolating null produced the href "/listing/null", which is a
+  // 404 dressed as a working button.
+  const listingHref =
+    booking.listing_id == null
+      ? null
+      : localizedPath(`/listing/${booking.listing_id}`, locale);
   const busy = pendingId === booking.id;
   const statusColor = BOOKING_STATUS_COLORS[booking.status] ?? BOOKING_STATUS_COLORS.requested;
   const total = formatBookingMoney(booking.total_price, booking.currency);
@@ -111,9 +117,11 @@ function BookingCard({
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.65rem", alignItems: "center" }}>
         {total ? <strong>{total}</strong> : null}
-        <Link href={listingHref} style={{ ...actionBtn, textDecoration: "none" }}>
-          {copy.bookingsViewListing}
-        </Link>
+        {listingHref ? (
+          <Link href={listingHref} style={{ ...actionBtn, textDecoration: "none" }}>
+            {copy.bookingsViewListing}
+          </Link>
+        ) : null}
         {busy ? (
           <span style={{ fontSize: "0.82rem", color: "var(--banco-muted)" }}>{copy.loading}</span>
         ) : (

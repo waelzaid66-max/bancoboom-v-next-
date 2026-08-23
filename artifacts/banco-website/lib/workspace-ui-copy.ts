@@ -34,6 +34,7 @@ export type WorkspaceUiCopy = {
   createPrice: string;
   createPhotos: string;
   createPhotosHint: string;
+  createSpecsRequired: string;
   createSuccess: string;
   editTitle: string;
   editSubmit: string;
@@ -214,6 +215,10 @@ export type WorkspaceUiCopy = {
   specIndustrialType: string;
   specEquipmentType: string;
   specCondition: string;
+  specOfferType: string;
+  specRentalTerm: string;
+  specFinishing: string;
+  specCapacity: string;
 };
 
 const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
@@ -251,6 +256,7 @@ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
     createPrice: "السعر (جنيه)",
     createPhotos: "الصور",
     createPhotosHint: "ارفع صورة واحدة على الأقل (JPG أو PNG).",
+    createSpecsRequired: "أكمل الحقول المطلوبة",
     createSuccess: "تم نشر الإعلان بنجاح.",
     editTitle: "تعديل الإعلان",
     editSubmit: "حفظ التغييرات",
@@ -434,6 +440,10 @@ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
     specIndustrialType: "النوع الصناعي",
     specEquipmentType: "نوع المعدة",
     specCondition: "الحالة",
+    specOfferType: "نوع العرض",
+    specRentalTerm: "نظام الإيجار",
+    specFinishing: "التشطيب",
+    specCapacity: "الطاقة الإنتاجية",
   },
   en: {
     title: "Seller workspace",
@@ -469,6 +479,7 @@ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
     createPrice: "Price (EGP)",
     createPhotos: "Photos",
     createPhotosHint: "Upload at least one image (JPG or PNG).",
+    createSpecsRequired: "Complete the required fields",
     createSuccess: "Listing published successfully.",
     editTitle: "Edit listing",
     editSubmit: "Save changes",
@@ -653,6 +664,10 @@ const COPY: Record<SiteLocale, WorkspaceUiCopy> = {
     specIndustrialType: "Industrial type",
     specEquipmentType: "Equipment type",
     specCondition: "Condition",
+    specOfferType: "Offer type",
+    specRentalTerm: "Rental system",
+    specFinishing: "Finishing",
+    specCapacity: "Capacity",
   },
 };
 

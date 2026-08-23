@@ -966,8 +966,7 @@ export const leadHistory = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     listingId: uuid("listing_id")
-      .references(() => listings.id, { onDelete: "cascade" })
-      .notNull(),
+      .references(() => listings.id, { onDelete: "set null" }),
     buyerId: uuid("buyer_id").references(() => users.id),
     sellerId: uuid("seller_id").references(() => users.id).notNull(),
     actionType: leadActionEnum("action_type").notNull(),
@@ -1102,8 +1101,7 @@ export const conversations = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     listingId: uuid("listing_id")
-      .references(() => listings.id, { onDelete: "cascade" })
-      .notNull(),
+      .references(() => listings.id, { onDelete: "set null" }),
     buyerId: uuid("buyer_id")
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
@@ -1876,8 +1874,7 @@ export const reports = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     listingId: uuid("listing_id")
-      .references(() => listings.id, { onDelete: "cascade" })
-      .notNull(),
+      .references(() => listings.id, { onDelete: "set null" }),
     reporterUserId: uuid("reporter_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -2909,8 +2906,7 @@ export const bookings = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     listingId: uuid("listing_id")
-      .references(() => listings.id, { onDelete: "cascade" })
-      .notNull(),
+      .references(() => listings.id, { onDelete: "set null" }),
     // The guest making the reservation.
     guestId: uuid("guest_id")
       .references(() => users.id, { onDelete: "set null" }),

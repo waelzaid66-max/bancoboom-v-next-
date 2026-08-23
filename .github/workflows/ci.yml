@@ -141,6 +141,12 @@ jobs:
       - name: Demo seed production guard (static)
         run: pnpm --filter @workspace/api-server run test:seed-guard
 
+      # Recursive workspace tests. build and typecheck are recursive; test was not,
+      # so any guard outside api-server and banco-mobile could never execute no
+      # matter how correctly it was wired.
+      - name: Workspace tests (recursive)
+        run: pnpm run test
+
   # The mobile pack above reads source files as TEXT and matches patterns; not
   # one of its tests imports a renderer. That means a screen can fail to bundle
   # — a bad import, a missing module, a syntax error past the regex — and every

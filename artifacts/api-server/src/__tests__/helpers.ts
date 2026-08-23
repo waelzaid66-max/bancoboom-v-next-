@@ -9,9 +9,9 @@
  */
 import { afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
-import { users } from "@workspace/db/schema";
+import { users, leadHistory } from "@workspace/db/schema";
 
 export { db, pool, randomUUID };
 
@@ -50,6 +50,14 @@ export async function createUser(
 /** Delete users by id (cascades to their listings/transactions/invoices). */
 export async function deleteUsers(...ids: string[]): Promise<void> {
   for (const id of ids) {
+    // lead_history survives its listing by design (Gate 4: deleting a listing
+    // must not erase the lead record) and its buyer_id/seller_id are NO ACTION,
+    // so a detached row blocks this hard delete. Production never hard-deletes a
+    // user — account deletion is a soft delete — so this ordering belongs to the
+    // fixture, not to the schema.
+    await db.delete(leadHistory).where(
+      or(eq(leadHistory.sellerId, id), eq(leadHistory.buyerId, id)),
+    );
     await db.delete(users).where(eq(users.id, id));
   }
 }

@@ -6,7 +6,10 @@ import { isUniqueViolation } from "../lib/billing";
 
 type ReportRow = {
   id: string;
-  listing_id: string;
+  // Nullable since migration 0008: the row survives its listing detached, so
+  // the evidence is not destroyed when a seller erases a listing (Gate 4).
+  // A null here means "the listing this refers to is gone", never "unknown".
+  listing_id: string | null;
   listing_title: string | null;
   reason: "fake_price" | "wrong_data" | "scam" | "duplicate" | "other";
   details: string | null;
@@ -19,7 +22,7 @@ type ReportRow = {
 
 function serializeReport(r: {
   id: string;
-  listingId: string;
+  listingId: string | null;
   listingTitle: string | null;
   reason: ReportRow["reason"];
   details: string | null;

@@ -109,7 +109,13 @@ export default function BookingsScreen() {
     return (
       <Pressable
         style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius }]}
-        onPress={() => router.push(`/listing/${item.listing_id}`)}
+        // listing_id is null once the listing is deleted; the booking row stays
+        // as the guest's record of it, but there is nothing to open.
+        onPress={() => {
+          if (!item.listing_id) return;
+          router.push(`/listing/${item.listing_id}`);
+        }}
+        disabled={!item.listing_id}
         testID={`booking-row-${item.id}`}
       >
         <View style={[styles.cardTop, { flexDirection: rowDir }]}>

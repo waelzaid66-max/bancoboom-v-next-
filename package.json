@@ -9,6 +9,7 @@
     "build": "pnpm run typecheck && pnpm -r --workspace-concurrency=1 --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "test": "pnpm -r --if-present run test",
     "typecheck:website": "pnpm --filter @workspace/design-tokens run typecheck && pnpm --filter @workspace/search-contract run typecheck && pnpm --filter @workspace/landing run typecheck && pnpm --filter @workspace/banco-web run typecheck && pnpm --filter @workspace/banco-website run typecheck",
     "lint": "eslint scripts --max-warnings 0",
     "lint:website": "eslint artifacts/banco-web artifacts/banco-website artifacts/landing --max-warnings 0",

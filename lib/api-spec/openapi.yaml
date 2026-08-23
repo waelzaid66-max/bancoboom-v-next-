@@ -598,6 +598,7 @@ components:
           type: string
         listing_id:
           type: string
+          nullable: true
         listing_title:
           type: string
         action_type:
@@ -623,6 +624,7 @@ components:
           type: string
         listing_id:
           type: string
+          nullable: true
         listing_title:
           type: string
           nullable: true
@@ -1834,6 +1836,7 @@ components:
           type: string
         listing_id:
           type: string
+          nullable: true
         listing_title:
           type: string
           nullable: true
@@ -2522,6 +2525,7 @@ components:
           type: string
         listing_id:
           type: string
+          nullable: true
         check_in:
           type: string
         check_out:
@@ -2573,6 +2577,7 @@ components:
           type: string
         listing_id:
           type: string
+          nullable: true
         check_in:
           type: string
         check_out:

@@ -72,7 +72,7 @@ export default function ReportsPage() {
               reports.map((r: (typeof reports)[number]) => (
                 <TableRow key={r.id}>
                   <TableCell>
-                    <div className="font-medium truncate max-w-[260px]">{r.listing_title ?? r.listing_id}</div>
+                    <div className="font-medium truncate max-w-[260px]">{r.listing_title ?? r.listing_id ?? "—"}</div>
                     {r.details ? (
                       <div className="text-xs text-muted-foreground truncate max-w-[260px]">{r.details}</div>
                     ) : null}

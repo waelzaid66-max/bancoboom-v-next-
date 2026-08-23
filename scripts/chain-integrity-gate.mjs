@@ -2223,6 +2223,48 @@ const CHECKS = [
     why: "The root build must serialize workspaces because repeated parallel runs reproduce Next export ENOTEMPTY while isolated and sequential builds pass",
   },
   {
+    id: "P-listing-delete-detaches-evidence",
+    file: "lib/db/src/schema/index.ts",
+    test: (s) => {
+      // Comments are stripped first: this asserts a code shape, and a sentence
+      // describing the shape must not be able to satisfy it.
+      const code = s
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+      // conversations, bookings, reports and lead_history are the seller's and
+      // the buyer's record that a listing existed. Deleting the listing must
+      // detach them, never destroy them (Gate 4). listing_media stays CASCADE
+      // on purpose — the contract requires those rows gone.
+      const tables = ["leadHistory", "conversations", "reports", "bookings"];
+      return tables.every((table) => {
+        const start = code.indexOf(`export const ${table} = pgTable(`);
+        if (start < 0) return false;
+        const next = code.indexOf("\nexport const ", start + 1);
+        const block = code.slice(start, next < 0 ? code.length : next);
+        const at = block.indexOf('listingId: uuid("listing_id")');
+        if (at < 0) return false;
+        // The declaration ends at the next column, which starts on its own line.
+        const decl = block.slice(at, block.indexOf("\n    ", at + 40));
+        return /onDelete:\s*"set null"/.test(decl) && !/\.notNull\(\)/.test(decl);
+      });
+    },
+    why: "Deleting a listing must detach its conversations, bookings, reports and leads (ON DELETE SET NULL, nullable) rather than erase the evidence that it existed",
+  },
+  {
+    id: "P-migration-0008-detach-listing-evidence-registered",
+    file: "lib/db/migrations/meta/_journal.json",
+    test: (s) => {
+      const journal = JSON.parse(s);
+      const entry = (journal.entries ?? []).find(
+        (e) => e.tag === "0008_detach_listing_evidence",
+      );
+      // Registered AND in its committed position: renumbering it would replay
+      // the cascade drop on a database that already ran it under another index.
+      return Boolean(entry) && entry.idx === 8;
+    },
+    why: "The migration that converts the four listing foreign keys to ON DELETE SET NULL must stay registered at idx 8; unregistering it silently restores the cascade on every fresh deploy",
+  },
+  {
     id: "P-next-build-export-cleanup-aws-docker",
     file: "deploy/aws/Dockerfile.banco-web",
     test: (s) => {
@@ -2237,6 +2279,20 @@ const CHECKS = [
 
 function main() {
   console.log("BANCO chain-integrity-gate (source markers only)\n");
+  // The summary below prints `${CHECKS.length - failed}/${CHECKS.length}`, so the
+  // denominator is its own source: deleting an assertion turns 247/247 into
+  // 246/246 and still reads "passed" with exit 0. Declaring the expected size
+  // makes removing a protection a deliberate two-line change instead of a silent
+  // one. Raise this number in the same commit that adds an assertion.
+  const EXPECTED_CHECKS = 247;
+  if (CHECKS.length !== EXPECTED_CHECKS) {
+    console.error(
+      `[FAIL] chain gate declares ${EXPECTED_CHECKS} checks but has ${CHECKS.length}. ` +
+        `Adding or removing an assertion must update EXPECTED_CHECKS in the same commit.`,
+    );
+    process.exit(1);
+  }
+
   const failed = [];
   for (const c of CHECKS) {
     const full = path.join(ROOT, c.file);

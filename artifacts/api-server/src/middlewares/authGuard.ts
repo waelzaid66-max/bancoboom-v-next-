@@ -37,7 +37,18 @@ async function findActiveUserByClerkId(clerkId: string): Promise<DbUserRow | und
  * are not — a lingering Clerk session must not keep deleted users operational.
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  const auth = getAuth(req);
+  // getAuth throws when clerkMiddleware did not complete — a missing or
+  // malformed Clerk key. The request is then unauthenticated, which is a 401,
+  // not a 500: measured 2026-08-23, every protected route returned
+  // INTERNAL_ERROR and an operator reading error rates saw a server fault
+  // instead of a configuration one. This still fails closed — no protected route
+  // serves data — it just says so with the correct status.
+  let auth: ReturnType<typeof getAuth> | null = null;
+  try {
+    auth = getAuth(req);
+  } catch {
+    auth = null;
+  }
   const clerkId = auth?.userId;
 
   if (!clerkId) {
@@ -75,7 +86,14 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 
 export function requireDealerRole(req: Request, res: Response, next: NextFunction): void {
-  const auth = getAuth(req);
+  // Same reasoning as requireAuth: a Clerk configuration failure makes the
+  // request unauthenticated (401), not a server fault (500). Still fails closed.
+  let auth: ReturnType<typeof getAuth> | null = null;
+  try {
+    auth = getAuth(req);
+  } catch {
+    auth = null;
+  }
   const clerkId = auth?.userId;
 
   if (!clerkId) {
@@ -105,7 +123,15 @@ export function requireDealerRole(req: Request, res: Response, next: NextFunctio
 }
 
 export function requireAdminRole(req: Request, res: Response, next: NextFunction): void {
-  const auth = getAuth(req);
+  // Same reasoning as requireAuth: getAuth throws when clerkMiddleware did not
+  // complete, and an unauthenticated admin request is a 401, not a 500. Still
+  // fails closed — no admin route serves anything without a resolved role.
+  let auth: ReturnType<typeof getAuth> | null = null;
+  try {
+    auth = getAuth(req);
+  } catch {
+    auth = null;
+  }
   const clerkId = auth?.userId;
 
   if (!clerkId) {
@@ -154,7 +180,21 @@ export function requirePermission(permission: Permission) {
 }
 
 export function optionalAuth(req: Request, res: Response, next: NextFunction): void {
-  const auth = getAuth(req);
+  // getAuth throws when clerkMiddleware did not complete — which happens when the
+  // Clerk keys are missing or malformed. On an OPTIONAL route that is not an
+  // error: it means there is no signed-in user, which is the state this
+  // middleware exists to tolerate. Measured 2026-08-23: without this, a Clerk
+  // misconfiguration turned the public /api/v1/search into a 500.
+  //
+  // requireAuth catches the same throw, but answers 401 instead of continuing:
+  // a route that needs a user must still fail closed. The difference between the
+  // two is the response, not the tolerance.
+  let auth: ReturnType<typeof getAuth> | null = null;
+  try {
+    auth = getAuth(req);
+  } catch {
+    auth = null;
+  }
   const clerkId = auth?.userId;
   if (!clerkId) {
     next();
@@ -208,7 +248,15 @@ export async function resolveDbUser(req: Request, res: Response, next: NextFunct
  * continuing without a resolved dbUserId would be unsafe.
  */
 export async function requireDbUser(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const clerkId = req.userId ?? getAuth(req)?.userId ?? undefined;
+  // req.userId is set by requireAuth upstream; the getAuth fallback must not
+  // throw when clerkMiddleware did not complete.
+  let fallbackClerkId: string | undefined;
+  try {
+    fallbackClerkId = getAuth(req)?.userId ?? undefined;
+  } catch {
+    fallbackClerkId = undefined;
+  }
+  const clerkId = req.userId ?? fallbackClerkId;
   if (!clerkId) {
     res.status(401).json(errorResponse("UNAUTHORIZED", "Authentication required"));
     return;

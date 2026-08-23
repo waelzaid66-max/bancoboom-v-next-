@@ -13,7 +13,7 @@ import {
 import { requestLogger } from "./middlewares/requestLogger";
 import { isAllowedOrigin, shouldRejectUnsafeOrigin } from "./lib/cors";
 import { errorResponse } from "./validators/schemas";
-import { accessLogger } from "./lib/logger";
+import { accessLogger, logger } from "./lib/logger";
 import router from "./routes";
 import healthRouter from "./routes/health";
 import seoRouter from "./seoRoutes";
@@ -125,15 +125,45 @@ app.get("/", (_req, res) => {
 });
 app.use("/api", healthRouter);
 
-// Resolve publishable key from request host for multi-domain support
-app.use(
-  clerkMiddleware((req) => ({
-    publishableKey: publishableKeyFromHost(
-      getClerkProxyHost(req) ?? "",
-      process.env.CLERK_PUBLISHABLE_KEY,
-    ),
-  })),
-);
+// Resolve publishable key from request host for multi-domain support.
+//
+// This middleware is global, so the entire public marketplace and the
+// crawler-facing routes below sit behind it. clerkMiddleware throws when the
+// Clerk keys are missing or malformed, and the error handler turns that into a
+// 500 — measured: with no key, /api/v1/listings, /sitemap.xml and /robots.txt
+// all returned 500 while /api/healthz and /api/readyz stayed 200.
+//
+// An auth *configuration* failure is not a failure of an anonymous request. It
+// means there is no auth context, which is exactly the state a public route
+// expects. Routes that need a user still fail closed at requireAuth with 401,
+// so nothing becomes reachable that was not reachable before.
+const clerk = clerkMiddleware((req) => ({
+  publishableKey: publishableKeyFromHost(
+    getClerkProxyHost(req) ?? "",
+    process.env.CLERK_PUBLISHABLE_KEY,
+  ),
+}));
+
+let clerkConfigErrorLogged = false;
+
+app.use((req, res, next) => {
+  try {
+    clerk(req, res, (err?: unknown) => {
+      if (!err) return next();
+      if (!clerkConfigErrorLogged) {
+        clerkConfigErrorLogged = true;
+        logger.error({ err }, "Clerk middleware unavailable — continuing without an auth context");
+      }
+      next();
+    });
+  } catch (err) {
+    if (!clerkConfigErrorLogged) {
+      clerkConfigErrorLogged = true;
+      logger.error({ err }, "Clerk middleware threw — continuing without an auth context");
+    }
+    next();
+  }
+});
 
 // Public, crawler-facing HTML/XML routes (/l/:id, /sitemap.xml, /robots.txt).
 // Mounted BEFORE /api and the 404 handler so these paths resolve to real pages.

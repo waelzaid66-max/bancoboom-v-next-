@@ -8,6 +8,7 @@
     "./locations": "./src/locations.ts",
     "./cars": "./src/cars.ts",
     "./categories": "./src/categories.ts",
-    "./markets": "./src/markets.ts"
+    "./markets": "./src/markets.ts",
+    "./listings": "./src/listings.ts"
   }
 }
