@@ -14,6 +14,7 @@
     "lint": "eslint scripts --max-warnings 0",
     "lint:website": "eslint artifacts/banco-web artifacts/banco-website artifacts/landing --max-warnings 0",
     "lint:report": "eslint scripts artifacts/api-server/src lib/db/src",
+    "test:api-test-db-safety": "node --test scripts/run-api-tests-local.safety.test.mjs",
     "ops:website-ci": "node scripts/website-ci-local.mjs",
     "ops:website-staging-prep": "node scripts/website-staging-prep-audit.mjs",
     "ops:website-staging-smoke": "node scripts/website-staging-smoke.mjs",
