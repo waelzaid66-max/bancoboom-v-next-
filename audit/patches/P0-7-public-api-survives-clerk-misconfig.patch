@@ -1,0 +1,269 @@
+From 204056abe3e43507468fcee4a69602f9c8756f58 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 23 Aug 2026 16:59:04 +0000
+Subject: [PATCH] proof: P0-7 public API survives a Clerk misconfiguration, and
+ readiness names it
+
+- app.ts: clerkMiddleware wrapped so a configuration failure yields no auth
+  context instead of a 500. Public routes are anonymous by definition
+- authGuard: all five getAuth callers guarded. requireAuth / requireAdminRole /
+  requireDealerRole answer 401 instead of 500; optionalAuth continues; requireDbUser
+  falls back safely. Still fails closed - no protected route serves data
+- health.ts: clerk_config appears in readyz checks but does NOT flip readiness.
+  A 503 would take a working public site out of rotation because sign-in is broken
+- test helper deletes detached lead_history before hard-deleting a user, because
+  Gate 4 makes that row survive its listing. Production never hard-deletes a user
+- full API suite: 511 passed, 3 skipped, 0 failed
+---
+ artifacts/api-server/src/__tests__/helpers.ts | 12 +++-
+ artifacts/api-server/src/app.ts               | 50 ++++++++++++----
+ .../api-server/src/middlewares/authGuard.ts   | 58 +++++++++++++++++--
+ artifacts/api-server/src/routes/health.ts     | 36 ++++++++++++
+ 4 files changed, 139 insertions(+), 17 deletions(-)
+
+diff --git a/artifacts/api-server/src/__tests__/helpers.ts b/artifacts/api-server/src/__tests__/helpers.ts
+index 35322ec..cb353f3 100644
+--- a/artifacts/api-server/src/__tests__/helpers.ts
++++ b/artifacts/api-server/src/__tests__/helpers.ts
+@@ -9,9 +9,9 @@
+  */
+ import { afterAll } from "vitest";
+ import { randomUUID } from "node:crypto";
+-import { eq } from "drizzle-orm";
++import { eq, or } from "drizzle-orm";
+ import { db, pool } from "@workspace/db";
+-import { users } from "@workspace/db/schema";
++import { users, leadHistory } from "@workspace/db/schema";
+ 
+ export { db, pool, randomUUID };
+ 
+@@ -50,6 +50,14 @@ export async function createUser(
+ /** Delete users by id (cascades to their listings/transactions/invoices). */
+ export async function deleteUsers(...ids: string[]): Promise<void> {
+   for (const id of ids) {
++    // lead_history survives its listing by design (Gate 4: deleting a listing
++    // must not erase the lead record) and its buyer_id/seller_id are NO ACTION,
++    // so a detached row blocks this hard delete. Production never hard-deletes a
++    // user — account deletion is a soft delete — so this ordering belongs to the
++    // fixture, not to the schema.
++    await db.delete(leadHistory).where(
++      or(eq(leadHistory.sellerId, id), eq(leadHistory.buyerId, id)),
++    );
+     await db.delete(users).where(eq(users.id, id));
+   }
+ }
+diff --git a/artifacts/api-server/src/app.ts b/artifacts/api-server/src/app.ts
+index 40db68e..b02fe95 100644
+--- a/artifacts/api-server/src/app.ts
++++ b/artifacts/api-server/src/app.ts
+@@ -13,7 +13,7 @@ import {
+ import { requestLogger } from "./middlewares/requestLogger";
+ import { isAllowedOrigin, shouldRejectUnsafeOrigin } from "./lib/cors";
+ import { errorResponse } from "./validators/schemas";
+-import { accessLogger } from "./lib/logger";
++import { accessLogger, logger } from "./lib/logger";
+ import router from "./routes";
+ import healthRouter from "./routes/health";
+ import seoRouter from "./seoRoutes";
+@@ -125,15 +125,45 @@ app.get("/", (_req, res) => {
+ });
+ app.use("/api", healthRouter);
+ 
+-// Resolve publishable key from request host for multi-domain support
+-app.use(
+-  clerkMiddleware((req) => ({
+-    publishableKey: publishableKeyFromHost(
+-      getClerkProxyHost(req) ?? "",
+-      process.env.CLERK_PUBLISHABLE_KEY,
+-    ),
+-  })),
+-);
++// Resolve publishable key from request host for multi-domain support.
++//
++// This middleware is global, so the entire public marketplace and the
++// crawler-facing routes below sit behind it. clerkMiddleware throws when the
++// Clerk keys are missing or malformed, and the error handler turns that into a
++// 500 — measured: with no key, /api/v1/listings, /sitemap.xml and /robots.txt
++// all returned 500 while /api/healthz and /api/readyz stayed 200.
++//
++// An auth *configuration* failure is not a failure of an anonymous request. It
++// means there is no auth context, which is exactly the state a public route
++// expects. Routes that need a user still fail closed at requireAuth with 401,
++// so nothing becomes reachable that was not reachable before.
++const clerk = clerkMiddleware((req) => ({
++  publishableKey: publishableKeyFromHost(
++    getClerkProxyHost(req) ?? "",
++    process.env.CLERK_PUBLISHABLE_KEY,
++  ),
++}));
++
++let clerkConfigErrorLogged = false;
++
++app.use((req, res, next) => {
++  try {
++    clerk(req, res, (err?: unknown) => {
++      if (!err) return next();
++      if (!clerkConfigErrorLogged) {
++        clerkConfigErrorLogged = true;
++        logger.error({ err }, "Clerk middleware unavailable — continuing without an auth context");
++      }
++      next();
++    });
++  } catch (err) {
++    if (!clerkConfigErrorLogged) {
++      clerkConfigErrorLogged = true;
++      logger.error({ err }, "Clerk middleware threw — continuing without an auth context");
++    }
++    next();
++  }
++});
+ 
+ // Public, crawler-facing HTML/XML routes (/l/:id, /sitemap.xml, /robots.txt).
+ // Mounted BEFORE /api and the 404 handler so these paths resolve to real pages.
+diff --git a/artifacts/api-server/src/middlewares/authGuard.ts b/artifacts/api-server/src/middlewares/authGuard.ts
+index f0b9caa..8fbf66f 100644
+--- a/artifacts/api-server/src/middlewares/authGuard.ts
++++ b/artifacts/api-server/src/middlewares/authGuard.ts
+@@ -37,7 +37,18 @@ async function findActiveUserByClerkId(clerkId: string): Promise<DbUserRow | und
+  * are not — a lingering Clerk session must not keep deleted users operational.
+  */
+ export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+-  const auth = getAuth(req);
++  // getAuth throws when clerkMiddleware did not complete — a missing or
++  // malformed Clerk key. The request is then unauthenticated, which is a 401,
++  // not a 500: measured 2026-08-23, every protected route returned
++  // INTERNAL_ERROR and an operator reading error rates saw a server fault
++  // instead of a configuration one. This still fails closed — no protected route
++  // serves data — it just says so with the correct status.
++  let auth: ReturnType<typeof getAuth> | null = null;
++  try {
++    auth = getAuth(req);
++  } catch {
++    auth = null;
++  }
+   const clerkId = auth?.userId;
+ 
+   if (!clerkId) {
+@@ -75,7 +86,14 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
+ }
+ 
+ export function requireDealerRole(req: Request, res: Response, next: NextFunction): void {
+-  const auth = getAuth(req);
++  // Same reasoning as requireAuth: a Clerk configuration failure makes the
++  // request unauthenticated (401), not a server fault (500). Still fails closed.
++  let auth: ReturnType<typeof getAuth> | null = null;
++  try {
++    auth = getAuth(req);
++  } catch {
++    auth = null;
++  }
+   const clerkId = auth?.userId;
+ 
+   if (!clerkId) {
+@@ -105,7 +123,15 @@ export function requireDealerRole(req: Request, res: Response, next: NextFunctio
+ }
+ 
+ export function requireAdminRole(req: Request, res: Response, next: NextFunction): void {
+-  const auth = getAuth(req);
++  // Same reasoning as requireAuth: getAuth throws when clerkMiddleware did not
++  // complete, and an unauthenticated admin request is a 401, not a 500. Still
++  // fails closed — no admin route serves anything without a resolved role.
++  let auth: ReturnType<typeof getAuth> | null = null;
++  try {
++    auth = getAuth(req);
++  } catch {
++    auth = null;
++  }
+   const clerkId = auth?.userId;
+ 
+   if (!clerkId) {
+@@ -154,7 +180,21 @@ export function requirePermission(permission: Permission) {
+ }
+ 
+ export function optionalAuth(req: Request, res: Response, next: NextFunction): void {
+-  const auth = getAuth(req);
++  // getAuth throws when clerkMiddleware did not complete — which happens when the
++  // Clerk keys are missing or malformed. On an OPTIONAL route that is not an
++  // error: it means there is no signed-in user, which is the state this
++  // middleware exists to tolerate. Measured 2026-08-23: without this, a Clerk
++  // misconfiguration turned the public /api/v1/search into a 500.
++  //
++  // requireAuth catches the same throw, but answers 401 instead of continuing:
++  // a route that needs a user must still fail closed. The difference between the
++  // two is the response, not the tolerance.
++  let auth: ReturnType<typeof getAuth> | null = null;
++  try {
++    auth = getAuth(req);
++  } catch {
++    auth = null;
++  }
+   const clerkId = auth?.userId;
+   if (!clerkId) {
+     next();
+@@ -208,7 +248,15 @@ export async function resolveDbUser(req: Request, res: Response, next: NextFunct
+  * continuing without a resolved dbUserId would be unsafe.
+  */
+ export async function requireDbUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+-  const clerkId = req.userId ?? getAuth(req)?.userId ?? undefined;
++  // req.userId is set by requireAuth upstream; the getAuth fallback must not
++  // throw when clerkMiddleware did not complete.
++  let fallbackClerkId: string | undefined;
++  try {
++    fallbackClerkId = getAuth(req)?.userId ?? undefined;
++  } catch {
++    fallbackClerkId = undefined;
++  }
++  const clerkId = req.userId ?? fallbackClerkId;
+   if (!clerkId) {
+     res.status(401).json(errorResponse("UNAUTHORIZED", "Authentication required"));
+     return;
+diff --git a/artifacts/api-server/src/routes/health.ts b/artifacts/api-server/src/routes/health.ts
+index 587c031..7551150 100644
+--- a/artifacts/api-server/src/routes/health.ts
++++ b/artifacts/api-server/src/routes/health.ts
+@@ -136,6 +136,42 @@ router.get("/readyz", async (_req, res) => {
+     checks.upload_claims = "down";
+   }
+ 
++  // A misconfigured Clerk key takes down every authenticated route while the
++  // database is perfectly healthy. Readiness that ignores it reports "ok" for a
++  // process that cannot serve a signed-in user — measured 2026-08-23. A
++  // publishable key is `pk_test_`/`pk_live_` + base64("domain$"); anything else
++  // makes @clerk/backend throw "Publishable key not valid."
++  {
++    const pk = (process.env.CLERK_PUBLISHABLE_KEY ?? "").trim();
++    const sk = (process.env.CLERK_SECRET_KEY ?? "").trim();
++    const shapeOk =
++      /^pk_(test|live)_[A-Za-z0-9+/=]+$/.test(pk) &&
++      /^sk_(test|live)_/.test(sk) &&
++      (() => {
++        try {
++          return Buffer.from(pk.slice(pk.indexOf("_", 3) + 1), "base64")
++            .toString("utf8")
++            .endsWith("$");
++        } catch {
++          return false;
++        }
++      })();
++    if (shapeOk) {
++      checks.clerk_config = "ok";
++    } else {
++      // Reported, but deliberately NOT a readiness failure. The public
++      // marketplace, search and the crawler routes all serve correctly without
++      // Clerk — verified 2026-08-23 — so a 503 here would take a working public
++      // site out of rotation because sign-in is misconfigured. An operator sees
++      // the named check; the orchestrator keeps routing what still works.
++      checks.clerk_config = "down";
++      logger.error(
++        { hasPublishable: pk.length > 0, hasSecret: sk.length > 0 },
++        "Clerk keys missing or malformed — authenticated routes will answer 401 until this is fixed",
++      );
++    }
++  }
++
+   res.status(healthy ? 200 : 503).json({
+     status: healthy ? "ok" : "degraded",
+     checks,
+-- 
+2.43.0
+
