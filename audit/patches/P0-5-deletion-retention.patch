@@ -1,0 +1,477 @@
+From 4cefc2f78c76f9cfb4813d616aaff31107bd1940 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 23 Aug 2026 15:08:15 +0000
+Subject: [PATCH] proof: P0-5 listing deletion retention - migration 0008 plus
+ media reclamation
+
+- 0008_detach_listing_evidence: conversations, bookings, reports and lead_history
+  move from ON DELETE CASCADE to ON DELETE SET NULL and become nullable.
+  listing_media deliberately stays CASCADE - the contract requires those rows gone.
+- deleteListing reads media identities before the delete, then hands them to
+  objectStorageService.deleteServingUrls after the DB delete commits, best-effort
+  and never rolling the delete back
+- Gate 4 acceptance test copied in byte-identical from its branch: 6/6 pass
+---
+ .../ListingDeletionRetention.gate4.test.ts    | 302 ++++++++++++++++++
+ .../api-server/src/services/ListingService.ts |  31 ++
+ .../0008_detach_listing_evidence.sql          |  31 ++
+ lib/db/migrations/meta/_journal.json          |   7 +
+ lib/db/src/schema/index.ts                    |  12 +-
+ 5 files changed, 375 insertions(+), 8 deletions(-)
+ create mode 100644 artifacts/api-server/src/services/ListingDeletionRetention.gate4.test.ts
+ create mode 100644 lib/db/migrations/0008_detach_listing_evidence.sql
+
+diff --git a/artifacts/api-server/src/services/ListingDeletionRetention.gate4.test.ts b/artifacts/api-server/src/services/ListingDeletionRetention.gate4.test.ts
+new file mode 100644
+index 0000000..7d5ebaf
+--- /dev/null
++++ b/artifacts/api-server/src/services/ListingDeletionRetention.gate4.test.ts
+@@ -0,0 +1,302 @@
++import { afterAll, describe, expect, it } from "vitest";
++import { eq, inArray } from "drizzle-orm";
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++
++import {
++  bookings,
++  conversations,
++  leadHistory,
++  listingAttributes,
++  listingMedia,
++  listings,
++  messages,
++  reports,
++  users,
++} from "@workspace/db/schema";
++import { db, randomUUID, uniq } from "../__tests__/helpers";
++import { deleteListing, getListingDetail } from "./ListingService";
++
++type Actor = {
++  id: string;
++  clerkId: string;
++};
++
++const createdUserIds: string[] = [];
++const createdListingIds: string[] = [];
++const createdConversationIds: string[] = [];
++const createdMessageIds: string[] = [];
++const createdBookingIds: string[] = [];
++const createdReportIds: string[] = [];
++const createdLeadIds: string[] = [];
++
++async function seedActor(label: string): Promise<Actor> {
++  const id = randomUUID();
++  const clerkId = uniq(`gate4-${label}`);
++  createdUserIds.push(id);
++
++  await db.insert(users).values({
++    id,
++    clerkId,
++    name: `Gate 4 ${label}`,
++    role: "individual",
++  });
++
++  return { id, clerkId };
++}
++
++async function seedListing(owner: Actor): Promise<string> {
++  const id = randomUUID();
++  createdListingIds.push(id);
++
++  await db.insert(listings).values({
++    id,
++    userId: owner.id,
++    title: uniq("gate4-retention"),
++    description: "listing deletion retention regression fixture",
++    category: "real_estate",
++    basePriceCash: "1500",
++    location: "Cairo",
++    status: "active",
++  });
++
++  await db.insert(listingAttributes).values({
++    listingId: id,
++    specs: {
++      offer_type: "rent",
++      rental_term: "furnished_daily",
++    },
++  });
++
++  return id;
++}
++
++async function seedConversationFixture(
++  listingId: string,
++  buyer: Actor,
++  seller: Actor,
++): Promise<{ conversationId: string; messageId: string }> {
++  const conversationId = randomUUID();
++  const messageId = randomUUID();
++  createdConversationIds.push(conversationId);
++  createdMessageIds.push(messageId);
++
++  await db.insert(conversations).values({
++    id: conversationId,
++    listingId,
++    buyerId: buyer.id,
++    sellerId: seller.id,
++    lastMessageText: "still available?",
++    lastMessageAt: new Date(),
++  });
++
++  await db.insert(messages).values({
++    id: messageId,
++    conversationId,
++    senderId: buyer.id,
++    body: "still available?",
++  });
++
++  return { conversationId, messageId };
++}
++
++async function deleteAsOwner(listingId: string, owner: Actor): Promise<void> {
++  const result = await deleteListing(listingId, owner.clerkId);
++  expect(result).toEqual({ id: listingId, deleted: true });
++}
++
++afterAll(async () => {
++  if (createdMessageIds.length > 0) {
++    await db.delete(messages).where(inArray(messages.id, createdMessageIds));
++  }
++  if (createdConversationIds.length > 0) {
++    await db
++      .delete(conversations)
++      .where(inArray(conversations.id, createdConversationIds));
++  }
++  if (createdBookingIds.length > 0) {
++    await db.delete(bookings).where(inArray(bookings.id, createdBookingIds));
++  }
++  if (createdReportIds.length > 0) {
++    await db.delete(reports).where(inArray(reports.id, createdReportIds));
++  }
++  if (createdLeadIds.length > 0) {
++    await db
++      .delete(leadHistory)
++      .where(inArray(leadHistory.id, createdLeadIds));
++  }
++  if (createdListingIds.length > 0) {
++    await db
++      .delete(listings)
++      .where(inArray(listings.id, createdListingIds));
++  }
++  if (createdUserIds.length > 0) {
++    await db.delete(users).where(inArray(users.id, createdUserIds));
++  }
++});
++
++describe("Gate 4 — listing deletion retention contract", () => {
++  it("RED: seller listing deletion must preserve the buyer/seller thread and message history", async () => {
++    const seller = await seedActor("seller-chat");
++    const buyer = await seedActor("buyer-chat");
++    const listingId = await seedListing(seller);
++    const { conversationId, messageId } = await seedConversationFixture(
++      listingId,
++      buyer,
++      seller,
++    );
++
++    await deleteAsOwner(listingId, seller);
++
++    const [thread] = await db
++      .select({ id: conversations.id, listingId: conversations.listingId })
++      .from(conversations)
++      .where(eq(conversations.id, conversationId));
++    const [message] = await db
++      .select({ id: messages.id, body: messages.body })
++      .from(messages)
++      .where(eq(messages.id, messageId));
++
++    expect(thread?.id).toBe(conversationId);
++    expect(thread?.listingId).toBeNull();
++    expect(message).toEqual({ id: messageId, body: "still available?" });
++  });
++
++  it("RED: seller listing deletion must preserve booking transaction history with a detached listing reference", async () => {
++    const seller = await seedActor("seller-booking");
++    const guest = await seedActor("guest-booking");
++    const listingId = await seedListing(seller);
++    const bookingId = randomUUID();
++    createdBookingIds.push(bookingId);
++
++    await db.insert(bookings).values({
++      id: bookingId,
++      listingId,
++      guestId: guest.id,
++      checkIn: "2030-01-10",
++      checkOut: "2030-01-12",
++      nights: 2,
++      guests: 1,
++      pricePerNight: "1500",
++      totalPrice: "3000",
++      status: "requested",
++    });
++
++    await deleteAsOwner(listingId, seller);
++
++    const [row] = await db
++      .select({ id: bookings.id, listingId: bookings.listingId })
++      .from(bookings)
++      .where(eq(bookings.id, bookingId));
++
++    expect(row?.id).toBe(bookingId);
++    expect(row?.listingId).toBeNull();
++  });
++
++  it("RED: seller listing deletion must preserve moderation/report evidence with a detached listing reference", async () => {
++    const seller = await seedActor("seller-report");
++    const reporter = await seedActor("reporter");
++    const listingId = await seedListing(seller);
++    const reportId = randomUUID();
++    createdReportIds.push(reportId);
++
++    await db.insert(reports).values({
++      id: reportId,
++      listingId,
++      reporterUserId: reporter.id,
++      reason: "scam",
++      status: "open",
++    });
++
++    await deleteAsOwner(listingId, seller);
++
++    const [row] = await db
++      .select({ id: reports.id, listingId: reports.listingId })
++      .from(reports)
++      .where(eq(reports.id, reportId));
++
++    expect(row?.id).toBe(reportId);
++    expect(row?.listingId).toBeNull();
++  });
++
++  it("RED: seller listing deletion must preserve captured lead history with a detached listing reference", async () => {
++    const seller = await seedActor("seller-lead");
++    const buyer = await seedActor("buyer-lead");
++    const listingId = await seedListing(seller);
++    const leadId = randomUUID();
++    createdLeadIds.push(leadId);
++
++    await db.insert(leadHistory).values({
++      id: leadId,
++      listingId,
++      buyerId: buyer.id,
++      sellerId: seller.id,
++      actionType: "chat",
++      status: "new",
++      buyerName: "Gate 4 Buyer",
++    });
++
++    await deleteAsOwner(listingId, seller);
++
++    const [row] = await db
++      .select({ id: leadHistory.id, listingId: leadHistory.listingId })
++      .from(leadHistory)
++      .where(eq(leadHistory.id, leadId));
++
++    expect(row?.id).toBe(leadId);
++    expect(row?.listingId).toBeNull();
++  });
++
++  it("GREEN invariant: deleted listings and their listing_media DB references disappear from public/detail consumers", async () => {
++    const seller = await seedActor("seller-media-db");
++    const viewer = await seedActor("viewer-media-db");
++    const listingId = await seedListing(seller);
++    const mediaId = randomUUID();
++
++    await db.insert(listingMedia).values({
++      id: mediaId,
++      listingId,
++      type: "image",
++      url: `https://cdn.example/${listingId}.jpg`,
++      isThumbnail: true,
++    });
++
++    await deleteAsOwner(listingId, seller);
++
++    const listingRows = await db
++      .select({ id: listings.id })
++      .from(listings)
++      .where(eq(listings.id, listingId));
++    const mediaRows = await db
++      .select({ id: listingMedia.id })
++      .from(listingMedia)
++      .where(eq(listingMedia.id, mediaId));
++    const detail = await getListingDetail(listingId, viewer.clerkId);
++
++    expect(listingRows).toHaveLength(0);
++    expect(mediaRows).toHaveLength(0);
++    expect(detail).toBeNull();
++  });
++
++  it("RED: deleteListing must hand first-party media to a durable storage-reclamation path after DB deletion", () => {
++    const source = readFileSync(
++      fileURLToPath(new URL("./ListingService.ts", import.meta.url)),
++      "utf8",
++    );
++    const start = source.indexOf("export async function deleteListing");
++    const endMarker = "return { id, deleted: true };";
++    const end = source.indexOf(endMarker, start);
++
++    expect(start).toBeGreaterThanOrEqual(0);
++    expect(end).toBeGreaterThan(start);
++
++    const deleteListingSource = source.slice(
++      start,
++      end + endMarker.length,
++    );
++
++    expect(deleteListingSource).toMatch(
++      /(deleteServingUrls|enqueue\w*(Media|Object|Storage)\w*(Cleanup|Deletion)|\w*(Media|Object|Storage)\w*(Cleanup|Deletion)Outbox)/i,
++    );
++  });
++});
+diff --git a/artifacts/api-server/src/services/ListingService.ts b/artifacts/api-server/src/services/ListingService.ts
+index b803a4f..e33e767 100644
+--- a/artifacts/api-server/src/services/ListingService.ts
++++ b/artifacts/api-server/src/services/ListingService.ts
+@@ -1563,7 +1563,38 @@ export async function deleteListing(
+ 
+   if (!listing) throw Object.assign(new Error("Listing not found or access denied"), { code: "NOT_FOUND" });
+ 
++  // Read the media identities BEFORE the delete: listing_media keeps ON DELETE
++  // CASCADE, so after the statement below these rows no longer exist and the
++  // stored objects would be unreachable — paid for, served to nobody.
++  const mediaRows = await db
++    .select({ url: listingMedia.url, thumbnailUrl: listingMedia.thumbnailUrl })
++    .from(listingMedia)
++    .where(eq(listingMedia.listingId, id));
++
+   await db.delete(listings).where(eq(listings.id, id));
+ 
++  // Storage reclamation happens AFTER the DB delete has committed and never
++  // rolls it back. deleteServingUrls is idempotent, skips foreign URLs, and
++  // reports failures rather than throwing — a storage outage must not leave the
++  // seller with a listing they asked to remove.
++  const servingUrls = [
++    ...mediaRows.map((m) => m.url),
++    ...mediaRows.map((m) => m.thumbnailUrl),
++  ].filter((u): u is string => typeof u === "string" && u.length > 0);
++
++  if (servingUrls.length > 0) {
++    try {
++      const result = await objectStorageService.deleteServingUrls(servingUrls);
++      if (result.failed > 0) {
++        logger.error(
++          { listingId: id, ...result },
++          "Listing media reclamation reported failures",
++        );
++      }
++    } catch (error) {
++      logger.error({ err: error, listingId: id }, "Listing media reclamation failed");
++    }
++  }
++
+   return { id, deleted: true };
+ }
+diff --git a/lib/db/migrations/0008_detach_listing_evidence.sql b/lib/db/migrations/0008_detach_listing_evidence.sql
+new file mode 100644
+index 0000000..e765fdb
+--- /dev/null
++++ b/lib/db/migrations/0008_detach_listing_evidence.sql
+@@ -0,0 +1,31 @@
++-- Gate 4 — listing deletion must not erase the evidence around a listing.
++--
++-- Deleting a listing used to cascade away the buyer/seller conversation, the
++-- booking, the moderation report filed against it and the captured lead
++-- history. A seller reported for a scam could erase the report by deleting the
++-- listing. The listing row and its listing_media still go — what survives is
++-- the record, detached.
++--
++-- listing_media deliberately keeps ON DELETE CASCADE: the DB rows go with the
++-- listing and the stored objects are handed to a reclamation path in
++-- deleteListing.
++
++ALTER TABLE "conversations" ALTER COLUMN "listing_id" DROP NOT NULL;
++ALTER TABLE "conversations" DROP CONSTRAINT "conversations_listing_id_listings_id_fk";
++ALTER TABLE "conversations" ADD CONSTRAINT "conversations_listing_id_listings_id_fk"
++  FOREIGN KEY ("listing_id") REFERENCES "listings"("id") ON DELETE SET NULL ON UPDATE NO ACTION;
++--> statement-breakpoint
++ALTER TABLE "bookings" ALTER COLUMN "listing_id" DROP NOT NULL;
++ALTER TABLE "bookings" DROP CONSTRAINT "bookings_listing_id_listings_id_fk";
++ALTER TABLE "bookings" ADD CONSTRAINT "bookings_listing_id_listings_id_fk"
++  FOREIGN KEY ("listing_id") REFERENCES "listings"("id") ON DELETE SET NULL ON UPDATE NO ACTION;
++--> statement-breakpoint
++ALTER TABLE "reports" ALTER COLUMN "listing_id" DROP NOT NULL;
++ALTER TABLE "reports" DROP CONSTRAINT "reports_listing_id_listings_id_fk";
++ALTER TABLE "reports" ADD CONSTRAINT "reports_listing_id_listings_id_fk"
++  FOREIGN KEY ("listing_id") REFERENCES "listings"("id") ON DELETE SET NULL ON UPDATE NO ACTION;
++--> statement-breakpoint
++ALTER TABLE "lead_history" ALTER COLUMN "listing_id" DROP NOT NULL;
++ALTER TABLE "lead_history" DROP CONSTRAINT "lead_history_listing_id_listings_id_fk";
++ALTER TABLE "lead_history" ADD CONSTRAINT "lead_history_listing_id_listings_id_fk"
++  FOREIGN KEY ("listing_id") REFERENCES "listings"("id") ON DELETE SET NULL ON UPDATE NO ACTION;
+diff --git a/lib/db/migrations/meta/_journal.json b/lib/db/migrations/meta/_journal.json
+index 5337f0c..12371f7 100644
+--- a/lib/db/migrations/meta/_journal.json
++++ b/lib/db/migrations/meta/_journal.json
+@@ -57,6 +57,13 @@
+       "when": 1786368817905,
+       "tag": "0007_early_tiger_shark",
+       "breakpoints": true
++    },
++    {
++      "idx": 8,
++      "version": "7",
++      "when": 1787497467040,
++      "tag": "0008_detach_listing_evidence",
++      "breakpoints": true
+     }
+   ]
+ }
+\ No newline at end of file
+diff --git a/lib/db/src/schema/index.ts b/lib/db/src/schema/index.ts
+index 828908c..17a4031 100644
+--- a/lib/db/src/schema/index.ts
++++ b/lib/db/src/schema/index.ts
+@@ -966,8 +966,7 @@ export const leadHistory = pgTable(
+   {
+     id: uuid("id").defaultRandom().primaryKey(),
+     listingId: uuid("listing_id")
+-      .references(() => listings.id, { onDelete: "cascade" })
+-      .notNull(),
++      .references(() => listings.id, { onDelete: "set null" }),
+     buyerId: uuid("buyer_id").references(() => users.id),
+     sellerId: uuid("seller_id").references(() => users.id).notNull(),
+     actionType: leadActionEnum("action_type").notNull(),
+@@ -1102,8 +1101,7 @@ export const conversations = pgTable(
+   {
+     id: uuid("id").defaultRandom().primaryKey(),
+     listingId: uuid("listing_id")
+-      .references(() => listings.id, { onDelete: "cascade" })
+-      .notNull(),
++      .references(() => listings.id, { onDelete: "set null" }),
+     buyerId: uuid("buyer_id")
+       .references(() => users.id, { onDelete: "cascade" })
+       .notNull(),
+@@ -1876,8 +1874,7 @@ export const reports = pgTable(
+   {
+     id: uuid("id").defaultRandom().primaryKey(),
+     listingId: uuid("listing_id")
+-      .references(() => listings.id, { onDelete: "cascade" })
+-      .notNull(),
++      .references(() => listings.id, { onDelete: "set null" }),
+     reporterUserId: uuid("reporter_user_id").references(() => users.id, {
+       onDelete: "set null",
+     }),
+@@ -2909,8 +2906,7 @@ export const bookings = pgTable(
+   {
+     id: uuid("id").defaultRandom().primaryKey(),
+     listingId: uuid("listing_id")
+-      .references(() => listings.id, { onDelete: "cascade" })
+-      .notNull(),
++      .references(() => listings.id, { onDelete: "set null" }),
+     // The guest making the reservation.
+     guestId: uuid("guest_id")
+       .references(() => users.id, { onDelete: "set null" }),
+-- 
+2.43.0
+
