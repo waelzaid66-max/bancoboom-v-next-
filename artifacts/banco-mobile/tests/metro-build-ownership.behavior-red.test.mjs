@@ -3,8 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import vm from "node:vm";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
+const nodeRequire = createRequire(import.meta.url);
 const mobileRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const buildPath = path.join(mobileRoot, "scripts", "build.js");
 const source = fs.readFileSync(buildPath, "utf8");
@@ -35,7 +37,7 @@ function loadHarness({ fetchImpl, spawnImpl }) {
       if (id === "child_process") {
         return { spawn: spawnImpl, spawnSync() { throw new Error("unexpected spawnSync"); } };
       }
-      return require(id);
+      return nodeRequire(id);
     },
     setTimeout,
     __dirname: path.dirname(buildPath),
