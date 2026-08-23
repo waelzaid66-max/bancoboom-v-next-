@@ -16,7 +16,14 @@ function makeChild() {
   const child = new EventEmitter();
   child.stdout = null;
   child.stderr = null;
-  child.kill = () => true;
+  child.killCalls = 0;
+  child.kill = () => {
+    child.killCalls += 1;
+    return true;
+  };
+  // Keep a synthetic spawn error observable without letting Node turn an
+  // intentionally unhandled EventEmitter "error" into a test-process crash.
+  child.on("error", () => {});
   return child;
 }
 
@@ -130,6 +137,67 @@ test("RED behavioral: a spawned Metro child that exits early must fail promptly"
   assert.ok(
     elapsedMs < 750,
     `early child exit must fail promptly instead of waiting for readiness timeout (elapsed ${elapsedMs}ms)`,
+  );
+});
+
+test("RED behavioral: a spawned Metro child error must fail promptly", async () => {
+  let spawnedChild = null;
+  const harness = loadHarness({
+    env: { METRO_READY_TIMEOUT_SEC: "1" },
+    fetchImpl: async () => ({ ok: false }),
+    spawnImpl() {
+      spawnedChild = makeChild();
+      setTimeout(() => spawnedChild.emit("error", new Error("synthetic spawn failure")), 20);
+      return spawnedChild;
+    },
+  });
+
+  const startedAt = Date.now();
+  let failure = null;
+  try {
+    await harness.startMetro("example.invalid", "test-repl");
+  } catch (error) {
+    failure = error;
+  }
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.ok(spawnedChild, "the test must reach the spawned-child path");
+  assert.ok(failure, "spawn error must reject/fail the build harness");
+  assert.match(
+    String(failure?.message ?? failure),
+    /spawn|synthetic|metro/i,
+    "failure should identify the owned Metro spawn path",
+  );
+  assert.ok(
+    elapsedMs < 750,
+    `spawn error must fail promptly instead of waiting for readiness timeout (elapsed ${elapsedMs}ms)`,
+  );
+});
+
+test("RED behavioral: readiness timeout cleans exactly the owned Metro child", async () => {
+  let spawnedChild = null;
+  const harness = loadHarness({
+    env: { METRO_READY_TIMEOUT_SEC: "1" },
+    fetchImpl: async () => ({ ok: false }),
+    spawnImpl() {
+      spawnedChild = makeChild();
+      return spawnedChild;
+    },
+  });
+
+  let failure = null;
+  try {
+    await harness.startMetro("example.invalid", "test-repl");
+  } catch (error) {
+    failure = error;
+  }
+
+  assert.ok(spawnedChild, "the test must reach the spawned-child path");
+  assert.ok(failure, "readiness timeout must fail the build harness");
+  assert.equal(
+    spawnedChild.killCalls,
+    1,
+    "timeout cleanup must terminate the invocation-owned child exactly once",
   );
 });
 
