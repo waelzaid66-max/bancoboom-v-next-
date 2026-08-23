@@ -19,25 +19,32 @@ function option(overrides: Partial<PaymentOption> = {}): PaymentOption {
   };
 }
 
-type CurrencyAwareComputeOffers = (
+type OfferProjectionContext = {
+  currency: string;
+  locale: "ar" | "en";
+};
+
+/**
+ * RED-only adapter. It deliberately ignores listing currency/locale because the
+ * current Product engine has no authority for either. Keeping the adapter local
+ * prevents this evidence test from preselecting the final Product API shape.
+ */
+function projectCurrentOffers(
   options: PaymentOption[],
   listingPriceCash: string | number,
-  currency: string,
-  locale?: "ar" | "en",
-) => ReturnType<typeof computeOffers>;
-
-const computeOffersWithContext =
-  computeOffers as unknown as CurrencyAwareComputeOffers;
+  context: OfferProjectionContext,
+): ReturnType<typeof computeOffers> {
+  void context;
+  return computeOffers(options, listingPriceCash);
+}
 
 describe("FIN-OFFER money authority RED contract", () => {
   for (const currency of ["SAR", "AED", "USD", "EUR"] as const) {
     it(`projects ${currency} from listing authority instead of hard-coded EGP`, () => {
-      const result = computeOffersWithContext(
-        [option()],
-        100000,
+      const result = projectCurrentOffers([option()], 100000, {
         currency,
-        "en",
-      );
+        locale: "en",
+      });
 
       expect(result.offers).toHaveLength(1);
       expect(result.offers[0].monthly_display).toContain(currency);
@@ -48,12 +55,10 @@ describe("FIN-OFFER money authority RED contract", () => {
   }
 
   it("does not leak generic English financing system labels into Arabic projection", () => {
-    const result = computeOffersWithContext(
-      [option()],
-      100000,
-      "SAR",
-      "ar",
-    );
+    const result = projectCurrentOffers([option()], 100000, {
+      currency: "SAR",
+      locale: "ar",
+    });
 
     const systemProjection = [
       result.offers[0]?.provider_badge,
@@ -68,7 +73,7 @@ describe("FIN-OFFER money authority RED contract", () => {
   });
 
   it("preserves the Islamic public no-rate invariant", () => {
-    const result = computeOffersWithContext(
+    const result = projectCurrentOffers(
       [
         option({
           mode: "bank_finance",
@@ -79,8 +84,7 @@ describe("FIN-OFFER money authority RED contract", () => {
         }),
       ],
       100000,
-      "AED",
-      "en",
+      { currency: "AED", locale: "en" },
     );
 
     const offer = result.offers[0];
