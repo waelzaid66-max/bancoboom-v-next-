@@ -9,6 +9,7 @@ import {
   databaseUrlForChild,
   makeChildDatabaseName,
   validateExternalAdminConfig,
+  validateFaultInjection,
 } from "./run-api-tests-local.mjs";
 
 const ARM = "CREATE_DROP_RANDOM_CHILD_DB";
@@ -162,4 +163,38 @@ test("Docker Postgres transport avoids exec/setns and compose health wait", () =
   assert.doesNotMatch(source, /"--wait"/);
   assert.match(source, /"run"\s*,\s*"--rm"/s);
   assert.match(source, /dockerClientArgs\("pg_isready",\s*"postgres"\)/);
+});
+
+test("fault injection is fail-closed to the explicit after_identity mode", () => {
+  assert.equal(validateFaultInjection({}), null);
+  assert.equal(
+    validateFaultInjection({ BANCO_API_TEST_FAULT_INJECT: "after_identity" }),
+    "after_identity",
+  );
+  assert.equal(validateFaultInjection({ BANCO_API_TEST_FAULT_INJECT: "   " }), null);
+  assert.throws(
+    () => validateFaultInjection({ BANCO_API_TEST_FAULT_INJECT: "before_migrate" }),
+    /must be unset or exactly after_identity/,
+  );
+});
+
+test("after_identity fault is placed after exact DB identity verification and before Product commands", () => {
+  const source = readFileSync(
+    new URL("./run-api-tests-local.mjs", import.meta.url),
+    "utf8",
+  );
+  const verifyIndex = source.indexOf("const connectedDatabase = provisioned.verify();");
+  const identityErrorIndex = source.indexOf("Disposable database identity verification failed");
+  const faultIndex = source.indexOf("if (faultInjection === FAULT_AFTER_IDENTITY)");
+  const extensionsIndex = source.indexOf("provisioned.enableExtensions();");
+
+  assert.ok(verifyIndex >= 0, "identity verification call must exist");
+  assert.ok(identityErrorIndex > verifyIndex, "exact identity mismatch guard must follow verification");
+  assert.ok(faultIndex > identityErrorIndex, "fault must fire only after exact identity verification");
+  assert.ok(extensionsIndex > faultIndex, "fault must fire before extension/migration/seed/API work");
+
+  const faultBlock = source.slice(faultIndex, extensionsIndex);
+  assert.match(faultBlock, /throw new Error\("Injected API test DB failure after identity verification\."\)/);
+  assert.doesNotMatch(faultBlock, /cleanup|DROP DATABASE|pg_terminate_backend/);
+  assert.match(source, /delete testEnv\.BANCO_API_TEST_FAULT_INJECT;/);
 });

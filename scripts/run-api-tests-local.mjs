@@ -31,6 +31,7 @@ const DEFAULT_SERVER_URL =
   "postgresql://postgres:postgres@127.0.0.1:5433/postgres";
 const EXTERNAL_CONFIRM = "CREATE_DROP_RANDOM_CHILD_DB";
 const CHILD_PREFIX = "banco_api_test_";
+const FAULT_AFTER_IDENTITY = "after_identity";
 const DOCKER_READY_ATTEMPTS = 30;
 const DOCKER_READY_DELAY_MS = 1_000;
 
@@ -109,6 +110,17 @@ export function createCleanupController(cleanupTarget) {
       return cleaned;
     },
   };
+}
+
+export function validateFaultInjection(env = process.env) {
+  const fault = env.BANCO_API_TEST_FAULT_INJECT?.trim() ?? "";
+  if (!fault) return null;
+  if (fault !== FAULT_AFTER_IDENTITY) {
+    throw new Error(
+      "BANCO_API_TEST_FAULT_INJECT must be unset or exactly after_identity.",
+    );
+  }
+  return fault;
 }
 
 export function validateExternalAdminConfig(env = process.env) {
@@ -350,6 +362,7 @@ function installSignalCleanup(cleanup) {
 }
 
 export function main(env = process.env) {
+  const faultInjection = validateFaultInjection(env);
   const external = validateExternalAdminConfig(env);
   if (!external && !dockerAvailable()) {
     throw new Error(
@@ -374,6 +387,10 @@ export function main(env = process.env) {
       );
     }
 
+    if (faultInjection === FAULT_AFTER_IDENTITY) {
+      throw new Error("Injected API test DB failure after identity verification.");
+    }
+
     provisioned.enableExtensions();
     console.log(`\nAPI integration test database: ${childDatabase}`);
     console.log(`Isolation: ${provisioned.className}`);
@@ -388,6 +405,7 @@ export function main(env = process.env) {
     delete testEnv.BANCO_API_TEST_EXPECT_HOST;
     delete testEnv.BANCO_API_TEST_EXPECT_PORT;
     delete testEnv.BANCO_API_TEST_EXPECT_DATABASE;
+    delete testEnv.BANCO_API_TEST_FAULT_INJECT;
 
     console.log("\nValidating committed migrations…");
     run("pnpm", ["--filter", "@workspace/db", "run", "check"], testEnv);
