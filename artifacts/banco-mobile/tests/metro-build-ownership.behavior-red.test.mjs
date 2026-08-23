@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import vm from "node:vm";
+import { EventEmitter } from "node:events";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -11,13 +12,21 @@ const mobileRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 const buildPath = path.join(mobileRoot, "scripts", "build.js");
 const source = fs.readFileSync(buildPath, "utf8");
 
-function loadHarness({ fetchImpl, spawnImpl }) {
+function makeChild() {
+  const child = new EventEmitter();
+  child.stdout = null;
+  child.stderr = null;
+  child.kill = () => true;
+  return child;
+}
+
+function loadHarness({ fetchImpl, spawnImpl, env = {} }) {
   const withoutEntrypoint = source.replace(/\nmain\(\)\.catch\([\s\S]*$/m, "\n");
   const instrumented = `${withoutEntrypoint}\nglobalThis.__metroHarness = { checkMetroHealth, startMetro };\n`;
 
   const fakeProcess = {
     ...process,
-    env: { ...process.env },
+    env: { ...process.env, ...env },
     on() {},
     exit() {
       throw new Error("unexpected process.exit");
@@ -35,7 +44,12 @@ function loadHarness({ fetchImpl, spawnImpl }) {
     process: fakeProcess,
     require(id) {
       if (id === "child_process") {
-        return { spawn: spawnImpl, spawnSync() { throw new Error("unexpected spawnSync"); } };
+        return {
+          spawn: spawnImpl,
+          spawnSync() {
+            throw new Error("unexpected spawnSync");
+          },
+        };
       }
       return nodeRequire(id);
     },
@@ -48,31 +62,78 @@ function loadHarness({ fetchImpl, spawnImpl }) {
   return context.__metroHarness;
 }
 
-test("RED behavioral: an arbitrary HTTP-OK Metro must not be adopted as build authority", async () => {
+test("RED behavioral: arbitrary HTTP-OK must never be silently adopted as this build's Metro", async () => {
   const fetched = [];
-  let spawnCount = 0;
+  const spawnCalls = [];
   const harness = loadHarness({
     fetchImpl: async (url) => {
       fetched.push(String(url));
       return { ok: true };
     },
-    spawnImpl() {
-      spawnCount += 1;
-      return { stdout: null, stderr: null, kill() {} };
+    spawnImpl(command, args, options) {
+      spawnCalls.push({ command, args, options });
+      return makeChild();
     },
   });
 
-  await assert.rejects(
-    () => harness.startMetro("example.invalid", "test-repl"),
-    /occupied|owned|authority|already running/i,
-    "an HTTP-OK listener is not sufficient proof that this build owns the Metro process",
+  let rejected = false;
+  try {
+    await harness.startMetro("example.invalid", "test-repl");
+  } catch {
+    rejected = true;
+  }
+
+  assert.ok(fetched.length > 0, "the endpoint probe must execute");
+  assert.ok(
+    rejected || spawnCalls.length > 0,
+    "HTTP-OK alone must not resolve successfully without starting an invocation-owned Metro or failing closed",
   );
 
-  assert.equal(spawnCount, 0, "the build must not spawn over an occupied/unowned endpoint");
-  assert.ok(fetched.length > 0, "the occupied-endpoint probe must execute");
+  if (spawnCalls.length > 0) {
+    const argv = spawnCalls[0].args ?? [];
+    const portIndex = argv.indexOf("--port");
+    assert.notEqual(portIndex, -1, "an alternate owned Metro must receive an explicit --port");
+    const port = String(argv[portIndex + 1] ?? "");
+    assert.notEqual(port, "", "the explicit --port must have a value");
+    assert.notEqual(port, "8081", "the build must not spawn over the occupied legacy shared port");
+  }
 });
 
-test("RED behavioral: Metro health probing must not be fixed to shared localhost:8081", async () => {
+test("RED behavioral: a spawned Metro child that exits early must fail promptly", async () => {
+  let spawnedChild = null;
+  const harness = loadHarness({
+    env: { METRO_READY_TIMEOUT_SEC: "2" },
+    fetchImpl: async () => ({ ok: false }),
+    spawnImpl() {
+      spawnedChild = makeChild();
+      setTimeout(() => spawnedChild.emit("exit", 42, null), 20);
+      return spawnedChild;
+    },
+  });
+
+  const startedAt = Date.now();
+  let failure = null;
+  try {
+    await harness.startMetro("example.invalid", "test-repl");
+  } catch (error) {
+    failure = error;
+  }
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.ok(spawnedChild, "the test must reach the spawned-child path");
+  assert.ok(failure, "early child exit must reject/fail the build harness");
+  assert.match(
+    String(failure?.message ?? failure),
+    /exit|spawn|metro|42/i,
+    "failure should identify the Metro child/process path rather than an unrelated timeout",
+  );
+  assert.ok(
+    elapsedMs < 750,
+    `early child exit must fail promptly instead of waiting for readiness timeout (elapsed ${elapsedMs}ms)`,
+  );
+});
+
+test("RED behavioral: Metro health probing must not stay fixed to shared localhost:8081", async () => {
   const fetched = [];
   const harness = loadHarness({
     fetchImpl: async (url) => {
