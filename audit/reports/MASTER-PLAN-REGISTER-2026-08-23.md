@@ -180,8 +180,8 @@ plus a chain assertion **on the confidence gate**, which today it does not menti
 
 # §7 · STANDING
 
-**Register: 32 classes · 9 at P0 · 43 corrections published.**
-**All nine proven and patched. `pnpm run typecheck` exits 0 from the root; `guard-reachability` returns UNREACHABLE 0 of 151. Seven patches in `audit/patches/`, each `git apply --check` clean against a pristine pre-fix tree.**
+**Register: 33 classes · 9 at P0 · 44 corrections published.**
+**All nine proven and patched, and now assembled: `origin/local/audit-union-20260823` carries eight team branches plus all nine P0 fixes and is green on every gate — chain 247/247, confidence 24/24, root `typecheck` 0, root `test` 0, API 518 passed on a fresh database, mobile render 129/129, parity 40/40. Seven patches in `audit/patches/`, each `git apply --check` clean against a pristine pre-fix tree.**
 **Sequencing: `P0-3` must not land without `P0-2` — alone it converts a wrong price into an empty one.**
 **Trunk candidate: `local/owner-assembly-20260822-r2` — 16 inputs, 135 commits, eight gates green, API 527 passed.**
 **Production: `NO-GO`.**
