@@ -40,6 +40,19 @@ function projectCurrentOffers(
   return computeOffers(options, listingPriceCash);
 }
 
+function expectNoUnsafePublicMoney(result: ReturnType<typeof computeOffers>) {
+  for (const offer of result.offers) {
+    for (const value of [
+      offer.monthly_display,
+      offer.down_payment_display,
+      offer.total_payable_display,
+    ]) {
+      if (value == null) continue;
+      expect(value).not.toMatch(/(?:^|\s)[-−]|NaN|Infinity/);
+    }
+  }
+}
+
 describe("FIN-OFFER money authority RED contract", () => {
   for (const currency of ["SAR", "AED", "USD", "EUR"] as const) {
     it(`projects ${currency} from listing authority instead of hard-coded EGP`, () => {
@@ -110,6 +123,52 @@ describe("FIN-OFFER money authority RED contract", () => {
     );
 
     expect(result.offers[0]?.monthly_display).toBe("5K EGP");
+  });
+
+  it("never projects a negative stored monthly as public money even if the engine chooses to degrade instead of reject", () => {
+    const result = computeOffers(
+      [
+        option({
+          downPayment: "0",
+          monthlyPayment: "-5000",
+          annualRatePct: null,
+        }),
+      ],
+      100000,
+    );
+
+    expectNoUnsafePublicMoney(result);
+  });
+
+  it("never projects a negative down payment as public money even if the engine chooses to degrade instead of reject", () => {
+    const result = computeOffers(
+      [
+        option({
+          downPayment: "-10000",
+          monthlyPayment: "5000",
+          annualRatePct: null,
+        }),
+      ],
+      100000,
+    );
+
+    expectNoUnsafePublicMoney(result);
+  });
+
+  it("keeps a real provider business name verbatim under Arabic projection", () => {
+    const result = projectCurrentOffers(
+      [
+        option({
+          provider: "bank",
+          providerName: "CIB Auto Finance",
+        }),
+      ],
+      100000,
+      { currency: "EGP", locale: "ar" },
+    );
+
+    expect(result.offers[0]?.provider).toBe("bank");
+    expect(result.offers[0]?.provider_badge).toBe("CIB Auto Finance");
   });
 
   it("preserves the Islamic public no-rate invariant", () => {
