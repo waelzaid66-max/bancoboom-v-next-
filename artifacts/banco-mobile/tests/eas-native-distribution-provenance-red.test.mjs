@@ -22,23 +22,30 @@ function effectiveProfile(name) {
   };
 }
 
-test("production EAS config fails closed to committed source and avoids local Play-key authority", () => {
+test("production-capable EAS config requires a clean committed Git index", () => {
   assert.equal(
     easJson.cli?.requireCommit,
     true,
     "production-capable EAS config must require a clean committed Git index",
   );
+});
 
+test("production provenance does not inherit EAS_NO_VCS=1", () => {
   const production = effectiveProfile("production");
   assert.notEqual(
     production.env?.EAS_NO_VCS,
     "1",
     "production provenance must not inherit EAS_NO_VCS=1 as source authority",
   );
+});
 
+test("production profile preserves store-build shape and production environment", () => {
+  const production = effectiveProfile("production");
   assert.equal(production.environment, "production");
   assert.equal(production.android?.buildType, "app-bundle");
+});
 
+test("production submit avoids repo-local Google Play service-account authority", () => {
   assert.ok(
     !easJson.submit?.production?.android?.serviceAccountKeyPath,
     "production submit must use managed store credentials, not a repo-local service-account file",
