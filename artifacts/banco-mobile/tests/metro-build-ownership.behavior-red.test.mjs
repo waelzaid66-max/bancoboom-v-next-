@@ -268,9 +268,10 @@ test("RED behavioral: post-spawn Metro reads use the same explicit owned endpoin
   }
 });
 
-test("RED behavioral: signal cleanup is idempotent for the invocation-owned child", async () => {
+test("RED behavioral: signal cleanup is idempotent and awaits owned-child reaping before process exit", async () => {
   const handlers = new Map();
   const exitCodes = [];
+  const lifecycle = [];
   let spawnedChild = null;
   let statusReads = 0;
 
@@ -282,6 +283,7 @@ test("RED behavioral: signal cleanup is idempotent for the invocation-owned chil
     },
     processExitImpl(code) {
       exitCodes.push(code);
+      lifecycle.push("exit");
     },
     fetchImpl: async (url) => {
       if (String(url).includes("/status")) {
@@ -292,6 +294,15 @@ test("RED behavioral: signal cleanup is idempotent for the invocation-owned chil
     },
     spawnImpl() {
       spawnedChild = makeChild();
+      spawnedChild.kill = () => {
+        spawnedChild.killCalls += 1;
+        lifecycle.push("kill");
+        setTimeout(() => {
+          lifecycle.push("reaped");
+          spawnedChild.emit("exit", 0, "SIGTERM");
+        }, 10);
+        return true;
+      };
       return spawnedChild;
     },
   });
@@ -303,35 +314,71 @@ test("RED behavioral: signal cleanup is idempotent for the invocation-owned chil
   assert.equal(typeof handlers.get("SIGTERM"), "function");
   assert.equal(typeof handlers.get("SIGHUP"), "function");
 
-  handlers.get("SIGTERM")();
-  handlers.get("SIGHUP")();
+  const termResult = handlers.get("SIGTERM")();
+  const hupResult = handlers.get("SIGHUP")();
+  const returnedPromises = [termResult, hupResult].filter(
+    (value) => value && typeof value.then === "function",
+  );
+  await Promise.allSettled(returnedPromises);
+  await new Promise((resolve) => setTimeout(resolve, 30));
 
   assert.equal(
     spawnedChild.killCalls,
     1,
-    "repeated termination signals must not kill the invocation-owned child more than once",
+    "repeated termination signals must share one invocation-owned cleanup",
   );
-  assert.ok(exitCodes.length >= 1, "signal path must terminate the build process after cleanup");
+  assert.equal(exitCodes.length, 1, "repeated signals must request process exit only once");
+
+  const reapedIndex = lifecycle.indexOf("reaped");
+  const exitIndex = lifecycle.indexOf("exit");
+  assert.notEqual(reapedIndex, -1, "owned child must settle/reap on the signal path");
+  assert.ok(
+    exitIndex > reapedIndex,
+    `process exit must happen after the owned child settles (lifecycle: ${lifecycle.join(" -> ")})`,
+  );
 });
 
-test("RED behavioral: Metro health probing must not stay fixed to shared localhost:8081", async () => {
+test("RED behavioral: every Metro health probe derives from the invocation-owned spawn endpoint", async () => {
   const fetched = [];
+  const spawnCalls = [];
+  let spawned = false;
+
   const harness = loadHarness({
+    env: { METRO_READY_TIMEOUT_SEC: "2" },
+    setTimeoutImpl: fastReadinessTimer,
     fetchImpl: async (url) => {
-      fetched.push(String(url));
-      return { ok: false };
+      const value = String(url);
+      fetched.push(value);
+      if (value.includes("/status")) {
+        return { ok: spawned };
+      }
+      return { ok: true };
     },
-    spawnImpl() {
-      throw new Error("spawn not expected");
+    spawnImpl(command, args, options) {
+      spawnCalls.push({ command, args, options });
+      spawned = true;
+      return makeChild();
     },
   });
 
-  await harness.checkMetroHealth();
+  await harness.startMetro("example.invalid", "test-repl");
 
-  assert.equal(fetched.length, 1);
-  assert.doesNotMatch(
-    fetched[0],
-    /^http:\/\/localhost:8081\/status$/,
-    "the build-integrity probe must derive from an invocation-owned endpoint rather than the shared legacy port",
-  );
+  assert.equal(spawnCalls.length, 1, "the invocation must spawn exactly one owned Metro");
+  const argv = spawnCalls[0].args ?? [];
+  const portIndex = argv.indexOf("--port");
+  assert.notEqual(portIndex, -1, "owned Metro spawn must receive an explicit --port");
+  const ownedPort = String(argv[portIndex + 1] ?? "");
+  assert.match(ownedPort, /^\d+$/, "owned Metro port must be explicit and numeric");
+  assert.notEqual(ownedPort, "8081", "owned Metro must not reuse legacy shared 8081");
+
+  const statusUrls = fetched.filter((value) => value.includes("/status"));
+  assert.ok(statusUrls.length > 0, "the selected Metro endpoint must be health-probed");
+  for (const value of statusUrls) {
+    const parsed = new URL(value);
+    assert.equal(
+      parsed.port,
+      ownedPort,
+      `every Metro health probe must derive from the invocation-owned port ${ownedPort}: ${value}`,
+    );
+  }
 });
