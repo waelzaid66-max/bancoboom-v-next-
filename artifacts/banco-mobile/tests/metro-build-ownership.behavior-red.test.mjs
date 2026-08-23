@@ -27,17 +27,24 @@ function makeChild() {
   return child;
 }
 
-function loadHarness({ fetchImpl, spawnImpl, env = {} }) {
+function loadHarness({
+  fetchImpl,
+  spawnImpl,
+  env = {},
+  processOnImpl = () => {},
+  processExitImpl = () => {
+    throw new Error("unexpected process.exit");
+  },
+  setTimeoutImpl = setTimeout,
+}) {
   const withoutEntrypoint = source.replace(/\nmain\(\)\.catch\([\s\S]*$/m, "\n");
-  const instrumented = `${withoutEntrypoint}\nglobalThis.__metroHarness = { checkMetroHealth, startMetro };\n`;
+  const instrumented = `${withoutEntrypoint}\nglobalThis.__metroHarness = { checkMetroHealth, startMetro, downloadManifest, setupSignalHandlers };\n`;
 
   const fakeProcess = {
     ...process,
     env: { ...process.env, ...env },
-    on() {},
-    exit() {
-      throw new Error("unexpected process.exit");
-    },
+    on: processOnImpl,
+    exit: processExitImpl,
   };
 
   const context = {
@@ -60,13 +67,21 @@ function loadHarness({ fetchImpl, spawnImpl, env = {} }) {
       }
       return nodeRequire(id);
     },
-    setTimeout,
+    setTimeout: setTimeoutImpl,
     __dirname: path.dirname(buildPath),
   };
   context.globalThis = context;
 
   vm.runInNewContext(instrumented, context, { filename: buildPath });
   return context.__metroHarness;
+}
+
+function fastReadinessTimer(callback, delay, ...args) {
+  if (delay === 1000) {
+    callback(...args);
+    return 0;
+  }
+  return setTimeout(callback, delay, ...args);
 }
 
 test("RED behavioral: arbitrary HTTP-OK must never be silently adopted as this build's Metro", async () => {
@@ -199,6 +214,104 @@ test("RED behavioral: readiness timeout cleans exactly the owned Metro child", a
     1,
     "timeout cleanup must terminate the invocation-owned child exactly once",
   );
+});
+
+test("RED behavioral: post-spawn Metro reads use the same explicit owned endpoint", async () => {
+  const fetches = [];
+  const spawnCalls = [];
+  let spawned = false;
+  let statusReads = 0;
+
+  const harness = loadHarness({
+    env: { METRO_READY_TIMEOUT_SEC: "2" },
+    setTimeoutImpl: fastReadinessTimer,
+    fetchImpl: async (url) => {
+      const value = String(url);
+      fetches.push({ url: value, afterSpawn: spawned });
+      if (value.includes("/status")) {
+        statusReads += 1;
+        return { ok: statusReads > 1 };
+      }
+      if (value.includes("/manifest")) {
+        return { ok: true, json: async () => ({ id: "owned-manifest" }) };
+      }
+      return { ok: true };
+    },
+    spawnImpl(command, args, options) {
+      spawnCalls.push({ command, args, options });
+      spawned = true;
+      return makeChild();
+    },
+  });
+
+  await harness.startMetro("example.invalid", "test-repl");
+  await harness.downloadManifest("ios");
+
+  assert.equal(spawnCalls.length, 1, "the invocation must own one spawned Metro child");
+  const argv = spawnCalls[0].args ?? [];
+  const portIndex = argv.indexOf("--port");
+  assert.notEqual(portIndex, -1, "owned Metro spawn must receive --port");
+  const ownedPort = String(argv[portIndex + 1] ?? "");
+  assert.match(ownedPort, /^\d+$/, "owned Metro port must be explicit and numeric");
+  assert.notEqual(ownedPort, "8081", "owned Metro port must not reuse legacy shared 8081");
+
+  const postSpawnUrls = fetches.filter((entry) => entry.afterSpawn).map((entry) => entry.url);
+  assert.ok(postSpawnUrls.some((url) => url.includes("/status")), "owned readiness must be probed after spawn");
+  assert.ok(postSpawnUrls.some((url) => url.includes("/manifest")), "manifest must use the owned endpoint");
+  for (const value of postSpawnUrls) {
+    const parsed = new URL(value);
+    assert.equal(
+      parsed.port,
+      ownedPort,
+      `post-spawn Metro read must use the spawn-owned port ${ownedPort}: ${value}`,
+    );
+  }
+});
+
+test("RED behavioral: signal cleanup is idempotent for the invocation-owned child", async () => {
+  const handlers = new Map();
+  const exitCodes = [];
+  let spawnedChild = null;
+  let statusReads = 0;
+
+  const harness = loadHarness({
+    env: { METRO_READY_TIMEOUT_SEC: "2" },
+    setTimeoutImpl: fastReadinessTimer,
+    processOnImpl(signal, handler) {
+      handlers.set(signal, handler);
+    },
+    processExitImpl(code) {
+      exitCodes.push(code);
+    },
+    fetchImpl: async (url) => {
+      if (String(url).includes("/status")) {
+        statusReads += 1;
+        return { ok: statusReads > 1 };
+      }
+      return { ok: true };
+    },
+    spawnImpl() {
+      spawnedChild = makeChild();
+      return spawnedChild;
+    },
+  });
+
+  await harness.startMetro("example.invalid", "test-repl");
+  harness.setupSignalHandlers();
+
+  assert.ok(spawnedChild, "the test must own a spawned Metro child");
+  assert.equal(typeof handlers.get("SIGTERM"), "function");
+  assert.equal(typeof handlers.get("SIGHUP"), "function");
+
+  handlers.get("SIGTERM")();
+  handlers.get("SIGHUP")();
+
+  assert.equal(
+    spawnedChild.killCalls,
+    1,
+    "repeated termination signals must not kill the invocation-owned child more than once",
+  );
+  assert.ok(exitCodes.length >= 1, "signal path must terminate the build process after cleanup");
 });
 
 test("RED behavioral: Metro health probing must not stay fixed to shared localhost:8081", async () => {
