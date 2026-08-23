@@ -144,7 +144,7 @@ function isReOfferEngine(engine: EngineDef): boolean {
   return engine.params.offer_type === "sale" || engine.params.offer_type === "rent";
 }
 
-/** FilterSheet engines for RE: refinements only (compound/furnished/…).
+/** FilterSheet engines for RE: refinements only (furnished/compound/…).
  *  Offer sale/rent lives on PropertyHomeHeader strip; property-type engines
  *  stay out — Band D / propertyType owns those. */
 function isReSheetEngine(engine: EngineDef): boolean {
@@ -217,9 +217,6 @@ export function SectionSearchApp({
   const colors = useColors();
   const { t, isRTL } = useI18n();
   const { playSound } = useSound();
-  // This mini-app is one section at a time, so its taps can carry that
-  // section's cue instead of the neutral one. Read once — `category` is locked
-  // for the life of the screen by the anti-melt guards.
   const tap = soundForCategory(category);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -232,10 +229,7 @@ export function SectionSearchApp({
     cacheFeedItem,
     recordQuery,
   } = useSession();
-  // Never invent a 67px web pad — that crushed/pushed section chrome on Replit
-  // web and made headers look "destroyed". Use real safe-area insets only.
   const topPad = Math.max(insets.top, Platform.OS === "web" ? 12 : 0);
-
   const accent = sectionAccent(category);
 
   const onCommitted = useCallback(
@@ -265,9 +259,6 @@ export function SectionSearchApp({
     retry,
   } = search;
 
-  // Hard lock (fact): this mini-app's prop category must never drift through
-  // update/commit/applyPatch. FilterSheet already hides category UI, but a
-  // partial that carries `category` would otherwise melt the section.
   const commit = useCallback(
     (next: SearchCriteria) => {
       commitRaw({
@@ -299,7 +290,6 @@ export function SectionSearchApp({
     [applyPatchRaw, category, lockedEngine],
   );
 
-  // The seeded baseline for this section — the "clean" state a page starts in.
   const baseEngine = lockedEngine ?? "all";
   const buildSeed = useCallback(
     (market: string): SearchCriteria => ({
@@ -314,15 +304,8 @@ export function SectionSearchApp({
     }),
     [category, baseEngine, lockedEngine],
   );
-
-  // The clean, per-entry baseline. Captured when the page seeds (and updated
-  // when the async market preference hydrates) so "dirty" means "changed from
-  // the state the shopper actually landed on", never "differs from hardcoded
-  // defaults". This is what makes a freshly-entered page never prompt on exit.
   const baselineRef = useRef<SearchCriteria | null>(null);
 
-  // Route intents: ?map=1 (MOB-07) · ?engine=import (Discover car-import CTA).
-  // Must be read before seed so the first commit carries the deep-link engine.
   const params = useLocalSearchParams<{
     map?: string | string[];
     engine?: string | string[];
@@ -336,9 +319,6 @@ export function SectionSearchApp({
     ? params.property_type[0]
     : params.property_type;
 
-  // Seed the engine once on mount → entering the page immediately loads this
-  // section's results with no category chooser in sight.
-  // RE desks may also deep-link ?property_type=apartment (composes with ?engine=sale|rent).
   const seeded = useRef(false);
   useEffect(() => {
     if (seeded.current) return;
@@ -356,9 +336,6 @@ export function SectionSearchApp({
       (RE_TYPE_PRIMARY as readonly string[]).includes(propertyTypeParam)
         ? propertyTypeParam
         : null;
-    // Type-only engines (apartment/villa/…) migrate to propertyType below in
-    // the normalize effect; if both engine=sale and property_type=… are set,
-    // keep the offer engine and apply the type from the dedicated param.
     const seed: SearchCriteria = {
       ...buildSeed(criteria.marketCountry),
       ...(deepEngine ? { engineKey: deepEngine } : {}),
@@ -369,11 +346,6 @@ export function SectionSearchApp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Native: confirm the preferred market once (AsyncStorage is async). Mirrors
-  // the Search tab's safe pattern — applyPatch merges into the LATEST criteria
-  // (no stale-closure overwrite of newer user changes), rentalTerm is derived
-  // from a null basis, and we only re-query once a fetch is already in flight.
-  // The baseline is advanced in lockstep so a hydrated market isn't "dirty".
   const marketHydrated = useRef(Platform.OS === "web");
   useEffect(() => {
     if (marketHydrated.current) return;
@@ -397,11 +369,7 @@ export function SectionSearchApp({
     };
   }, [applyPatch, retry, items.length, phase, criteria.marketCountry]);
 
-  // ── Map view ──────────────────────────────────────────────────────────────
-  // Expo Router may deliver query values as string | string[] — normalize so
-  // ?map=1 always latches (MOB-07 must not silently no-op on web/native).
   const [mapMode, setMapMode] = useState(false);
-  // Discover "Explore on map" / section ?map=1 — latch until results arrive.
   const [wantMap, setWantMap] = useState(() => wantsMapFromParam(mapParam));
   const [marketPickerOpen, setMarketPickerOpen] = useState(false);
   const mappableItems = useMemo(
@@ -436,12 +404,9 @@ export function SectionSearchApp({
   useEffect(() => {
     if (prevMapSectionKey.current === mapSectionKey) return;
     prevMapSectionKey.current = mapSectionKey;
-    // Keep a Discover map latch across the first seed/query; only clear map
-    // when the shopper changes filters after that.
     if (!wantMap) setMapMode(false);
   }, [mapSectionKey, wantMap]);
 
-  // ── Facet gating (scoped to the locked category) ───────────────────────────
   const { scopedFacets, loading: facetsLoading } =
     useInventoryFacets(criteria.category, criteria.marketCountry);
   const engineList = useMemo(
@@ -449,33 +414,25 @@ export function SectionSearchApp({
     [criteria.category, scopedFacets],
   );
   const isRealEstateSection = criteria.category === "real_estate";
-  /** RE strip 1: offer only. Other sections keep the full engine bar. */
   const stripEngineList = useMemo(() => {
     if (!isRealEstateSection) return engineList;
     return engineList.filter(isReOfferEngine);
   }, [engineList, isRealEstateSection]);
-  /** FilterSheet = refinements only (furnished/compound/payment…). Offer +
-   *  property type live on dedicated strips so sheet never fights the chrome. */
   const filterSheetEngines = useMemo(() => {
     if (!isRealEstateSection) return engineList;
     return engineList.filter(isReSheetEngine);
   }, [engineList, isRealEstateSection]);
-  /** RE strip 2: property types (composes with offer via propertyType). */
   const reTypeTabs = useMemo(() => {
     if (!isRealEstateSection) return [] as string[];
     const counts = scopedFacets?.property_type;
     const tabs = RE_TYPE_PRIMARY.filter((ty) => {
-      // Core residential/land always visible (fail-open identity of the section).
       if (ty === "apartment" || ty === "villa" || ty === "land") return true;
-      // Keep the shopper's current selection visible even when facet count is 0
-      // so desk/FilterSheet taps are never silently wiped after normalize.
       if (criteria.propertyType === ty) return true;
       if (!counts) return true;
       return (counts[ty] ?? 0) > 0;
     });
     return tabs as string[];
   }, [isRealEstateSection, scopedFacets, criteria.propertyType]);
-  /** When a sheet refinement owns engineKey, offer strip still highlights all. */
   const activeOfferKey = useMemo(() => {
     if (!isRealEstateSection) return criteria.engineKey;
     const eng = engineByKey(criteria.category, criteria.engineKey);
@@ -488,18 +445,12 @@ export function SectionSearchApp({
       activeGroup ? visibleIndustrialTypes(activeGroup, scopedFacets) : null,
     [activeGroup, scopedFacets],
   );
-  // Show industrial baseline chips while facets load (fail-open). Gating on
-  // facetsLoading hid the whole strip and caused a reload flash per section.
   const showIndustrialChips =
     !!visibleIndTypes && visibleIndTypes.length > 1;
 
-  // Normalize criteria if facets reveal the committed engine/sub-type is empty.
-  // Never touches a locked engine.
   useEffect(() => {
     if (facetsLoading) return;
     const patch: Partial<SearchCriteria> = {};
-    // Migrate legacy RE property-type engines → propertyType strip so
-    // تمليك/إيجار can compose with شقة/فيلا (single engineKey could not).
     if (criteria.category === "real_estate" && !lockedEngine) {
       const eng = engineByKey(criteria.category, criteria.engineKey);
       if (eng?.params.property_type) {
@@ -539,8 +490,6 @@ export function SectionSearchApp({
       criteria.propertyType &&
       !(RE_TYPE_PRIMARY as readonly string[]).includes(criteria.propertyType)
     ) {
-      // Only wipe values outside the RE primary taxonomy (e.g. stale junk).
-      // Never wipe a desk/FilterSheet type just because facets say count=0.
       patch.propertyType = null;
     }
     if (Object.keys(patch).length === 0) return;
@@ -560,7 +509,6 @@ export function SectionSearchApp({
     scopedFacets,
   ]);
 
-  // ── Text query + autocomplete ──────────────────────────────────────────────
   const [draftQuery, setDraftQuery] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -569,13 +517,6 @@ export function SectionSearchApp({
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [brandValue, setBrandValue] = useState<string | null>(null);
   const [carPickerOpen, setCarPickerOpen] = useState(false);
-  /** B-oom Car: the filter axes open COLLAPSED. They used to paint five wrapped
-   *  chip rows across the first screen and bury the results (owner, 2026-08-01).
-   *  Nothing is deleted — market/sort/mode/engines/brand/origin all keep their
-   *  single seat, they just wait behind one control. */
-  /** Hero quick-category → free text. Not a taxonomy enum on purpose: the
-   *  marine/aviation vehicle taxonomy is unapproved (REL-21) and an unsupported
-   *  enum returns nothing. See the note in CarsHomeHeader. */
   const [carCategory, setCarCategory] = useState<VehicleGlyphName | null>(null);
 
   const autocompleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -692,7 +633,6 @@ export function SectionSearchApp({
     [cacheFeedItem],
   );
 
-  // ── Chrome handlers (engine locked category, no category switching) ─────────
   const selectEngine = (key: string) => {
     if (lockedEngine) return;
     const engine = engineByKey(criteria.category, key);
@@ -701,8 +641,6 @@ export function SectionSearchApp({
       patch.rentalTerm =
         engine?.params.offer_type === "rent" ? criteria.rentalTerm : null;
     }
-    // Mirror Search-host: fuel/transmission engines also set attribute fields
-    // so FilterSheet toggles stay in sync with the strip.
     if (criteria.category === "car") {
       if (engine?.params.fuel_type) patch.fuelType = engine.params.fuel_type;
       if (engine?.params.transmission) {
@@ -737,7 +675,6 @@ export function SectionSearchApp({
 
   const selectOrigin = (o: "all" | "local" | "imported") => {
     if (criteria.category === "car") {
-      // Keep origin strip and import engine on one axis (no dual conflict).
       const patch: Partial<SearchCriteria> = {
         originType: o === "all" ? null : o,
       };
@@ -752,9 +689,7 @@ export function SectionSearchApp({
   const selectListingMode = (mode: "all" | "sale" | "buy") =>
     update({ listingMode: mode });
 
-  /** RE type strip — composes with offer engine (sale/rent) via propertyType. */
   const selectRePropertyType = (value: string) => {
-    // Band D picker sentinels — never commit as propertyType.
     if (value === RE_COMMERCIAL_TAB || value === RE_MORE_TAB) return;
     if (value === RE_TYPE_ALL || value === criteria.propertyType) {
       update({ propertyType: null });
@@ -763,7 +698,6 @@ export function SectionSearchApp({
     update({ propertyType: value });
   };
 
-  /** Materials commodity strip — steel/resin/… via criteria.material. */
   const selectMaterial = (value: string) => {
     update({ material: criteria.material === value ? null : value });
   };
@@ -825,9 +759,6 @@ export function SectionSearchApp({
     [browseBrand],
   );
 
-  // "Clear all" resets to THIS section's clean entry baseline (locked category /
-  // engine + the market the shopper landed on), never to "all" and without
-  // discarding their market preference. Post-reset the page is not "dirty".
   const clearAllFilters = useCallback(() => {
     setDraftQuery("");
     setBrandValue(null);
@@ -850,11 +781,6 @@ export function SectionSearchApp({
   const isCarSection = criteria.category === "car";
   const isFacilitiesSection = criteria.category === "facilities";
 
-  /** B-INDUSTRY browse types. Every entry is a type the live `industrial_type`
-   *  facet actually returned with a count above zero, so the strip can never
-   *  offer a chip that leads to an empty result — and the number beside the
-   *  label is the same number the search will produce. Unlike the car section,
-   *  whose vehicle-type facet does not exist, this one is real. */
   const facilityTypes = useMemo<FacilityType[]>(() => {
     if (!isFacilitiesSection) return [];
     const counts = scopedFacets?.industrial_type;
@@ -873,10 +799,6 @@ export function SectionSearchApp({
       }))
       .filter((ty) => ty.count > 0);
   }, [isFacilitiesSection, scopedFacets, visibleIndTypes, t]);
-  // B-CORE upper header: identity + search/Filters + market beside BANCO.
-  // Smart horizontal strip under header: industrial types + origin (wrap, flexGrow:0).
-  // Commodity strip when raw/all. listingMode + refinements stay in FilterSheet
-  // (sliders in search). Never erase strips.
   const showOriginChrome = isMaterialsSection;
   const showMaterialChrome =
     isMaterialsSection &&
@@ -884,35 +806,8 @@ export function SectionSearchApp({
       criteria.industrialType === "raw_material");
   const showMaterialsAxisStrip = showOriginChrome;
   const showMaterialsLayer2 = showMaterialChrome;
-  const showCarOriginChrome = criteria.category === "car" && !lockedEngine;
   const showCarBrandStrip = criteria.category === "car" && !lockedEngine;
-  /**
-   * Hero quick-category gate. Owner rule 2026-08-01: no fake anything.
-   *
-   * FacetCounts has no vehicle-type map (category · condition · fuel_type ·
-   * transmission · payment_plan · property_type · finishing_type · offer_type ·
-   * industrial_type · industry · origin_type), and GET /v1/search has no
-   * body_type param — the API cannot separate a yacht from a sedan today. So
-   * every one of the owner's 21 types is ungated and the strip stays empty,
-   * exactly as lib/facets.ts requires ("never surface a chip that returns
-   * nothing"). Point `typeCounts` at the real map when it ships; the strip,
-   * the glyphs and the labels are already built.
-   */
-  /**
-   * The eleven types from the owner's render, in his order.
-   *
-   * This memo used to declare `typeCounts` as undefined and return an empty
-   * array on the next line, so the strip was drawn in the header and could
-   * never paint — the two lines after that were unreachable. It was written
-   * that way because there is no vehicle_type facet to gate the list against,
-   * and a chip that leads to an empty screen is worse than no chip.
-   *
-   * That reasoning does not hold here, because a tap is NOT a guess: the
-   * handler puts the type's own label into the query and runs a real search.
-   * An empty result is then an honest answer about the catalogue, not a broken
-   * control. The day the facet exists this gates against it and the strip only
-   * shows types with stock.
-   */
+
   const carHeroCategories = useMemo(() => {
     if (!isCarSection) return [];
     const inDesign = new Set([
@@ -931,19 +826,6 @@ export function SectionSearchApp({
     return CAR_CATEGORIES.filter((c) => inDesign.has(c.key));
   }, [isCarSection]);
 
-  /**
-   * Hero stats. Every entry is a live count or it does not exist.
-   *
-   * `scopedFacets.category` is the real per-category tally of active, publicly
-   * visible listings for the chosen market — the same source the browse chips
-   * already trust. While it loads, the band is simply absent (no skeleton
-   * pretending to be a number, no last-known value).
-   *
-   * The mock's other five figures — 1.2M+ vehicles, 950+ dealers, 18+ auctions,
-   * 34+ ports, 92+ shipping lines — have NO endpoint behind them anywhere in
-   * this repo. They are not written here as literals and must not be: this
-   * screen is the front door of a marketplace people spend money in.
-   */
   const carHeroStats = useMemo<CarHeroStat[]>(() => {
     if (!isCarSection) return [];
     const out: CarHeroStat[] = [];
@@ -969,22 +851,13 @@ export function SectionSearchApp({
         "rent");
   const showIndustrialChipsInStrip =
     showIndustrialChips && !isMaterialsSection;
-  // Keep engine chips visible during facet load — visibleEngines already
-  // fails open when scopedFacets are undefined. Hiding on facetsLoading made
-  // every section entry flash an empty strip then repaint.
-  // RE: offer strip + type tabs live in PropertyHomeHeader (not primary chips).
   const showEngineChips =
     !lockedEngine &&
     stripEngineList.length > 1 &&
     !showIndustrialChips &&
     !isRealEstateSection && !isMaterialsSection;
-  // listingMode "For sale / Wanted" collides with RE offer sale/rent labels —
-  // keep it for cars; RE uses offer engines + type strip (+ FilterSheet for مطلوب).
   const showListingMode = !lockedEngine && !isRealEstateSection && !isMaterialsSection;
-  // Types live in PropertyHomeHeader Band D (mock-aligned primary set).
   const showReTypeStrip = false;
-  /** Band D tabs — All / Apartments / Villas / Commercial / Land / More.
-   *  Commercial + More are picker sentinels — never sent as API enums. */
   const reHeaderTypeTabs = useMemo(() => {
     if (!isRealEstateSection) return [] as { value: string; label: string }[];
     return [
@@ -1036,15 +909,8 @@ export function SectionSearchApp({
       },
     ];
   }, [isMaterialsSection, t]);
-  // Smart materials axis strip uses the same tab list (horizontal wrap chips).
   const materialsAxisTabs = materialsHeaderTypeTabs;
-  // Country + currency live in ONE compact MarketCountryButton on the primary
-  // strip — every section, no exception (owner 2026-07-20, completed for RE +
-  // materials 2026-07-27). The old spread matrix laid 21 country cells in a
-  // horizontal strip ≈ 6 screens wide; the button is ~140px and opens the same
-  // picker the matrix's "…" button already opened, so nothing is lost.
 
-  // ── Section-scoped "dirty" filter count (excludes the locked baseline) ──────
   const rentEngineActive =
     criteria.category === "real_estate" &&
     engineByKey(criteria.category, criteria.engineKey)?.params.offer_type ===
@@ -1074,17 +940,11 @@ export function SectionSearchApp({
     criteria.category === "materials" && !!criteria.material,
     criteria.listingMode !== "all",
     criteria.nearMeEnabled,
-    // Sort chip lives on the primary strip — count it like Stay so the
-    // filter badge stays honest when shopper cycles off recommended.
     criteria.sort !== "recommended",
-    // Baseline-aware: the market only counts as an active filter once the
-    // shopper changes it from the market they entered on (not just from the
-    // global default), keeping the badge consistent with isDirty.
     criteria.marketCountry !==
       (baselineRef.current?.marketCountry ?? DEFAULT_MARKET_COUNTRY),
   ].filter(Boolean).length;
 
-  /** Removable summary chips for B-PROPERTY — only real applied criteria. */
   const reActiveChips = useMemo(() => {
     if (!isRealEstateSection) return [] as { id: string; label: string; onClear: () => void }[];
     const chips: { id: string; label: string; onClear: () => void }[] = [];
@@ -1194,10 +1054,6 @@ export function SectionSearchApp({
     commitQueryNow,
   ]);
 
-  // "Dirty" for exit-confirm = the criteria (or query text) diverges from the
-  // per-entry baseline. Delta-based so a freshly-landed page with a persisted
-  // non-default market is NOT dirty, yet ANY user change (including listing
-  // mode, engine, market, etc.) correctly arms the confirmation.
   const isDirty =
     (baselineRef.current !== null &&
       serializeCriteria(criteria) !== serializeCriteria(baselineRef.current)) ||
@@ -1216,8 +1072,6 @@ export function SectionSearchApp({
   const handleSaveSearch = () => {
     const snapshot: SearchCriteria = { ...criteria, q: draftQuery.trim() };
     saveSearch({
-      // The name is read back to the user inside the "new listing matches your
-      // search" alert and its email, so it is localised here where `t` lives.
       name: snapshot.q.trim() || t(`home.categories.${snapshot.category}`),
       criteria: snapshot,
       q: snapshot.q,
@@ -1229,8 +1083,6 @@ export function SectionSearchApp({
     });
   };
 
-  // Auto-reset filters on exit (header / hardware / swipe) — same Stay contract.
-  // No confirm dialog: leaving a browse mini-app clears chrome for next entry.
   const exitingRef = useRef(false);
   const resetAndLeave = useCallback(
     (leave: () => void) => {
@@ -1260,7 +1112,254 @@ export function SectionSearchApp({
     ? labelForValue(criteria.location, isRTL) || criteria.location
     : "";
 
-  // ── Overlay (discover surface is never shown — the engine is always active) ──
+  const carBrandDisplay = brandValue
+    ? brandLabel(
+        QUICK_BRANDS.find((b) => b.value === brandValue) ??
+          ({ value: brandValue, en: brandValue, ar: brandValue } as CarBrand),
+        isRTL,
+      )
+    : t("search.allBrands");
+
+  const primaryAxisStrip = (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.hScroll}
+      contentContainerStyle={[styles.chipStripRow, { flexDirection: rowDir }]}
+      testID="section-primary-strip"
+    >
+      <MarketCountryButton
+        selected={criteria.marketCountry}
+        onPress={() => {
+          playSound(tap);
+          setMarketPickerOpen(true);
+        }}
+      />
+      <Pressable
+        onPress={() => {
+          playSound(tap);
+          const cycle = ["recommended", "newest", "price_asc", "price_desc"] as const;
+          const next =
+            cycle[(cycle.indexOf(criteria.sort as (typeof cycle)[number]) + 1) % cycle.length];
+          update({ sort: next });
+        }}
+        style={[
+          styles.sortChip,
+          {
+            backgroundColor: criteria.sort !== "recommended" ? accent : colors.secondary,
+            flexDirection: rowDir,
+          },
+        ]}
+        accessibilityLabel={t(`search.sortOptions.${criteria.sort}`)}
+        testID="section-sort-cycle"
+      >
+        <Feather
+          name={
+            criteria.sort === "price_asc"
+              ? "trending-up"
+              : criteria.sort === "price_desc"
+                ? "trending-down"
+                : criteria.sort === "newest"
+                  ? "clock"
+                  : "list"
+          }
+          size={14}
+          color={criteria.sort !== "recommended" ? "#FFFFFF" : colors.mutedForeground}
+        />
+      </Pressable>
+      {showListingMode ? (
+        <View style={[styles.chipStripDivider, { backgroundColor: colors.border }]} />
+      ) : null}
+      {showListingMode ? (
+        axisShape(chrome, "listingMode") === "pill" ? (
+          <FilterPillSelect
+            icon="tag"
+            title={t("search.listingModeAll")}
+            options={[
+              { value: "sale", label: t("search.listingModeSale") },
+              { value: "buy", label: t("search.listingModeBuy") },
+            ]}
+            selected={criteria.listingMode}
+            allValue="all"
+            allLabel={t("search.offerAny")}
+            onSelect={(v) => {
+              playSound(tap);
+              Haptics.selectionAsync();
+              selectListingMode(v as "all" | "sale" | "buy");
+            }}
+            accentColor={accent}
+            testID="section-listing-mode"
+          />
+        ) : (
+          (["all", "sale", "buy"] as const).map((mode) => {
+            const active = criteria.listingMode === mode;
+            return (
+              <Pressable
+                key={mode}
+                onPress={() => { playSound(tap); Haptics.selectionAsync(); selectListingMode(mode); }}
+                style={[styles.stripChip, { backgroundColor: active ? accent : colors.secondary }]}
+                testID={`section-listing-mode-${mode}`}
+              >
+                <AppText style={[styles.stripChipText, { color: active ? "#FFFFFF" : colors.mutedForeground }]}>
+                  {mode === "all" ? t("search.listingModeAll") : mode === "sale" ? t("search.listingModeSale") : t("search.listingModeBuy")}
+                </AppText>
+              </Pressable>
+            );
+          })
+        )
+      ) : null}
+    </ScrollView>
+  );
+
+  const engineAxisStrip = (showEngineChips || showIndustrialChips) ? (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.hScroll}
+      contentContainerStyle={[styles.chipStripRow, { flexDirection: rowDir }]}
+      testID="section-engine-strip"
+    >
+      {showEngineChips ? (
+        axisShape(chrome, "engines") === "pill" ? (
+          <FilterPillSelect
+            icon="sliders"
+            title={t("search.type")}
+            options={stripEngineList
+              .filter((e) => e.key !== "all")
+              .map((e) => ({ value: e.key, label: t(e.i18nKey) }))}
+            selected={activeOfferKey ?? "all"}
+            allValue="all"
+            allLabel={t("search.typeAny")}
+            onSelect={(v) => {
+              playSound(tap);
+              Haptics.selectionAsync();
+              selectEngine(v);
+            }}
+            accentColor={accent}
+            testID="section-engine"
+          />
+        ) : (
+          stripEngineList.map((e) => {
+            const active = activeOfferKey === e.key;
+            return (
+              <Pressable
+                key={e.key}
+                onPress={() => { playSound(tap); Haptics.selectionAsync(); selectEngine(e.key); }}
+                style={[styles.stripChip, { backgroundColor: active ? accent : colors.secondary }]}
+                testID={`engine-${e.key}`}
+              >
+                <AppText style={[styles.stripChipText, { color: active ? "#FFFFFF" : colors.mutedForeground }]}>
+                  {t(e.i18nKey)}
+                </AppText>
+              </Pressable>
+            );
+          })
+        )
+      ) : null}
+      {showIndustrialChips ? [
+        { key: "all" as IndustrialType, i18nKey: "home.industrialTypes.all" },
+        ...((visibleIndTypes ?? []).map((ty) => ({ key: ty, i18nKey: `home.industrialTypes.${ty}` }))),
+      ].map((item) => {
+        const active = criteria.industrialType === item.key;
+        return (
+          <Pressable
+            key={item.key}
+            onPress={() => { playSound(tap); Haptics.selectionAsync(); selectIndustrialType(item.key); }}
+            style={[styles.stripChip, { backgroundColor: active ? accent : colors.secondary }]}
+            testID={`industrial-type-${item.key}`}
+          >
+            <AppText style={[styles.stripChipText, { color: active ? "#FFFFFF" : colors.mutedForeground }]}>
+              {t(item.i18nKey)}
+            </AppText>
+          </Pressable>
+        );
+      }) : null}
+    </ScrollView>
+  ) : null;
+
+  const carBrandOriginStrip = showCarBrandStrip ? (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={[styles.hScroll, styles.carFilterPanelFooter]}
+      contentContainerStyle={[styles.chipStrip, { flexDirection: rowDir }]}
+      testID="car-brand-origin-strip"
+    >
+      <View testID="car-brand-strip">
+        <Pressable
+          onPress={() => {
+            playSound(tap);
+            setCarPickerOpen(true);
+          }}
+          style={[
+            styles.carBrandBtn,
+            {
+              flexDirection: rowDir,
+              backgroundColor: brandValue ? accent : colors.secondary,
+              borderColor: brandValue ? accent : colors.border,
+            },
+          ]}
+          testID="car-brand-btn"
+        >
+          <Feather
+            name="grid"
+            size={13}
+            color={brandValue ? "#FFFFFF" : colors.foreground}
+          />
+          <AppText
+            style={[styles.stripChipText, { color: brandValue ? "#FFFFFF" : colors.foreground }]}
+            numberOfLines={1}
+          >
+            {carBrandDisplay}
+          </AppText>
+          <Feather
+            name="chevron-down"
+            size={12}
+            color={brandValue ? "#FFFFFF" : colors.mutedForeground}
+          />
+        </Pressable>
+      </View>
+      <View style={[styles.chipStripDivider, { backgroundColor: colors.border }]} />
+      <View testID="car-origin-strip" style={{ flexDirection: rowDir, gap: 6 }}>
+        {(["all", "local", "imported"] as const).map((o) => {
+          const active = originKey === o;
+          return (
+            <Pressable
+              key={o}
+              onPress={() => {
+                playSound(tap);
+                Haptics.selectionAsync();
+                selectOrigin(o);
+              }}
+              style={[
+                styles.stripChip,
+                { backgroundColor: active ? accent : colors.secondary },
+              ]}
+              testID={`car-origin-${o}`}
+            >
+              <AppText
+                style={[
+                  styles.stripChipText,
+                  { color: active ? "#FFFFFF" : colors.mutedForeground },
+                ]}
+              >
+                {o === "all" ? t("home.engines.all") : t(`create.opts.${o}`)}
+              </AppText>
+            </Pressable>
+          );
+        })}
+      </View>
+    </ScrollView>
+  ) : null;
+
+  const carControlsSlot = isCarSection ? (
+    <View style={styles.carFilterPanel}>
+      {primaryAxisStrip}
+      {engineAxisStrip}
+      {carBrandOriginStrip}
+    </View>
+  ) : null;
+
   let overlay: React.ReactNode = null;
   if (viewState === "loading" || viewState === "discover") {
     overlay = (
@@ -1331,10 +1430,6 @@ export function SectionSearchApp({
             </AppText>
           </Pressable>
         ) : null}
-        {/* Demand bridges — an empty result must never dead-end. Every section
-            offers "post what you're looking for" (buyer request) locked to THIS
-            section's create category (REL-07); supply sections additionally
-            bridge into the B2B RFQ flow. */}
         <Pressable
           onPress={() => {
             playSound(tap);
@@ -1358,7 +1453,7 @@ export function SectionSearchApp({
           testID="section-empty-post-request"
         >
           <Feather name="edit-2" size={16} color={accent} />
-          <AppText style={[styles.emptyCtaText, { color: accent }]}>
+          <AppText style={[styles.emptyCtaText, { color: accent }]}> 
             {t("search.emptyPostRequest")}
           </AppText>
         </Pressable>
@@ -1392,38 +1487,11 @@ export function SectionSearchApp({
     );
   }
 
-  /**
-   * The half of the Cars header that scrolls.
-   *
-   * The hero is 244dp of brand atmosphere; measured on a 932dp screen it helped
-   * push the first card down to 511dp. It is identity, not a control, so it
-   * belongs with the content: handed to the results list as its own header it
-   * leaves the screen on the first scroll and never comes back uninvited.
-   *
-   * The top bar and the search row stay pinned above the list — they are how a
-   * buyer changes the query, and the non-results overlay would swallow them if
-   * they lived in here.
-   *
-   * `carScrollY` is how the two halves stay in step. The list writes its offset
-   * to it on the UI thread and the pinned half interpolates its collapse from
-   * it, so the header answers the scroll without either half re-rendering, and
-   * without the hero having to leave the list to be animated.
-   */
   const carScrollY = useSharedValue(0);
-  /** Same contract as `carScrollY`, for the Property split. Separate values
-   *  rather than one shared offset: only one section is ever mounted, but a
-   *  single value would carry the previous section's scroll position into the
-   *  next one's first frame. */
   const propertyScrollY = useSharedValue(0);
-  /** Same again for Materials. */
   const materialsScrollY = useSharedValue(0);
-  /** Same mechanism for Factories: the pinned half reads it to collapse the
-   *  brand lockup. Separate value per section — one shared offset would carry
-   *  a stale scroll position across a section change. */
   const facilitiesScrollY = useSharedValue(0);
 
-  /** B-INDUSTRY's scrolling slice — hero, type strip, proven count. Placed here,
-   *  immediately before the return, because it reads state declared above it. */
   const facilitiesScrollHeader = useMemo(() => {
     if (!isFacilitiesSection) return null;
     return (
@@ -1481,16 +1549,6 @@ export function SectionSearchApp({
     facilityTypes,
   ]);
 
-
-  /**
-   * The half of the B-CORE header that scrolls — just the tagline today.
-   *
-   * Small, and deliberately so: this header was already the leanest of the
-   * five, so the win here is not height, it is that identity prose stops
-   * holding a permanent slice of the viewport. The browse strips this section
-   * uses live under the header in this file, not inside it, so there is
-   * nothing else to hand down.
-   */
   const materialsScrollHeader = useMemo(() => {
     if (!isMaterialsSection) return null;
     return (
@@ -1505,9 +1563,6 @@ export function SectionSearchApp({
         inputRef={inputRef}
         onBack={goBack}
         onSaveSearch={handleSaveSearch}
-        // Wired to the real handlers rather than no-ops even though this slot
-        // paints no control today — an empty handler is a dead control, and the
-        // guard fails one on sight.
         onOpenMap={() => {
           playSound(tap);
           Haptics.selectionAsync();
@@ -1546,9 +1601,8 @@ export function SectionSearchApp({
     criteria.sort,
   ]);
 
-
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}> 
       {isRealEstateSection ? (
         <PropertyHomeHeader
           slot="pinned"
@@ -1703,12 +1757,10 @@ export function SectionSearchApp({
       ) : isCarSection ? (
         <CarsHomeHeader
           slot="pinned"
-          // The filter bands below are painted here, in this component, right
-          // under the pinned header. Telling the header they continue it drops
-          // its rounded bottom + shadow so the two stop reading as separate
-          // cards — the closing edge moves to the last filter row.
-          continuesBelow
           scrollY={carScrollY}
+          compact={mapMode && inResultsView}
+          mapActive={mapMode && inResultsView}
+          controlsSlot={carControlsSlot}
           searchOpen={searchOpen}
           draftQuery={draftQuery}
           searchSaved={searchSaved}
@@ -1719,6 +1771,10 @@ export function SectionSearchApp({
           onOpenMap={() => {
             playSound(tap);
             Haptics.selectionAsync();
+            if (mapMode && inResultsView) {
+              setMapMode(false);
+              return;
+            }
             openOrLatchMap({ inResultsView, setMapMode, setWantMap });
           }}
           onOpenFilters={() => {
@@ -1757,7 +1813,6 @@ export function SectionSearchApp({
         />
       ) : (
       <>
-      {/* ── Section header: back + title/subtitle + section icon ── */}
       <View
         style={[
           styles.header,
@@ -1782,8 +1837,8 @@ export function SectionSearchApp({
           />
         </Pressable>
         <View style={styles.headerTitleWrap}>
-          <View style={[styles.headerTitleRow, { flexDirection: rowDir }]}>
-            <View style={[styles.headerIcon, { backgroundColor: accent }]}>
+          <View style={[styles.headerTitleRow, { flexDirection: rowDir }]}> 
+            <View style={[styles.headerIcon, { backgroundColor: accent }]}> 
               {headerIcon ? (
                 <Feather name={headerIcon} size={15} color="#FFFFFF" />
               ) : (
@@ -1822,10 +1877,6 @@ export function SectionSearchApp({
         >
           <Feather name="search" size={18} color={draftQuery ? "#FFFFFF" : colors.foreground} />
         </Pressable>
-        {/* W9 D-W9-02: generic-header worlds need a header map hit — the FAB
-            alone is easy to miss. Facilities has its own FacilitiesHomeHeader
-            now (imported, memoised and rendered above); this affordance still
-            serves the sections that fall back to the generic header. */}
         <Pressable
           onPress={() => {
             playSound(tap);
@@ -1865,8 +1916,8 @@ export function SectionSearchApp({
             color={activeFilterCount > 0 ? "#FFFFFF" : colors.foreground}
           />
           {activeFilterCount > 0 && (
-            <View style={[styles.filterBadge, { backgroundColor: "#FFFFFF" }]}>
-              <AppText style={[styles.filterBadgeText, { color: accent }]}>
+            <View style={[styles.filterBadge, { backgroundColor: "#FFFFFF" }]}> 
+              <AppText style={[styles.filterBadgeText, { color: accent }]}> 
                 {activeFilterCount}
               </AppText>
             </View>
@@ -1876,7 +1927,6 @@ export function SectionSearchApp({
       </>
       )}
 
-      {/* ── Collapsible search bar — non-RE/materials/car (those search live in home headers) ── */}
       {!isRealEstateSection && !isMaterialsSection && !isCarSection && searchOpen && (
         <View
           style={[
@@ -1921,7 +1971,6 @@ export function SectionSearchApp({
         </View>
       )}
 
-      {/* Inline autocomplete — below search bar / section home headers */}
       {searchOpen && showSuggestions && suggestions.length > 0 && (
         <View
           style={[
@@ -1955,209 +2004,18 @@ export function SectionSearchApp({
               >
                 {s}
               </AppText>
-
             </Pressable>
           ))}
         </View>
       )}
 
-      {/* ── B-PROPERTIES service desks retired from first paint — offer/map/request
-          live in FilterSheet + Band D. Import-hub rule still holds: no dead taps. ── */}
-
-      {/* ── B-oom Car: ONE control in front of every axis below.
-          Before this, market + sort + mode + engines + brand + origin painted
-          five wrapped chip rows over the first screen and the results started
-          off-screen. The axes are unchanged and un-deleted — they are simply
-          collapsed until asked for, which is what "الفلاتر" now means. ── */}
-
-      {/* ── Primary chip strip: country/currency · sort · mode/engines.
-          RE/materials: country + sort live inside home headers.
-          B-oom Car: market/sort SoT = this strip only (W8 D-W8-01); listingMode
-          + engines chips stay visible (REL-17) — visible meaning "on this strip
-          and nowhere else", now behind the car collapse above. ── */}
-      {!isRealEstateSection && !isMaterialsSection ? (
-      // Cars: the outer panel carries the SAME dark surface as the header above
-      // (#090909), so the chips continue the header card instead of floating on
-      // the page. The section flag lives HERE, on the wrapper — never between
-      // the strip and MarketCountryButton, which a guard keeps ungated.
-      <View style={isCarSection ? styles.carFilterPanel : undefined}>
-      {/* One clean horizontal strip instead of a wrapping block. The axes used
-          to wrap into ragged two- and three-line rows that read as loose chips
-          dumped under the header; on a horizontal scroll they stay a single
-          strip inside the header design, the way the type strip and the brand
-          strip already do. Nothing is removed — every axis is still here and
-          reachable, just on one line with the divider marking the compartments
-          (market · sort │ offer · condition). */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.hScroll}
-        contentContainerStyle={[styles.chipStripRow, { flexDirection: rowDir }]}
-        testID="section-primary-strip"
-      >
-        <MarketCountryButton
-          selected={criteria.marketCountry}
-          onPress={() => {
-            playSound(tap);
-            setMarketPickerOpen(true);
-          }}
-        />
-        {/* Quick sort — one seat only (strip). Cycles recommended → newest
-            → price low→high → high→low. */}
-        <Pressable
-          onPress={() => {
-            playSound(tap);
-            const cycle = ["recommended", "newest", "price_asc", "price_desc"] as const;
-            const next =
-              cycle[(cycle.indexOf(criteria.sort as (typeof cycle)[number]) + 1) % cycle.length];
-            update({ sort: next });
-          }}
-          style={[
-            styles.sortChip,
-            {
-              backgroundColor: criteria.sort !== "recommended" ? accent : colors.secondary,
-              flexDirection: rowDir,
-            },
-          ]}
-          accessibilityLabel={t(`search.sortOptions.${criteria.sort}`)}
-          testID="section-sort-cycle"
-        >
-          <Feather
-            name={
-              criteria.sort === "price_asc"
-                ? "trending-up"
-                : criteria.sort === "price_desc"
-                  ? "trending-down"
-                  : criteria.sort === "newest"
-                    ? "clock"
-                    : "list"
-            }
-            size={14}
-            color={criteria.sort !== "recommended" ? "#FFFFFF" : colors.mutedForeground}
-          />
-        </Pressable>
-        {showListingMode ? (
-          <View style={[styles.chipStripDivider, { backgroundColor: colors.border }]} />
-        ) : null}
-        {/* Offer axis stays on the primary strip next to market + sort. The
-            engine/condition chips (new/used/import/instalment) moved to their
-            own strip below so they lead their own line and are not pushed off
-            the right edge behind the offer pill — visible, not hidden. */}
-        {showListingMode ? (
-          axisShape(chrome, "listingMode") === "pill" ? (
-            <FilterPillSelect
-              icon="tag"
-              title={t("search.listingModeAll")}
-              options={[
-                { value: "sale", label: t("search.listingModeSale") },
-                { value: "buy", label: t("search.listingModeBuy") },
-              ]}
-              selected={criteria.listingMode}
-              allValue="all"
-              allLabel={t("search.offerAny")}
-              onSelect={(v) => {
-                playSound(tap);
-                Haptics.selectionAsync();
-                selectListingMode(v as "all" | "sale" | "buy");
-              }}
-              accentColor={accent}
-              testID="section-listing-mode"
-            />
-          ) : (
-            (["all", "sale", "buy"] as const).map((mode) => {
-              const active = criteria.listingMode === mode;
-              return (
-                <Pressable
-                  key={mode}
-                  onPress={() => { playSound(tap); Haptics.selectionAsync(); selectListingMode(mode); }}
-                  style={[styles.stripChip, { backgroundColor: active ? accent : colors.secondary }]}
-                  testID={`section-listing-mode-${mode}`}
-                >
-                  <AppText style={[styles.stripChipText, { color: active ? "#FFFFFF" : colors.mutedForeground }]}>
-                    {mode === "all" ? t("search.listingModeAll") : mode === "sale" ? t("search.listingModeSale") : t("search.listingModeBuy")}
-                  </AppText>
-                </Pressable>
-              );
-            })
-          )
-        ) : null}
-      </ScrollView>
-      {/* Condition/engine strip — its own clean line so new/used/import/
-          instalment lead the row instead of scrolling off behind the offer
-          pill. Same compartment surface as the strip above; a section that
-          wants its axis as a single pill still gets one, here. */}
-      {(showEngineChips || showIndustrialChips) ? (
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.hScroll}
-        contentContainerStyle={[styles.chipStripRow, { flexDirection: rowDir }]}
-        testID="section-engine-strip"
-      >
-        {showEngineChips ? (
-          axisShape(chrome, "engines") === "pill" ? (
-            <FilterPillSelect
-              icon="sliders"
-              title={t("search.type")}
-              options={stripEngineList
-                .filter((e) => e.key !== "all")
-                .map((e) => ({ value: e.key, label: t(e.i18nKey) }))}
-              selected={activeOfferKey ?? "all"}
-              allValue="all"
-              allLabel={t("search.typeAny")}
-              onSelect={(v) => {
-                playSound(tap);
-                Haptics.selectionAsync();
-                selectEngine(v);
-              }}
-              accentColor={accent}
-              testID="section-engine"
-            />
-          ) : (
-            stripEngineList.map((e) => {
-              const active = activeOfferKey === e.key;
-              return (
-                <Pressable
-                  key={e.key}
-                  onPress={() => { playSound(tap); Haptics.selectionAsync(); selectEngine(e.key); }}
-                  style={[styles.stripChip, { backgroundColor: active ? accent : colors.secondary }]}
-                  testID={`engine-${e.key}`}
-                >
-                  <AppText style={[styles.stripChipText, { color: active ? "#FFFFFF" : colors.mutedForeground }]}>
-                    {t(e.i18nKey)}
-                  </AppText>
-                </Pressable>
-              );
-            })
-          )
-        ) : null}
-        {showIndustrialChips ? [
-          { key: "all" as IndustrialType, i18nKey: "home.industrialTypes.all" },
-          ...((visibleIndTypes ?? []).map((ty) => ({ key: ty, i18nKey: `home.industrialTypes.${ty}` }))),
-        ].map((item) => {
-          const active = criteria.industrialType === item.key;
-          return (
-            <Pressable
-              key={item.key}
-              onPress={() => { playSound(tap); Haptics.selectionAsync(); selectIndustrialType(item.key); }}
-              style={[styles.stripChip, { backgroundColor: active ? accent : colors.secondary }]}
-              testID={`industrial-type-${item.key}`}
-            >
-              <AppText style={[styles.stripChipText, { color: active ? "#FFFFFF" : colors.mutedForeground }]}>
-                {t(item.i18nKey)}
-              </AppText>
-            </Pressable>
-          );
-        }) : null}
-      </ScrollView>
-      ) : null}
-      </View>
+      {!isRealEstateSection && !isMaterialsSection && !isCarSection ? (
+        <View>
+          {primaryAxisStrip}
+          {engineAxisStrip}
+        </View>
       ) : null}
 
-      {/* ── RE property-type axis (Stay-parallel) — never mixed into offer row.
-          Shape comes from the section screen via chrome.propertyType:
-          "pill" collapses 16 types into one control (B-PROPERTY content-first);
-          "chips" keeps the horizontal strip for any section that still wants it. ── */}
       {showReTypeStrip ? (
         axisShape(chrome, "propertyType") === "pill" ? (
           <View
@@ -2242,96 +2100,6 @@ export function SectionSearchApp({
         )
       ) : null}
 
-      {/* ── Cars: brand-picker button + origin chips — ONE compact strip.
-          Replaces the old brand-only row + the separate origin row, saving
-          ~50dp of vertical chrome. Brand collapses to a single icon+label
-          button (active = accent, shows chosen brand; idle = grid icon).  ── */}
-      {showCarBrandStrip ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={[styles.hScroll, styles.carFilterPanelFooter]}
-          contentContainerStyle={[styles.chipStrip, { flexDirection: rowDir }]}
-          testID="car-brand-origin-strip"
-        >
-          {/* Collapsed brand button — single picker entry point */}
-          <View testID="car-brand-strip">
-          <Pressable
-            onPress={() => {
-              playSound(tap);
-              setCarPickerOpen(true);
-            }}
-            style={[
-              styles.carBrandBtn,
-              {
-                flexDirection: rowDir,
-                backgroundColor: brandValue ? accent : colors.secondary,
-                borderColor: brandValue ? accent : colors.border,
-              },
-            ]}
-            testID="car-brand-btn"
-          >
-            <Feather
-              name="grid"
-              size={13}
-              color={brandValue ? "#FFFFFF" : colors.foreground}
-            />
-            <AppText
-              style={[styles.stripChipText, { color: brandValue ? "#FFFFFF" : colors.foreground }]}
-              numberOfLines={1}
-            >
-              {brandValue
-                ? brandLabel(
-                    QUICK_BRANDS.find((b) => b.value === brandValue) ??
-                      ({ value: brandValue, en: brandValue, ar: brandValue } as CarBrand),
-                    isRTL,
-                  )
-                : t("search.allBrands")}
-            </AppText>
-            <Feather
-              name="chevron-down"
-              size={12}
-              color={brandValue ? "#FFFFFF" : colors.mutedForeground}
-            />
-          </Pressable>
-          </View>
-          {/* Thin divider between brand and origin */}
-          <View style={[styles.chipStripDivider, { backgroundColor: colors.border }]} />
-          {/* Origin chips inline */}
-          <View testID="car-origin-strip" style={{ flexDirection: rowDir, gap: 6 }}>
-            {(["all", "local", "imported"] as const).map((o) => {
-              const active = originKey === o;
-              return (
-                <Pressable
-                  key={o}
-                  onPress={() => {
-                    playSound(tap);
-                    Haptics.selectionAsync();
-                    selectOrigin(o);
-                  }}
-                  style={[
-                    styles.stripChip,
-                    { backgroundColor: active ? accent : colors.secondary },
-                  ]}
-                  testID={`car-origin-${o}`}
-                >
-                  <AppText
-                    style={[
-                      styles.stripChipText,
-                      { color: active ? "#FFFFFF" : colors.mutedForeground },
-                    ]}
-                  >
-                    {o === "all" ? t("home.engines.all") : t(`create.opts.${o}`)}
-                  </AppText>
-                </Pressable>
-              );
-            })}
-          </View>
-        </ScrollView>
-      ) : null}
-
-      {/* ── Materials smart axis strip: types + origin ONE horizontal scroll.
-          flexGrow:0 via hScroll — never eat results. FilterSheet = refinements. ── */}
       {showMaterialsAxisStrip ? (
         <ScrollView
           horizontal
@@ -2418,7 +2186,6 @@ export function SectionSearchApp({
         </ScrollView>
       ) : null}
 
-      {/* ── Materials commodities (Steel / Aluminum / …) — horizontal scroll ── */}
       {showMaterialsLayer2 ? (
         <ScrollView
           horizontal
@@ -2494,9 +2261,6 @@ export function SectionSearchApp({
         </ScrollView>
       ) : null}
 
-      {/* ── Rental term (RE rent) — pill, not a full chip row.
-          Same axis as before (criteria.rentalTerm); only the chrome shape
-          changes so rent browse keeps vertical space for listings. ── */}
       {showRentalTerms ? (
         <View
           style={[styles.rentalChrome, { flexDirection: rowDir }]}
@@ -2527,9 +2291,6 @@ export function SectionSearchApp({
         </View>
       ) : null}
 
-      {/* ── B-PROPERTY active filters — removable chips for applied refinements.
-          Only mounts when something is actually applied; each chip clears ONE
-          real criteria field (no fake filters). ── */}
       {isRealEstateSection && reActiveChips.length > 0 ? (
         <ScrollView
           horizontal
@@ -2591,7 +2352,6 @@ export function SectionSearchApp({
         </ScrollView>
       ) : null}
 
-      {/* ── Results count ── */}
       {viewState === "results" && items.length > 0 && (
         <AppText
           style={[styles.resultsCount, { color: colors.mutedForeground, textAlign }]}
@@ -2613,10 +2373,7 @@ export function SectionSearchApp({
         brandValue={brandValue}
         locationLabel={locationLabel}
         lockCategory
-        // Materials axis strip owns origin (D-W9-03) — sheet keeps material refinements.
         hideOriginAxis={isMaterialsSection}
-        // Stay-parallel: scope RE sheet types to the primary taxonomy so
-        // twinhouse/clinic cannot drift away from the pill / desks.
         propertyTypeOptions={
           isRealEstateSection ? [...RE_TYPE_PRIMARY] : undefined
         }
@@ -2643,7 +2400,6 @@ export function SectionSearchApp({
         onClearAll={clearAllFilters}
       />
 
-
       <View style={styles.resultsArea}>
         <SearchResultsSurface
           items={items}
@@ -2658,16 +2414,7 @@ export function SectionSearchApp({
           onRefresh={retry}
           overlay={overlay}
           contentPaddingBottom={insets.bottom + 150}
-          // Cars keep every band pinned now — the hero, the type strip and the
-          // stats were all being covered by the empty-state overlay when they
-          // rode in the list header, which is why none of them were ever on
-          // screen. Property does the same. Materials and Facilities still hand
-          // the list a scrolling half.
           listHeader={materialsScrollHeader ?? facilitiesScrollHeader}
-          // Every section that animates its collapse needs the offset: Cars and
-          // Property read it from their pinned half, Materials and Facilities
-          // from their scrolling half. Every other section leaves this
-          // undefined and the list attaches no scroll handler at all.
           scrollY={
             isCarSection
               ? carScrollY
@@ -2687,8 +2434,6 @@ export function SectionSearchApp({
             criteria={criteria}
             onOpenListing={handleCardPress}
             onOpenListingId={(id) => {
-              // Only focus booking chrome when the pin is actually bookable
-              // (or unknown off-page). Non-bookable RE pins open the listing.
               const hit = items.find((i) => i.id === id);
               const focusBooking =
                 criteria.category === "real_estate" &&
@@ -2704,7 +2449,7 @@ export function SectionSearchApp({
           />
         ) : null}
 
-        {showMapChrome ? (
+        {showMapChrome && !isCarSection ? (
           <View
             style={[styles.mapToggleWrap, { bottom: insets.bottom + 88 }]}
             pointerEvents="box-none"
@@ -2790,9 +2535,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   resultsArea: { flex: 1 },
   header: {
-    // Match Search-host chrome (16/gap 8). Shrinking H-pad + icon hits to
-    // "fix crush" pushed search/filter buttons outside the header band
-    // (Owner: الهيدر كويس لما صغّر باظ والزراير خرجت منه).
     paddingHorizontal: 16,
     paddingBottom: 10,
     borderBottomWidth: 1,
@@ -2858,8 +2600,6 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   iconBtn: {
-    // Restored to Search-host 12. Padding 8 let icon hits escape the header.
-    // Title shrinks (minWidth:0); buttons never flex-shrink.
     padding: 12,
     position: "relative",
     flexShrink: 0,
@@ -2867,7 +2607,6 @@ const styles = StyleSheet.create({
   filterBadge: {
     position: "absolute",
     top: 6,
-    // Logical end — flips correctly under RTL (was pinned `right`).
     end: 6,
     width: 14,
     height: 14,
@@ -2879,10 +2618,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontFamily: "Inter_700Bold",
   },
-  // Every stacked strip in a section shares ONE left edge (12) and ONE vertical
-  // rhythm (8 / 2). Before: this row sat at 16/10 between neighbours at 12/8, so
-  // the materials origin strip visibly jutted out 4px from the strips above and
-  // below it. Alignment, not decoration — see MASTER-TRACKER §7.
   chipRow: {
     gap: 8,
     paddingHorizontal: 12,
@@ -2898,16 +2633,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_500Medium",
   },
-  // Unified horizontal chip strip — globe first, then mode/engine chips inline
-  /** Wraps, and every axis stays on screen.
-   *
-   *  Two wrong answers were tried on this strip and both HID controls: putting
-   *  the axes behind a Filters toggle, and turning the row into a sideways
-   *  scroll. Sideways scroll is what this guard was written against — 999px of
-   *  chips in a 375px window left 624px of the user's own segmentation off the
-   *  right edge with nothing hinting it was there. Compression here means
-   *  smaller chips, never fewer visible ones. `flexGrow: 0` is load-bearing:
-   *  without it RN lets the strip expand and crush the results column. */
   chipStrip: {
     alignItems: "center",
     flexWrap: "wrap",
@@ -2917,11 +2642,6 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 2,
   },
-  /** Single-line variant of chipStrip for the primary axis strip. No wrap: it
-   *  is the content of a horizontal scroll, so the axes stay on one clean line
-   *  (market · sort · offer · condition) instead of wrapping into ragged rows.
-   *  Same rhythm/padding as chipStrip so the compartment lines up with the
-   *  bands above and below it. */
   chipStripRow: {
     alignItems: "center",
     flexGrow: 0,
@@ -2930,16 +2650,10 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 2,
   },
-  /** Cars filter surface — the same #090909 the header root uses, so the chips
-   *  continue the header card rather than floating on the page. */
   carFilterPanel: {
     backgroundColor: SECTION_NEUTRAL.void,
     paddingTop: 10,
   },
-  /** The last cars filter row: same surface, and the rounded bottom that closes
-   *  the card off. This row is now the bottom edge of the whole header+filters
-   *  card, so it also carries the soft shadow the pinned header used to own —
-   *  the card floats over the results from here, its one closing edge. */
   carFilterPanelFooter: {
     backgroundColor: SECTION_NEUTRAL.void,
     borderBottomLeftRadius: 20,
@@ -2958,11 +2672,6 @@ const styles = StyleSheet.create({
     opacity: 0.5,
     marginHorizontal: 2,
   },
-  // B-oom Car collapse. Sits on the same 12 left edge / 8 rhythm as every other
-  // strip so opening it does not shift the column sideways.
-  /** Compressed and moved into the strip 2026-08-03. It used to sit on its own
-   *  line above, with 10 of margin and 9 of vertical padding, reading as a
-   *  separate row of chrome rather than a control on the row it opens. */
   carFilterToggle: {
     alignItems: "center",
     gap: 6,
@@ -2987,16 +2696,11 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Inter_700Bold",
   },
-  /** On FilterPill's metrics — the ONE approved filter shape in this app
-   *  (paddingHorizontal 10, paddingVertical 4, guard at
-   *  section-miniapp-guard:590). These ran 14/7, which is what put the car axes
-   *  on three wrapped rows. Smaller chips, not fewer visible ones. */
   stripChip: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 16,
   },
-  // Materials smart axis — types + origin one horizontal scroll row (~3mm lifted).
   materialsAxisStrip: {
     alignItems: "center",
     gap: 6,
@@ -3024,7 +2728,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  // Materials commodities strip rhythm
   materialsLayer2Strip: {
     alignItems: "center",
     gap: 6,
