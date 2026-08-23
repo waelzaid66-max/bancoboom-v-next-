@@ -33,3 +33,14 @@ test("offer composer does not serialize hard-coded EGP as currency authority", (
     "new offer composition must use listing-authoritative normalized currency rather than hard-coded EGP",
   );
 });
+
+test("accept or decline is not persisted as an ordinary quoted text reply", () => {
+  const legacyQuotedResponse =
+    /const\s+answerOffer\s*=\s*\([^)]*\)\s*=>\s*\{[\s\S]*?messages\.offer\.acceptBody[\s\S]*?messages\.offer\.declineBody[\s\S]*?reply_to_id:\s*offerMsgId[\s\S]*?deliver\(tempId,\s*\{\s*body,\s*reply_to_id:\s*offerMsgId\s*\}\)/;
+
+  assert.equal(
+    legacyQuotedResponse.test(threadSource),
+    false,
+    "accept/decline must become a durable server-authoritative offer transition, not another quoted chat message",
+  );
+});
