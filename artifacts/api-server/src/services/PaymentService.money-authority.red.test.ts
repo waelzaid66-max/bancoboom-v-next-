@@ -22,12 +22,14 @@ function option(overrides: Partial<PaymentOption> = {}): PaymentOption {
 type OfferProjectionContext = {
   currency: string;
   locale: "ar" | "en";
+  calculationBasis?: "quoted_monthly";
 };
 
 /**
- * RED-only adapter. It deliberately ignores listing currency/locale because the
- * current Product engine has no authority for either. Keeping the adapter local
- * prevents this evidence test from preselecting the final Product API shape.
+ * RED-only adapter. It deliberately ignores listing currency/locale/calculation
+ * basis because the current Product engine has no authority for those concepts.
+ * Keeping the adapter local prevents this evidence test from preselecting the
+ * final Product API shape.
  */
 function projectCurrentOffers(
   options: PaymentOption[],
@@ -70,6 +72,44 @@ describe("FIN-OFFER money authority RED contract", () => {
     expect(systemProjection).not.toMatch(
       /Seller Plan|Bank Finance|Dealer Finance|Supplier Finance|\bIslamic\b|\bfrom\b|\/mo\b/,
     );
+  });
+
+  it("preserves a conventional quoted monthly instead of silently replacing it with rate math", () => {
+    const result = projectCurrentOffers(
+      [
+        option({
+          monthlyPayment: "5000",
+          downPayment: "0",
+          durationMonths: 12,
+          annualRatePct: "0",
+        }),
+      ],
+      120000,
+      { currency: "EGP", locale: "en", calculationBasis: "quoted_monthly" },
+    );
+
+    expect(result.offers[0]?.monthly_display).toBe("5K EGP");
+  });
+
+  it("preserves an Islamic quoted monthly instead of silently replacing it with profit math", () => {
+    const result = projectCurrentOffers(
+      [
+        option({
+          mode: "bank_finance",
+          monthlyPayment: "5000",
+          downPayment: "20000",
+          durationMonths: 10,
+          isIslamicCompliant: true,
+          provider: "bank",
+          providerName: "CIB",
+          profitRatePct: "10",
+        }),
+      ],
+      100000,
+      { currency: "EGP", locale: "en", calculationBasis: "quoted_monthly" },
+    );
+
+    expect(result.offers[0]?.monthly_display).toBe("5K EGP");
   });
 
   it("preserves the Islamic public no-rate invariant", () => {
