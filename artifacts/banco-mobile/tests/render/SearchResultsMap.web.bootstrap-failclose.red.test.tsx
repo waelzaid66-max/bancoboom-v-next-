@@ -289,16 +289,15 @@ describe("SearchResultsMap web bootstrap fail-close", () => {
     expect(view.getByTestId("mock-map-overlay")).toBeTruthy();
 
     const previousWindow = currentIframeWindow();
+    const previousHtml = mockBuildMapHtml.mock.results.at(-1)?.value;
     view.rerender(mapElement([MAPPED_ITEM], SAME_MARKER_NEXT_CRITERIA));
 
-    expect(mockBuildMapHtml).toHaveBeenLastCalledWith(
-      expect.anything(),
-      expect.anything(),
+    const latestBuildArgs = mockBuildMapHtml.mock.calls.at(-1);
+    expect(latestBuildArgs?.[2]).toEqual(
       expect.objectContaining({ lat: 24.7136, lng: 46.6753 }),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
     );
+    const nextHtml = mockBuildMapHtml.mock.results.at(-1)?.value;
+    expect(nextHtml).not.toBe(previousHtml);
     expect(view.queryByTestId("mock-map-overlay")).toBeNull();
 
     dispatchMapMessage({ type: "ready" }, previousWindow);
