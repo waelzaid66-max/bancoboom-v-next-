@@ -8,6 +8,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync, mkdirSync, rmSync } from "node:fs";
+import { readCode } from "./_codeOnly.mjs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
@@ -87,7 +88,7 @@ test("every i18n key used in the app resolves in the en tree", () => {
   const en = compileI18n();
   const missing = [];
   for (const f of sourceFiles()) {
-    const src = readFileSync(f, "utf8");
+    const src = readCode(f);
     for (const m of src.matchAll(KEY_RE)) {
       const k = m[1];
       if (!k.includes(".")) continue;

@@ -1,3 +1,4 @@
+import { readCode } from "./_codeOnly.mjs";
 // Scale infrastructure guards — prove multi-market / high-user readiness is wired.
 // Run: node --test tests/scale-readiness.test.mjs
 
@@ -11,7 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "../../..");
 
 test("DB pool is sized for multi-replica Coolify (env-driven, not unbounded)", () => {
-  const src = fs.readFileSync(path.join(ROOT, "lib/db/src/index.ts"), "utf8");
+  const src = readCode(path.join(ROOT, "lib/db/src/index.ts"));
   assert.match(src, /DB_POOL_MAX/);
   assert.match(src, /max:/);
   assert.match(src, /idleTimeoutMillis/);
@@ -19,10 +20,7 @@ test("DB pool is sized for multi-replica Coolify (env-driven, not unbounded)", (
 });
 
 test("boot creates market_country expression index for 21-market filters", () => {
-  const src = fs.readFileSync(
-    path.join(ROOT, "artifacts/api-server/src/lib/bootstrap.ts"),
-    "utf8",
-  );
+  const src = readCode(path.join(ROOT, "artifacts/api-server/src/lib/bootstrap.ts"));
   assert.match(src, /idx_listing_attrs_market_country/);
   assert.match(
     src,
@@ -32,20 +30,14 @@ test("boot creates market_country expression index for 21-market filters", () =>
 });
 
 test("boot creates geo + feed scale indexes", () => {
-  const src = fs.readFileSync(
-    path.join(ROOT, "artifacts/api-server/src/lib/bootstrap.ts"),
-    "utf8",
-  );
+  const src = readCode(path.join(ROOT, "artifacts/api-server/src/lib/bootstrap.ts"));
   assert.match(src, /idx_listings_geo/);
   assert.match(src, /idx_listings_status_category_created/);
   assert.match(src, /idx_import_orders_stage_created/);
 });
 
 test("SearchService market filter uses the same COALESCE contract as the index", () => {
-  const src = fs.readFileSync(
-    path.join(ROOT, "artifacts/api-server/src/services/SearchService.ts"),
-    "utf8",
-  );
+  const src = readCode(path.join(ROOT, "artifacts/api-server/src/services/SearchService.ts"));
   assert.match(
     src,
     /COALESCE\(\$\{listingAttributes\.specs\}->>'market_country', 'EG'\)/,
@@ -53,18 +45,14 @@ test("SearchService market filter uses the same COALESCE contract as the index",
 });
 
 test("API trusts proxy once (Coolify/nginx) so rate limits see real client IP", () => {
-  const src = fs.readFileSync(
-    path.join(ROOT, "artifacts/api-server/src/app.ts"),
-    "utf8",
-  );
+  const src = readCode(path.join(ROOT, "artifacts/api-server/src/app.ts"));
   assert.match(src, /trust proxy/);
 });
 
 test("Coolify compose exposes api + web + website + nginx with healthchecks", () => {
-  const compose = fs.readFileSync(
-    path.join(ROOT, "docker-compose.coolify.yml"),
-    "utf8",
-  );
+  // A compose file is a config artifact: its CONTENT is the thing under test,
+  // and the JS comment stripper must never touch it (see _codeOnly.mjs).
+  const compose = fs.readFileSync(path.join(ROOT, "docker-compose.coolify.yml"), "utf8");
   for (const svc of ["postgres", "api", "banco-web", "banco-website", "web"]) {
     assert.match(compose, new RegExp(`^\\s+${svc}:`, "m"), `missing service ${svc}`);
   }
@@ -73,10 +61,7 @@ test("Coolify compose exposes api + web + website + nginx with healthchecks", ()
 });
 
 test("Import-order lifecycle is closed (create + stage + cancel)", () => {
-  const routes = fs.readFileSync(
-    path.join(ROOT, "artifacts/api-server/src/routes/v1/import-orders.ts"),
-    "utf8",
-  );
+  const routes = readCode(path.join(ROOT, "artifacts/api-server/src/routes/v1/import-orders.ts"));
   assert.match(routes, /updateImportOrderStageHandler/);
   assert.match(routes, /cancelImportOrderHandler/);
   assert.match(routes, /\/:id\/stage/);
@@ -84,10 +69,7 @@ test("Import-order lifecycle is closed (create + stage + cancel)", () => {
 });
 
 test("Auth surface includes Google + Apple + Facebook + MFA", () => {
-  const profile = fs.readFileSync(
-    path.join(ROOT, "artifacts/banco-mobile/app/(tabs)/profile.tsx"),
-    "utf8",
-  );
+  const profile = readCode(path.join(ROOT, "artifacts/banco-mobile/app/(tabs)/profile.tsx"));
   assert.match(profile, /oauth_facebook/);
   assert.match(profile, /oauth_google/);
   assert.match(profile, /oauth_apple/);

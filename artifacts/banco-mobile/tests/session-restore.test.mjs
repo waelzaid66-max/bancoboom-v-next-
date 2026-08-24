@@ -1,3 +1,4 @@
+import { readCode } from "./_codeOnly.mjs";
 /**
  * Session restore flow — static regression guards.
  *
@@ -43,19 +44,16 @@ const AUTH_GATE = path.join(APP_ROOT, "hooks", "useAuthGate.tsx");
 const SESSION = path.join(APP_ROOT, "context", "SessionContext.tsx");
 const LISTING = path.join(APP_ROOT, "app", "listing", "[id].tsx");
 
-const layout = fs.readFileSync(LAYOUT, "utf8");
-const biometric = fs.readFileSync(BIOMETRIC, "utf8");
-const authGate = fs.readFileSync(AUTH_GATE, "utf8");
-const session = fs.readFileSync(SESSION, "utf8");
-const listing = fs.readFileSync(LISTING, "utf8");
+const layout = readCode(LAYOUT);
+const biometric = readCode(BIOMETRIC);
+const authGate = readCode(AUTH_GATE);
+const session = readCode(SESSION);
+const listing = readCode(LISTING);
 
 // ─── 1. Token cache → session survives Expo Go restart ───────────────────────
 
 test("Saving a search reaches the SERVER, or the new-listing alert stays dark", () => {
-  const ctx = fs.readFileSync(
-    path.join(APP_ROOT, "context", "SessionContext.tsx"),
-    "utf8",
-  );
+  const ctx = readCode(path.join(APP_ROOT, "context", "SessionContext.tsx"));
   // The whole "a new listing matches your saved search" pipeline already existed
   // server-side: the saved_searches table, the new_match notification type, the
   // four CRUD endpoints, the per-user email channel, and notifyNewMatch running

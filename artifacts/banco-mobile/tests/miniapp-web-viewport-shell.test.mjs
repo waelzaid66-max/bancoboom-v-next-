@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readCode } from "./_codeOnly.mjs";
 import test from "node:test";
 
-const rootHtml = readFileSync(new URL("../app/+html.tsx", import.meta.url), "utf8");
+const rootHtml = readCode(new URL("../app/+html.tsx", import.meta.url));
 
 function cssBlock(selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
