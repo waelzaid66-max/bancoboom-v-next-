@@ -151,8 +151,16 @@ function mapElement(criteria: SearchCriteria = CRITERIA) {
   );
 }
 
+/** Post one bridge message from the iframe, as the real srcDoc does. */
+function postFromMap(message: Record<string, unknown>) {
+  mockMessageHandler?.({
+    data: JSON.stringify(message),
+    source: mockIframeWindow,
+  } as unknown as MessageEvent);
+}
+
 function mountMap(criteria: SearchCriteria = CRITERIA) {
-  return render(
+  const view = render(
     mapElement(criteria),
     {
       createNodeMock: (element) =>
@@ -161,6 +169,14 @@ function mountMap(criteria: SearchCriteria = CRITERIA) {
           : null,
     },
   );
+  // mapHtml.ts posts `ready` once Leaflet is up (see its post({type:"ready"}))
+  // and the host now gates MapOverlayChrome on it, at native parity. Every real
+  // mount reaches this state, so the helper reproduces it rather than leaving
+  // the tests exercising a host state the browser never sits in.
+  act(() => {
+    postFromMap({ type: "ready" });
+  });
+  return view;
 }
 
 describe("SearchResultsMap web host", () => {
@@ -208,6 +224,28 @@ describe("SearchResultsMap web host", () => {
     );
     expect(mockOverlayProps.count).toBe(1);
     expect(mockMessageHandler).not.toBeNull();
+  });
+
+  it("fails closed on a bootstrap error: no chrome over a dead map", () => {
+    const view = render(mapElement(CRITERIA), {
+      createNodeMock: (element) =>
+        element.type === "iframe" ? { contentWindow: mockIframeWindow } : null,
+    });
+
+    act(() => {
+      postFromMap({ type: "error" });
+    });
+
+    expect(view.root.findAllByProps({ testID: "search-map-bootstrap-failed" }).length)
+      .toBeGreaterThan(0);
+    expect(mockOverlayProps.count).toBeUndefined();
+
+    // A tile failure must never revive an instance that already failed bootstrap.
+    act(() => {
+      postFromMap({ type: "tile_error" });
+    });
+    expect(view.root.findAllByProps({ testID: "search-map-bootstrap-failed" }).length)
+      .toBeGreaterThan(0);
   });
 
   it("surfaces a trusted tile failure once without blocking listing results", () => {

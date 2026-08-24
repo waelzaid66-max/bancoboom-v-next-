@@ -34,7 +34,7 @@ import { MapOverlayChrome, type MapPreviewCardProps } from "./MapOverlayChrome";
 const CLUSTER_DEBOUNCE_MS = 300;
 const CLUSTER_CACHE_MAX = 24;
 
-type MapBootstrapState = "loading" | "ready" | "failed";
+export type MapBootstrapState = "loading" | "ready" | "failed";
 
 function clusterCacheKey(criteriaSig: string, viewport: MapViewport): string {
   return `${criteriaSig}:${viewport.max_lat.toFixed(3)}:${viewport.min_lat.toFixed(3)}:${viewport.max_lng.toFixed(3)}:${viewport.min_lng.toFixed(3)}:${viewport.zoom}`;

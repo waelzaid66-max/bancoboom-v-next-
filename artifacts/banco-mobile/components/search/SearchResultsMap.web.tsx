@@ -1,9 +1,10 @@
 import { FeedItem, getMapClusters } from "@workspace/api-client-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Linking, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, StyleSheet, View } from "react-native";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AppText } from "@/components/AppText";
 import { apiCategoryFor } from "@/components/CategoryTabs";
 import { useI18n } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
@@ -27,7 +28,7 @@ import {
   type MapClusterMarker,
 } from "./mapHtml";
 import { MapOverlayChrome } from "./MapOverlayChrome";
-import type { SearchResultsMapProps } from "./SearchResultsMap";
+import type { MapBootstrapState, SearchResultsMapProps } from "./SearchResultsMap";
 
 const CLUSTER_DEBOUNCE_MS = 300;
 const CLUSTER_CACHE_MAX = 24;
@@ -77,6 +78,12 @@ export function SearchResultsMap({
   const navClearance = miniAppNavClearance(insets.bottom);
   const { t, isRTL } = useI18n();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Native parity (MAP fail-closed): a Leaflet/bootstrap failure is terminal
+  // for this iframe. Before this, the web host handled no bootstrap message at
+  // all and rendered MapOverlayChrome unconditionally — so a dead map showed a
+  // full control surface over a grey void, with nothing said. Measured
+  // 2026-08-24 against test/maps-web-bootstrap-failclose-red-20260824.
+  const [bootstrapState, setBootstrapState] = useState<MapBootstrapState>("loading");
   const [serverTotal, setServerTotal] = useState<number | null>(null);
   const areaRef = useRef<GeoArea | null>(null);
   const [areaTotal, setAreaTotal] = useState<{
@@ -282,7 +289,16 @@ export function SearchResultsMap({
       if (event.source !== iframeRef.current?.contentWindow) return;
       try {
         const msg = JSON.parse(String(event.data)) as MapBridgeMessage;
-        if (msg.type === "tile_error") {
+        if (msg.type === "ready") {
+          setBootstrapState("ready");
+        } else if (msg.type === "error") {
+          // Terminal for this iframe: do not expose overlay controls over a
+          // dead map. Same rule as the native host.
+          setBootstrapState("failed");
+        } else if (msg.type === "tile_error") {
+          // A tile failure is a degraded ready map, not a bootstrap failure —
+          // and it must never revive an instance that already failed bootstrap.
+          setBootstrapState((current) => (current === "failed" ? current : "ready"));
           if (!tileFailureShownRef.current) {
             tileFailureShownRef.current = true;
             Alert.alert(
@@ -365,6 +381,33 @@ export function SearchResultsMap({
         allow="geolocation"
         style={{ border: "none", width: "100%", height: "100%" }}
       />
+      {bootstrapState === "loading" ? (
+        <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : null}
+
+      {bootstrapState === "failed" ? (
+        <View
+          style={[StyleSheet.absoluteFill, styles.failure, { backgroundColor: colors.card }]}
+          testID="search-map-bootstrap-failed"
+          accessibilityRole="alert"
+        >
+          <AppText style={[styles.failureTitle, { color: colors.foreground }]}>
+            {t("search.mapUnavailableTitle")}
+          </AppText>
+          <AppText
+            style={[
+              styles.failureBody,
+              { color: colors.mutedForeground, textAlign: isRTL ? "right" : "left" },
+            ]}
+          >
+            {t("search.mapUnavailableBody")}
+          </AppText>
+        </View>
+      ) : null}
+
+      {bootstrapState === "ready" ? (
       <MapOverlayChrome
         count={serverTotal ?? markers.length}
         areaCount={areaTotal}
@@ -375,6 +418,28 @@ export function SearchResultsMap({
         isSaved={isSaved}
         CardComponent={CardComponent}
       />
+      ) : null}
     </View>
   );
 }
+
+// Mirrors the native host so the two surfaces present the same failure.
+const styles = StyleSheet.create({
+  center: { alignItems: "center", justifyContent: "center" },
+  failure: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 28,
+  },
+  failureTitle: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+  },
+  failureBody: {
+    maxWidth: 320,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+});
