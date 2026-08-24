@@ -165,3 +165,36 @@ node audit/tools/union-mobile-package-json.mjs
 
 ---
 *Every figure verified by command on 2026-08-24: tree hashes compared directly, merge-bases computed per branch, conflicts produced by `git merge-tree`, the Cars icon contract mutation-proven three ways. The Cars guard was extended and committed before this handoff was written, so the icons cannot be lost while it is being read.*
+
+---
+
+# 🚨 إضافة حرجة — السبب الجذري، مقيس بعد نشر التقرير الأول
+# CRITICAL ADDENDUM — the root cause, measured after this report was first published
+
+**CI ميت منذ عشرة أيام. ٣٢٤ تشغيلة متتالية فشلت دون تنفيذ خطوة واحدة.**
+
+```
+total CI runs (ci.yml)        347
+successful                     19
+last success        run #23 ·  2026-08-14 19:01
+consecutive failures since    324
+```
+
+**النمط الحاسم — the decisive pattern:**
+
+```
+all 19 successes    event = workflow_dispatch (manual)  → 2–3 min, real execution
+every push / PR run                                     → fails in 4–6s
+                                                           zero logs, zero steps
+```
+
+**آخر تشغيلة على `main` (7 jobs):** `created 14:13:06` · `started 14:13:06` · `completed 14:13:09`.
+`get_job_logs` يعيد `HTTP 404` لكل عمل — **لا سجل لأن لا خطوة نُفِّذت.**
+
+> **هذه ليست نتيجة الفوضى — هذه سببها.** *كل ادعاء "أخضر" مبني على CI في آخر عشرة أيام بلا قيمة. الوكلاء يفتحون PR فيرونها حمراء دائماً، فيتوقفون عن قراءة الإشارة — ولا أحد يميّز فشلاً حقيقياً من عطل بنية تحتية.*
+
+**قياس مقابل استنتاج — measured vs inferred:** الأرقام أعلاه مقيسة عبر GitHub API. **السبب مُرجَّح لا مؤكَّد:** نجاح التشغيل اليدوي مع فشل التلقائي فوراً يشير إلى حدّ إنفاق/حصة Actions أو سياسة موافقة على المُشغِّلات التلقائية. **الفحص:** `Settings ← Billing ← Actions` و `Settings ← Actions ← General`. لا أملك صلاحية قراءة الفوترة.
+
+**الاختبار الحاسم (دقيقتان):** شغّل `ci.yml` يدوياً من تبويب Actions على `main`. إن نجح، فالعطل في المُشغِّل التلقائي لا في الكود.
+
+**ملاحظة نشر:** `deploy.yml` يعمل على وسوم `v*.*.*` فقط — والوسوم **صفر**. أي أن النشر لم يُشغَّل قط.
