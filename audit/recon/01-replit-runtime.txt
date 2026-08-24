@@ -1,46 +1,242 @@
-BANCO-RECON-01 — DELIVERABLE 1 — Replit runtime
+BANCO-RECON-01 — DELIVERABLE 1
+Captured from Replit app: bancoboom-v-next-
+Replit app id: bcfee6f4-aa39-4e69-bdbc-930478a53c75
 
-COMMAND:
-git status --porcelain
-NOT RUN: Replit shell is not exposed by the available connector. The Replit Agent was queried twice for this exact read-only collection and returned: "Replit Agent is still busy with an earlier request for this app. This question was NOT submitted and no work was queued, to avoid interrupting that work."
+COMMAND: git status --porcelain
+RAW OUTPUT:
 
-COMMAND:
-git branch --show-current
-NOT RUN: same reason as above.
 
-COMMAND:
-git log --oneline -5
-NOT RUN: same reason as above.
+COMMAND: git branch --show-current
+RAW OUTPUT:
+release/reconciled-rc-20260823
 
-COMMAND:
-git rev-parse HEAD
-NOT RUN: same reason as above.
+COMMAND: git log --oneline -5
+RAW OUTPUT:
+6fb6c0c (HEAD -> release/reconciled-rc-20260823, subrepl-aaxt2fb5) Add mobile preview screenshot
+5df67cf (subrepl-n1mi31f7) Build and smoke-test fresh BANCO production surfaces
+9055576 Update post-merge script and add memory documentation for database migrations
+6f06b88 Fail closed on invalid production URLs and incomplete live service configuration
+d80a250 Update Replit configuration settings
 
-COMMAND:
-git remote -v
-NOT RUN: same reason as above.
+COMMAND: git rev-parse HEAD
+RAW OUTPUT:
+6fb6c0c108eb188562805c2866fd749a1d3e5854
 
-COMMAND:
-cat .replit
-NOT RUN: same reason as above.
+COMMAND: git remote -v
+RAW OUTPUT:
+gitsafe-backupgit://gitsafe:5418/backup.git (fetch)
+gitsafe-backupgit://gitsafe:5418/backup.git (push)
+originhttps://github.com/waelzaid66-max/bancoboom-v-next- (fetch)
+originhttps://github.com/waelzaid66-max/bancoboom-v-next- (push)
+subrepl-76ghf1bigit+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (fetch)
+subrepl-76ghf1bigit+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (push)
+subrepl-7ot611aggit+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (fetch)
+subrepl-7ot611aggit+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (push)
+subrepl-aaxt2fb5git+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (fetch)
+subrepl-aaxt2fb5git+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (push)
+subrepl-aqpinmotgit+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (fetch)
+subrepl-aqpinmotgit+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (push)
+subrepl-c7ggauergit+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (fetch)
+subrepl-c7ggauergit+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (push)
+subrepl-h83tjy06git+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (fetch)
+subrepl-h83tjy06git+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (push)
+subrepl-m38rkls2git+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (fetch)
+subrepl-m38rkls2git+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (push)
+subrepl-n1mi31f7git+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (fetch)
+subrepl-n1mi31f7git+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (push)
+subrepl-v1wiof3bgit+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (fetch)
+subrepl-v1wiof3bgit+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (push)
+subrepl-x0s2ax1qgit+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (fetch)
+subrepl-x0s2ax1qgit+ssh://git@ssh.worf.replit.dev:/home/runner/workspace (push)
 
-COMMAND:
-node -v && pnpm -v
-NOT RUN: same reason as above.
+COMMAND: cat .replit
+RAW OUTPUT:
+modules = "python-3.12", "web", "nodejs-22", "postgresql-16"
+router = "application"
+deploymentTarget = "autoscale"
+run = "bash", "scripts/replit-prod-start.sh"]
+build = ["bash", "scripts/replit-prod-build.sh"
+args = "pnpm", "store", "prune"]
+env = { "CI" = "true" }
 
-COMMAND:
-env | grep -oE '^(REPLIT_[A-Z_]*|REPL_ID|EXPO_[A-Z_]*|PORT|NODE_ENV|DATABASE_URL)=' | sort
-NOT RUN: same reason as above. No environment value was read or exposed.
+[workflows]
+runButton = "Project"
 
-COMMAND:
-ls -la artifacts/banco-mobile/static-build/web/ 2>&1 | head -5
-NOT RUN: same reason as above.
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
 
-Q1 Is the Replit workspace tree dirty (uncommitted changes)?
-NOT RUN: current workspace shell output unavailable.
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "artifacts/banco-mobile: expo"
 
-Q2 Which branch is checked out?
-NOT RUN: current workspace shell output unavailable.
+[[workflows.workflow]]
+name = "artifacts/banco-mobile: expo"
+author = "agent"
 
-Q3 Does `git log` on Replit match origin, or has the workspace diverged?
-NOT RUN: current workspace shell output unavailable.
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "EXPO_NO_INTERACTIVE=1 NODE_PATH=/home/runner/workspace/artifacts/banco-mobile/node_modules pnpm --filter @workspace/banco-mobile run dev"
+
+[[workflows.workflow]]
+name = "BANCO Mobile Serve"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/banco-mobile run build:web && PORT=3000 BASE_PATH=/banco-mobile node artifacts/banco-mobile/server/serve.js"
+
+[[workflows.workflow]]
+name = "BANCO Mobile Web Build"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/banco-mobile run build:web"
+
+[agent]
+stack = "BEST_EFFORT_FALLBACK"
+expertMode = true
+integrations = ["javascript_openai_ai_integrations:2.0.0", "javascript_object_storage:2.0.0"
+path = "scripts/post-merge.sh"
+timeoutMs = 600000
+
+[ports]]
+localPort = 3000
+externalPort = 6800
+
+[[ports]]
+localPort = 3001
+externalPort = 3001
+
+[[ports]]
+localPort = 3002
+externalPort = 3002
+
+[[ports]]
+localPort = 3003
+externalPort = 3003
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[[ports]]
+localPort = 8081
+externalPort = 8081
+
+[[ports]]
+localPort = 8082
+externalPort = 8082
+
+[[ports]]
+localPort = 8083
+externalPort = 5173
+
+[[ports]]
+localPort = 8084
+externalPort = 6000
+
+[[ports]]
+localPort = 18150
+externalPort = 4200
+
+[[ports]]
+localPort = 21539
+externalPort = 3000
+
+[[ports]]
+localPort = 22357
+externalPort = 8008
+
+[[ports]]
+localPort = 23351
+externalPort = 8000
+
+[objectStorage]
+defaultBucketID = "replit-objstore-41fc812e-9f5e-42cb-93cc-f15445fe1efa"
+
+[userenv
+ADMIN_EMAILS = "bancotoday@gmail.com,wael_zeed@yahoo.com"
+PAYMOB_MODE = "live"
+NEXT_PUBLIC_API_URL = "https://banco.today/api"
+NEXT_PUBLIC_SEARCH_ENABLED = "true"
+NEXT_PUBLIC_WEB_SEARCH_LIVE = "true"
+NEXT_PUBLIC_WEB_SEARCH_MAP = "false"
+NEXT_PUBLIC_SEARCH_ANALYTICS_MODE = "off"
+CORS_ALLOWED_ORIGINS = "https://banco.today,https://banco.deals,https://banco.autos"
+PUBLIC_APP_URL = "https://banco.today"
+PUBLIC_API_BASE_URL = "https://banco.today/"
+EXPO_PUBLIC_PUBLIC_APP_URL = "https://banco.today"
+OPENAI_MODEL = "gpt-4o-mini"
+OPENAI_MAX_COMPLETION_TOKENS = "4096"
+CLERK_TELEMETRY_DISABLED = "true"
+CLERK_SECRET_KEY must be injected by the Secrets UI; never commit it here.
+PUBLIC_OBJECT_SEARCH_PATHS = "/public"
+PRIVATE_OBJECT_DIR = "/private"
+OBJECT_STORAGE_PROVIDER = "s3"
+VITE_ADMIN_URL = "https://banco.today/admin/"
+VITE_MARKET_URL = "https://banco.today/market/"
+VITE_WEB_URL = "https://banco.today"
+NEXT_PUBLIC_ADMIN_URL = "https://banco.today/admin/"
+NEXT_PUBLIC_MARKET_URL = "https://banco.today/market/"
+NEXT_PUBLIC_SITE_URL = "https://banco.today"
+NEXT_PUBLIC_SITE_URL_EN = "https://banco.today/en"
+WEB_PLUG_ENABLED = "true"
+PAYMENT_CONFIG_ENCRYPTION_KEY
+
+COMMAND: node -v && pnpm -v
+NOT RUN: follow-up Replit Agent request did not return raw stdout before becoming busy.
+
+COMMAND: env | grep -oE '^(REPLIT_[A-Z_]*|REPL_ID|EXPO_[A-Z_]*|PORT|NODE_ENV|DATABASE_URL)=' | sort
+NOT RUN: initial Replit response omitted this command's raw output; follow-up request became busy. No values inferred.
+
+COMMAND: ls -la artifacts/banco-mobile/static-build/web/ 2>&1 | head -5
+RAW OUTPUT:
+total 24
+drwxr-xr-x 1 runner runner    90 Aug 22 21:30 .
+drwxr-xr-x 1 runner runner    64 Aug 22 21:29 ..
+drwxr-xr-x 1 runner runner    40 Aug 22 21:30 assets
+drwxr-xr-x 1 runner runner    12 Aug 22 21:30 _expo
+
+COMMAND: git fetch origin --prune
+RAW OUTPUT:
+From https://github.com/waelzaid66-max/bancoboom-v-next-
+ deleted               -> origin/pr13-reconcile
+remote: Enumerating objects: 57, done.
+remote: Counting objects: 100% (29/29), done.
+remote: Compressing objects: 100% (3/3), done.
+remote: Total 7 (delta 4), reused 7 (delta 4), pack-reused 0 (from 0)
+Unpacking objects: 100% (7/7), 6.98 KiB | 75.00 KiB/s, done.
+   4372791..c078945  local/audit-union-20260823 -> origin/local/audit-union-20260823
+   4372791..c078945  main                 -> origin/main
+ [new branch]      recon/codex-20260824 -> origin/recon/codex-20260824
+
+COMMAND: git status --porcelain | wc -l
+RAW OUTPUT:
+0
+
+COMMAND: git rev-list --left-right --count HEAD...origin/canonical/vnext-assembly
+RAW OUTPUT AS RETURNED BY REPLIT AGENT:
+82
+NOTE: the rendering collapsed the separator; exact left/right component values were not safely recoverable from the returned text. Follow-up disambiguation command was not returned before the agent became busy.
+
+Q1 Is the Replit workspace tree dirty? no + file count 0
+COMMAND BASIS: git status --porcelain ; git status --porcelain | wc -l
+
+Q2 Which branch is checked out? release/reconciled-rc-20260823
+COMMAND BASIS: git branch --show-current
+
+Q3 Does git log on Replit match origin, or has the workspace diverged? diverged
+COMMAND BASIS: git rev-parse HEAD => 6fb6c0c108eb188562805c2866fd749a1d3e5854 ; git rev-list --left-right --count HEAD...origin/canonical/vnext-assembly => non-zero output returned as `82` (separator collapsed). Exact left/right counts NOT RUN: disambiguation follow-up unavailable.

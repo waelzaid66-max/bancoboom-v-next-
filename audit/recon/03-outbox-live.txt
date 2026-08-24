@@ -1,32 +1,75 @@
-BANCO-RECON-01 — DELIVERABLE 3 — live outbox facts
+BANCO-RECON-01 — DELIVERABLE 3
+Captured by Replit Agent against the DATABASE_URL inherited by the bancoboom-v-next- workspace shell. Secret value was not printed.
 
-TARGET:
-DATABASE THE PREVIEW ACTUALLY USES
+COMMAND/FACT: DATABASE_URL classification only
+RAW OUTPUT:
+DATABASE_URL_KIND=postgresql
+DATABASE_URL_LENGTH=62
 
-COMMAND:
+SQL:
 SELECT count(*) FILTER (WHERE completed_at IS NULL) AS pending,
        count(*) FILTER (WHERE completed_at IS NOT NULL) AS done,
        max(attempt_count) AS max_attempts,
        count(*) FILTER (WHERE attempt_count > 12) AS over_12
 FROM message_notification_outbox;
-NOT RUN: the current tool environment has no direct shell/database connector for the Replit preview database, and the Replit Agent was busy and did not accept the read-only request.
+RAW OUTPUT:
+ pending | done | max_attempts | over_12 
+---------+------+--------------+---------
+       0 |    0 |              |       0
+(1 row)
 
-COMMAND:
-SELECT count(*) FILTER (WHERE completed_at IS NULL) AS pending,
-       count(*) FILTER (WHERE completed_at IS NOT NULL) AS done,
-       max(attempt_count) AS max_attempts,
-       count(*) FILTER (WHERE attempt_count > 12) AS over_12
-FROM billing_receipt_outbox;
-NOT RUN: same reason as above.
+SQL: same aggregate against billing_receipt_outbox
+RAW OUTPUT:
+ pending | done | max_attempts | over_12 
+---------+------+--------------+---------
+       0 |    0 |              |       0
+(1 row)
 
-COMMAND:
+SQL:
 SELECT attempt_count, left(last_error, 120), count(*)
 FROM message_notification_outbox
 WHERE completed_at IS NULL GROUP BY 1,2 ORDER BY 1 DESC LIMIT 20;
-NOT RUN: same reason as above.
+RAW OUTPUT:
+ attempt_count | left | count 
+---------------+------+-------
+(0 rows)
+
+SQL: analogous pending grouped query against billing_receipt_outbox
+RAW OUTPUT:
+ attempt_count | left | count 
+---------------+------+-------
+(0 rows)
+
+SQL: message_notification_outbox pending attempt_count > 12
+RAW OUTPUT:
+ count 
+     0
+(1 row)
+
+SQL: message_notification_outbox pending max(attempt_count)
+RAW OUTPUT:
+ max 
+    
+(1 row)
+
+SQL: billing_receipt_outbox pending attempt_count > 12
+RAW OUTPUT:
+ count 
+     0
+(1 row)
+
+SQL: billing_receipt_outbox pending max(attempt_count)
+RAW OUTPUT:
+ max 
+    
+(1 row)
 
 Q6 What is the highest attempt_count in each outbox?
-NOT RUN: no live preview DB query executed.
+message_notification_outbox: NULL / no rows
+billing_receipt_outbox: NULL / no rows
+COMMAND BASIS: max(attempt_count) queries above.
 
 Q7 Are there rows that will never complete? How many, and what is the error?
-NOT RUN: no live preview DB query executed.
+ANSWER: 0 pending rows observed in both outboxes; 0 rows over attempt_count 12; no pending error rows returned.
+COMMAND BASIS: aggregate and grouped pending queries above.
+NOTE: this is a point-in-time read of the DATABASE_URL available to the preview workspace shell only.
