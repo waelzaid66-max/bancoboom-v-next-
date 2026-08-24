@@ -197,6 +197,20 @@ describe("SearchResultsMap web bootstrap fail-close", () => {
     expect(view.getByTestId("mock-map-overlay")).toBeTruthy();
   });
 
+  it("tile_error while loading never establishes readiness", () => {
+    const view = mountMap();
+
+    dispatchMapMessage({ type: "tile_error" });
+    dispatchMapMessage({ type: "tile_error" });
+
+    expect(mockAlert).toHaveBeenCalledTimes(1);
+    expect(view.queryByTestId("mock-map-overlay")).toBeNull();
+    expect(view.queryByText("search.mapUnavailableTitle")).toBeNull();
+
+    dispatchMapMessage({ type: "ready" });
+    expect(view.getByTestId("mock-map-overlay")).toBeTruthy();
+  });
+
   it("ignores an untrusted bootstrap error after readiness", () => {
     const view = mountMap();
     dispatchMapMessage({ type: "ready" });
