@@ -69,8 +69,22 @@ test("both map hosts pass the clearance, and recompute it when it moves", () => 
     // The inset changes on rotation and on a foldable opening. A memo that
     // does not list it keeps serving HTML built for the old geometry, which
     // puts the button straight back under the bar.
+    //
+    // The dependency array used to be located by the `eslint-disable-next-line`
+    // comment above it. Measured 2026-08-24: with comments stripped the match
+    // returned "" and the guard failed — it was anchored on prose. Deleting that
+    // lint pragma is a legitimate edit and must not break this guard, so both
+    // ends are now anchored on code.
+    const memoStart = src.indexOf("const html = useMemo(");
+    assert.ok(memoStart >= 0, `${name}: the html memo moved — update this guard`);
+    const memoEnd = src.indexOf("\n    ],\n  );", memoStart);
+    const depsStart = src.lastIndexOf("\n    [", memoEnd);
+    assert.ok(
+      memoEnd > memoStart && depsStart > memoStart,
+      `${name}: could not bound the html memo's dependency array`,
+    );
     assert.match(
-      src.match(/\/\/ eslint-disable-next-line react-hooks\/exhaustive-deps\s*\n\s*\[[\s\S]*?\]/)?.[0] ?? "",
+      src.slice(depsStart, memoEnd),
       /navClearance/,
       `${name} must rebuild the HTML when the clearance changes`,
     );
@@ -233,10 +247,11 @@ test("a criteria transition invalidates the prior request before debouncing", ()
     ["SearchResultsMap.web.tsx", webHost],
   ]) {
     const effectStart = src.indexOf("const sigChanged = prevSigRef.current !== sig");
-    const effectEnd = src.indexOf(
-      "// eslint-disable-next-line react-hooks/exhaustive-deps",
-      effectStart,
-    );
+    // The end used to be the `eslint-disable-next-line` comment. Measured
+    // 2026-08-24: with comments stripped the slice was empty and the guard
+    // failed — anchored on prose. The effect's own dependency list closes it,
+    // and that is code.
+    const effectEnd = src.indexOf("}, [sig, criteriaSig]);", effectStart);
     assert.ok(effectStart >= 0 && effectEnd > effectStart, `${name} criteria effect moved`);
     const criteriaEffect = src.slice(effectStart, effectEnd);
     const invalidate = criteriaEffect.indexOf("vpSeqRef.current++");

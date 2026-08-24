@@ -197,6 +197,12 @@ test("NOTIF-09 unknown notification routes to /notifications", () => {
   const fnStart = routing.indexOf("export function routeForNotification(");
   const fnEnd = routing.indexOf("export function routeForNotificationItem(");
   const body = routing.slice(fnStart, fnEnd);
+  // prose-assertion: intentional — this line deliberately requires a COMMENT.
+  // It is the twin of the declared assertion in notification-routing.test.mjs,
+  // which owns the rationale: the fallback exists because of NOTIF-09 and the
+  // marker is the traceability. Declared here too because the prover reads each
+  // pack on its own and would otherwise file this duplicate as a finding.
+  // The two assertions below are the behaviour.
   assert.match(body, /\/\/ NOTIF-09/);
   assert.match(body, /return "\/notifications";\s*\n\}/);
   assert.doesNotMatch(body, /return null;/);
@@ -340,8 +346,31 @@ test("MSG-07b before cursor uses created_at + id tie-break", () => {
 
 test("MSG-07b does not arm older-load on contentSizeChange", () => {
   assert.match(thread, /nearBottomRef/);
-  assert.match(thread, /Do NOT arm readyForOlder here/);
   assert.match(thread, /unique\.length === 0/);
+
+  // Was: assert.match(thread, /Do NOT arm readyForOlder here/) — the test's own
+  // name says "does not arm", and the only thing it checked was that a comment
+  // saying so existed. Measured 2026-08-24: stripping comments broke it, so it
+  // had never read the code. Arming the gate here WOULD have kept it green.
+  //
+  // First layout is often still at y≈0 before scrollToEnd runs, so arming from
+  // onContentSizeChange fires loadOlder immediately and the thread jumps.
+  const handlerStart = thread.indexOf("onContentSizeChange={() => {");
+  assert.ok(handlerStart >= 0, "the onContentSizeChange handler moved — update this guard");
+  const handlerEnd = thread.indexOf("onScroll={", handlerStart);
+  assert.ok(handlerEnd > handlerStart, "could not bound the onContentSizeChange handler");
+  const onContentSizeChange = thread.slice(handlerStart, handlerEnd);
+
+  assert.doesNotMatch(
+    onContentSizeChange,
+    /readyForOlderRef\.current\s*=\s*true/,
+    "onContentSizeChange must not arm the older-load gate — first layout sits at y≈0",
+  );
+  assert.match(
+    thread,
+    /const scrollToEnd = useCallback\([\s\S]*?readyForOlderRef\.current\s*=\s*true/,
+    "the gate must be armed from scrollToEnd, which is the only place the list is really at the bottom",
+  );
 });
 
 test("MAP-07 Leaflet is vendored inline (no unpkg)", () => {

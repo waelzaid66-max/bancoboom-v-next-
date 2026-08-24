@@ -174,7 +174,28 @@ test("VNX-07A persists body-only attempts under one owner-bound root processor",
   assert.match(outbox, /biometricRef\.current\.hydrated/);
   assert.match(outboxCodec, /MESSAGE_TEXT_OUTBOX_MAX_ENTRIES = 100/);
   assert.match(outboxCodec, /MESSAGE_TEXT_OUTBOX_RETENTION_MS/);
-  assert.match(outboxCodec, /serialized array order is the durable FIFO authority/);
+  // Was: assert.match(outboxCodec, /serialized array order is the durable FIFO
+  // authority/) — a sentence, satisfied by the sentence. Measured 2026-08-24:
+  // stripping comments broke it, so it had never read the code.
+  //
+  // What the sentence actually forbids is re-ordering the restored queue: UUIDs
+  // are random, so sorting equal-millisecond entries reverses two taps after a
+  // relaunch. Scoped to `parseMessageTextOutbox`, because the send-selection
+  // helper further down the file sorts legitimately.
+  const parseStart = outboxCodec.indexOf("export function parseMessageTextOutbox(");
+  assert.ok(parseStart >= 0, "parseMessageTextOutbox moved — update this guard");
+  const parseEnd = outboxCodec.indexOf("\nexport function ", parseStart + 1);
+  const parseBody = outboxCodec.slice(parseStart, parseEnd > parseStart ? parseEnd : undefined);
+  assert.doesNotMatch(
+    parseBody,
+    /\.sort\(/,
+    "the restored outbox must keep serialized order — sorting it reverses two taps made in the same millisecond",
+  );
+  assert.match(
+    parseBody,
+    /entries\.push\(entry\)[\s\S]*?return entries;/,
+    "entries must be returned in the order they were read",
+  );
   assert.doesNotMatch(outbox, /media_url|listing_ref_id|localUri|signed[_-]?url/i);
 });
 
