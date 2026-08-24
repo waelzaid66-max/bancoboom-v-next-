@@ -105,6 +105,14 @@ const RENDER_CRITICAL = [
     claim: "the native WebView map fails closed on bootstrap error, reaches ready honestly, and keeps tile failure degraded without reviving failed bootstrap",
   },
   {
+    source: "components/MapPinPicker.tsx",
+    symbol: "MapPinPicker",
+    suite: "tests/render/MapPinPicker.render.test.tsx",
+    staticGuard: "tests/map-bootstrap-fail-closed.test.mjs",
+    claim:
+      "the create-listing pin picker cannot confirm a coordinate the map never showed — a failed bootstrap is terminal and the seeded coordinate is not a user choice",
+  },
+  {
     source: "components/search/maps/MapsHubApp.tsx",
     symbol: "MapsHubApp",
     suite: "tests/render/MapsHubApp.render.test.tsx",
