@@ -46,12 +46,17 @@ test("ready is the only success bridge and bootstrap error becomes terminal fail
   );
 });
 
-test("tile failure is degraded-ready and cannot revive a bootstrap-failed instance", () => {
+test("tile failure never establishes bootstrap readiness or revives failed state", () => {
   const tileBranch = bodyBetween('msg.type === "tile_error"', 'msg.type === "viewport"');
+  assert.doesNotMatch(
+    tileBranch,
+    /setBootstrapState\s*\(/,
+    "tile_error is a degraded tile signal only; it must leave loading/ready/failed bootstrap authority unchanged",
+  );
   assert.match(
     tileBranch,
-    /failed[\s\S]{0,160}\?[\s\S]{0,80}failed[\s\S]{0,160}ready|failed[\s\S]{0,240}ready/,
-    "tile_error must preserve failed bootstrap state while allowing degraded ready otherwise",
+    /Alert\.alert\s*\(/,
+    "tile_error must preserve the existing user-visible degraded-map alert",
   );
 });
 
