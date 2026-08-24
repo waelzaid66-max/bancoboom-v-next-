@@ -29,6 +29,11 @@ let _authFailureGeneration = 0;
 type AccountDeletedTeardownState = "idle" | "in_flight" | "completed";
 let _accountDeletedTeardownState: AccountDeletedTeardownState = "idle";
 
+type AuthFailureRequestSnapshot = {
+  sessionId: string | null;
+  generation: number;
+};
+
 /**
  * Set a base URL that is prepended to every relative request URL
  * (i.e. paths that start with `/`).
@@ -404,12 +409,16 @@ export async function customFetch<T = unknown>(
   }
 
   const requestInfo = { method, url: resolveUrl(input) };
+  const authFailureSnapshot: AuthFailureRequestSnapshot = {
+    sessionId: _authFailureSessionId,
+    generation: _authFailureGeneration,
+  };
 
   const response = await fetch(input, { ...init, method, headers });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
-    maybeNotifyAccountDeleted(response.status, errorData);
+    maybeNotifyAccountDeleted(response.status, errorData, authFailureSnapshot);
     throw new ApiError(response, errorData, requestInfo);
   }
 
@@ -424,9 +433,20 @@ function extractErrorCode(data: unknown): string | undefined {
   return typeof code === "string" ? code : undefined;
 }
 
-function maybeNotifyAccountDeleted(status: number, data: unknown): void {
+function maybeNotifyAccountDeleted(
+  status: number,
+  data: unknown,
+  requestSnapshot: AuthFailureRequestSnapshot,
+): void {
   if (status !== 401) return;
   if (extractErrorCode(data) !== "ACCOUNT_DELETED") return;
+  if (
+    requestSnapshot.sessionId === null ||
+    requestSnapshot.sessionId !== _authFailureSessionId ||
+    requestSnapshot.generation !== _authFailureGeneration
+  ) {
+    return;
+  }
 
   const handler = _authFailureHandler;
   const sessionId = _authFailureSessionId;
