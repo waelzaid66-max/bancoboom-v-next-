@@ -94,3 +94,56 @@ test("RED: a delayed ACCOUNT_DELETED response from Session A must never tear dow
     "a stale Session-A tombstone must never run the currently registered Session-B teardown",
   );
 });
+
+test("RED: switching sessions while old-session token acquisition is pending must not tear down the replacement session", async () => {
+  const tokenGate = deferred<string | null>();
+  let sessionATeardowns = 0;
+  let sessionBTeardowns = 0;
+
+  setAuthFailureHandler(SESSION_A, () => {
+    sessionATeardowns += 1;
+  });
+  setAuthTokenGetter(() => tokenGate.promise);
+  globalThis.fetch = async () => tombstoneResponse();
+
+  const requestStartedUnderSessionA = customFetch("https://api.example.test/v1/me", {
+    responseType: "json",
+  });
+
+  // Let customFetch enter the pending Session-A token getter before Session B
+  // becomes the active teardown generation.
+  await Promise.resolve();
+
+  setAuthFailureHandler(SESSION_B, () => {
+    sessionBTeardowns += 1;
+  });
+
+  // This models an already-started Session-A getToken() call resolving after
+  // Session B became current. The eventual 401 belongs to an A/ambiguous auth
+  // context and must never tear down replacement Session B.
+  tokenGate.resolve("token-from-session-a");
+
+  await assert.rejects(requestStartedUnderSessionA, (error: unknown) => {
+    assert.ok(error instanceof ApiError);
+    assert.equal(error.status, 401);
+    assert.equal(
+      (error.data as { error?: { code?: string } })?.error?.code,
+      "ACCOUNT_DELETED",
+    );
+    return true;
+  });
+
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(
+    sessionATeardowns,
+    0,
+    "the superseded Session-A teardown must not run after replacement",
+  );
+  assert.equal(
+    sessionBTeardowns,
+    0,
+    "an old/ambiguous token request must never tear down replacement Session B",
+  );
+});
