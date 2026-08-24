@@ -19,6 +19,8 @@
     "typecheck:website": "pnpm --filter @workspace/design-tokens run typecheck && pnpm --filter @workspace/search-contract run typecheck && pnpm --filter @workspace/landing run typecheck && pnpm --filter @workspace/banco-web run typecheck && pnpm --filter @workspace/banco-website run typecheck",
     "lint": "eslint scripts --max-warnings 0",
     "lint:website": "eslint artifacts/banco-web artifacts/banco-website artifacts/landing --max-warnings 0",
+    "lint:workspaces": "eslint artifacts/admin-os artifacts/dealer-os artifacts/banco-mobile artifacts/mockup-sandbox",
+    "lint:all": "pnpm run lint && pnpm run lint:website && pnpm run lint:workspaces",
     "lint:report": "eslint scripts artifacts/api-server/src lib/db/src",
     "test:api-test-db-safety": "node --test scripts/run-api-tests-local.safety.test.mjs",
     "ops:website-ci": "node scripts/website-ci-local.mjs",
