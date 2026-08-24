@@ -81,6 +81,7 @@ type Pin = { lat: number; lng: number };
 
 const INITIAL: Pin = { lat: 30.1, lng: 31.2 };
 const MOVED: Pin = { lat: 30.2, lng: 31.3 };
+const LATE: Pin = { lat: 30.3, lng: 31.4 };
 
 function bridge(payload: Record<string, unknown>): void {
   const onMessage = mockLatestWebViewProps.onMessage as
@@ -124,14 +125,19 @@ describe("MapPinPicker mounted bootstrap fail-close", () => {
     mockLatestWebViewProps = {};
   });
 
-  it("shows terminal unavailable UI and cannot commit a seeded coordinate after failure", () => {
+  it("shows terminal unavailable UI and cannot commit seeded or late coordinates after failure", () => {
     const { onConfirm, view } = picker({ initial: INITIAL });
+    const confirm = () => view.getByTestId("create-map-pin-confirm");
 
     expect(view.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
-    expect(view.getByTestId("create-map-pin-confirm").props.disabled).toBe(true);
+    fireEvent.press(confirm());
+    expect(onConfirm).not.toHaveBeenCalled();
 
     bridge({ type: "ready" });
-    expect(view.getByTestId("create-map-pin-confirm").props.disabled).toBe(false);
+    fireEvent.press(confirm());
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledWith(INITIAL);
+    onConfirm.mockClear();
 
     bridge({ type: "error" });
 
@@ -139,52 +145,60 @@ describe("MapPinPicker mounted bootstrap fail-close", () => {
     expect(view.getByText("search.mapUnavailableBody")).toBeTruthy();
     expect(view.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
 
-    const failedConfirm = view.getByTestId("create-map-pin-confirm");
-    expect(failedConfirm.props.disabled).toBe(true);
-    fireEvent.press(failedConfirm);
+    fireEvent.press(confirm());
     expect(onConfirm).not.toHaveBeenCalled();
 
+    // A failed picker may still receive queued center/ready messages. Neither
+    // may restore confirmation authority or commit stale/late coordinates.
+    bridge({ type: "center", ...LATE });
     bridge({ type: "ready" });
     expect(view.getByText("search.mapUnavailableTitle")).toBeTruthy();
-    expect(view.getByTestId("create-map-pin-confirm").props.disabled).toBe(true);
-    fireEvent.press(view.getByTestId("create-map-pin-confirm"));
+    fireEvent.press(confirm());
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
   it("preserves the normal ready-center-confirm path and ignores malformed bridge data", () => {
     const { onConfirm, view } = picker();
+    const confirm = () => view.getByTestId("create-map-pin-confirm");
 
     expect(() => bridgeRaw("not-json")).not.toThrow();
-    expect(view.getByTestId("create-map-pin-confirm").props.disabled).toBe(true);
     expect(view.queryByText("search.mapUnavailableTitle")).toBeNull();
+    fireEvent.press(confirm());
+    expect(onConfirm).not.toHaveBeenCalled();
 
     bridge({ type: "ready" });
-    expect(view.getByTestId("create-map-pin-confirm").props.disabled).toBe(true);
+    fireEvent.press(confirm());
+    expect(onConfirm).not.toHaveBeenCalled();
 
     bridge({ type: "center", ...MOVED });
-    const confirm = view.getByTestId("create-map-pin-confirm");
-    expect(confirm.props.disabled).toBe(false);
-    fireEvent.press(confirm);
+    fireEvent.press(confirm());
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onConfirm).toHaveBeenCalledWith(MOVED);
   });
 
-  it("resets ready and failed bootstrap state when the picker is reframed or reopened", () => {
-    const { allProps, view } = picker();
+  it("resets confirmation authority when the picker is reframed or reopened", () => {
+    const { allProps, onConfirm, view } = picker();
+    const confirm = () => view.getByTestId("create-map-pin-confirm");
 
     bridge({ type: "ready" });
     bridge({ type: "center", ...MOVED });
-    expect(view.getByTestId("create-map-pin-confirm").props.disabled).toBe(false);
+    fireEvent.press(confirm());
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    onConfirm.mockClear();
 
     view.rerender(
       <MapPinPicker {...allProps} marketCountry="SA" initial={null} />,
     );
     expect(view.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
-    expect(view.getByTestId("create-map-pin-confirm").props.disabled).toBe(true);
+    fireEvent.press(confirm());
+    expect(onConfirm).not.toHaveBeenCalled();
 
     bridge({ type: "error" });
     expect(view.getByText("search.mapUnavailableTitle")).toBeTruthy();
+    bridge({ type: "center", ...LATE });
+    fireEvent.press(confirm());
+    expect(onConfirm).not.toHaveBeenCalled();
 
     view.rerender(
       <MapPinPicker
@@ -205,6 +219,7 @@ describe("MapPinPicker mounted bootstrap fail-close", () => {
 
     expect(view.queryByText("search.mapUnavailableTitle")).toBeNull();
     expect(view.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
-    expect(view.getByTestId("create-map-pin-confirm").props.disabled).toBe(true);
+    fireEvent.press(confirm());
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 });
