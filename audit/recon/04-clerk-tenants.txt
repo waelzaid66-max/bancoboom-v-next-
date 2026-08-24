@@ -1,16 +1,11 @@
 BANCO-RECON-01 — DELIVERABLE 4
 
-SOURCE: Replit workspace inspection without exposing publishable-key values.
-
-PREVIEW CLERK
-KIND=pk_test
+COMMAND: inspect current Replit preview Clerk publishable configuration, decode host only, print key kind/length only, then query the Clerk environment endpoint for that host
+RAW OUTPUT:
+PREVIEW_HOST
+KIND=env:CLERK_PUBLISHABLE_KEY
 LENGTH=59
 HOST=evolving-magpie-43.clerk.accounts.dev
-
-REQUEST SHAPE USED BY REPLIT AGENT:
-GET https://<frontend-api-host>/v1/environment?__clerk_api_version=2024-10-01&_clerk_js_version=5.0.0
-
-RAW SANITIZED OUTPUT:
 {
  "social": {
   "oauth_google": true
@@ -21,13 +16,16 @@ RAW SANITIZED OUTPUT:
  ]
 }
 
-LIVE CLERK
-NOT RUN: live Clerk tenant host not identifiable from the raw Replit response that completed. A follow-up request to identify the live host without exposing keys was not executed because the Replit Agent became busy.
+COMMAND: search tracked source/config and environment for every distinct Clerk publishable/public key reference; print only variable/file, kind, length, decoded host; deduplicate hosts
+RAW OUTPUT:
+VAR_NAME=CLERK_PUBLISHABLE_KEY KIND=pk_test LENGTH=59 HOST=evolving-magpie-43.clerk.accounts.dev
+NO_SECOND_CLERK_HOST_FOUND.
 
 Q8 Which tenant host does the Replit preview use?
 evolving-magpie-43.clerk.accounts.dev
-COMMAND BASIS: Replit Agent decoded the configured pk_test publishable-key prefix without printing the key.
+COMMAND BASIS: preview Clerk publishable-key decode above
 
 Q9 Which social providers are enabled on it? On the live tenant?
-PREVIEW: oauth_google=true; identification_strategies=[email_address, oauth_google]
-LIVE: NOT RUN: live Clerk tenant host not identifiable from accessible completed evidence.
+PREVIEW/TEST: oauth_google=true; identification_strategies=[email_address, oauth_google]
+LIVE: NOT RUN: NO_SECOND_CLERK_HOST_FOUND.
+COMMAND BASIS: Clerk environment request and distinct-host inventory above
