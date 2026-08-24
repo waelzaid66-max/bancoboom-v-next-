@@ -101,8 +101,15 @@ test("profile Payments menu opens billing hub (wallet remains linked inside)", (
 // These must never return — they make overflow menus fill the screen / eat taps.
 test("profile overflow menu stays touch-safe (no nested responder trap)", () => {
   const src = fs.readFileSync(PROFILE, "utf8");
-  const modalStart = src.indexOf("{/* Overflow menu");
-  assert.ok(modalStart >= 0, "overflow menu marker must exist");
+  // Anchor on CODE, not on a comment. This block used to be located by
+  // `src.indexOf("{/* Overflow menu")` — a JSX comment. The assertions inside
+  // are all about real code, but the guard could not run at all once that
+  // comment was reworded or removed: proven 2026-08-24 by stripping every
+  // product comment, which turned this into the only failure in the whole
+  // 42-script pack ("overflow menu marker must exist"). `visible={showMenu}`
+  // is unique in this file and is what actually opens the menu.
+  const modalStart = src.lastIndexOf("<Modal", src.indexOf("visible={showMenu}"));
+  assert.ok(modalStart >= 0, "the overflow menu Modal must exist and bind visible={showMenu}");
   const modalEnd = src.indexOf("</Modal>", modalStart);
   assert.ok(modalEnd > modalStart, "overflow menu Modal must close");
   const block = src.slice(modalStart, modalEnd);
