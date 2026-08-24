@@ -24,27 +24,59 @@ import { readFileSync } from "node:fs";
 export function stripComments(source) {
   let out = "";
   let i = 0;
-  let mode = "code"; // code | line | block | single | double | tick
+  let mode = "code"; // code | line | block | single | double | tick | regex | class
+
+  // Is the `/` at index `i` the start of a REGEX literal rather than division?
+  // Decided from the last meaningful character, as every JS lexer does.
+  // Getting this wrong is not cosmetic: `/^https?:\/\//i` ends in `\/`
+  // followed by `/`, so a stripper without this check reads `//` and eats the
+  // rest of the line. It did — mediaPolicy.ts, measured 2026-08-24 — and the
+  // file then failed to parse at all.
+  const regexAllowedBefore = /[(,=:[!&|?{};+\-*%~^<>\n]/;
+  const keywordBefore = /\b(return|typeof|instanceof|in|of|new|delete|void|case|do|else|yield|await)$/;
+  const startsRegex = () => {
+    const before = out.replace(/\s+$/, "");
+    if (before === "") return true;
+    const last = before[before.length - 1];
+    if (regexAllowedBefore.test(last)) return true;
+    return keywordBefore.test(before);
+  };
+
   while (i < source.length) {
     const c = source[i];
     const n = source[i + 1];
+
     if (mode === "code") {
       if (c === "/" && n === "/") { mode = "line"; i += 2; continue; }
       if (c === "/" && n === "*") { mode = "block"; i += 2; continue; }
+      if (c === "/" && startsRegex()) { mode = "regex"; out += c; i += 1; continue; }
       if (c === "'") mode = "single";
       else if (c === '"') mode = "double";
       else if (c === "`") mode = "tick";
       out += c; i += 1; continue;
     }
+
     if (mode === "line") {
       if (c === "\n") { mode = "code"; out += c; }
       i += 1; continue;
     }
+
     if (mode === "block") {
       if (c === "*" && n === "/") { mode = "code"; i += 2; continue; }
       if (c === "\n") out += c; // keep line numbers usable in failure messages
       i += 1; continue;
     }
+
+    if (mode === "regex" || mode === "class") {
+      out += c;
+      if (c === "\\") { out += source[i + 1] ?? ""; i += 2; continue; }
+      if (mode === "regex" && c === "[") mode = "class";
+      else if (mode === "class" && c === "]") mode = "regex";
+      else if (mode === "regex" && c === "/") mode = "code";
+      else if (c === "\n") mode = "code"; // an unterminated regex cannot span lines
+      i += 1; continue;
+    }
+
     // inside a string literal
     out += c;
     if (c === "\\") { out += source[i + 1] ?? ""; i += 2; continue; }
