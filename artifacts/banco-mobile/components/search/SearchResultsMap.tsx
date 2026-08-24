@@ -329,15 +329,15 @@ export function SearchResultsMap({
       try {
         const msg = JSON.parse(event.nativeEvent.data) as MapBridgeMessage;
         if (msg.type === "ready") {
-          setBootstrapState("ready");
+          setBootstrapState((current) => (current === "failed" ? current : "ready"));
         } else if (msg.type === "error") {
           // Leaflet/bootstrap failure is terminal for this WebView instance.
           // Fail closed: do not expose overlay controls over a dead/grey map.
           setBootstrapState("failed");
         } else if (msg.type === "tile_error") {
-          // A tile failure is a degraded ready map, not a bootstrap failure.
-          // Never let it revive an instance that already failed bootstrap.
-          setBootstrapState((current) => (current === "failed" ? current : "ready"));
+          // A tile failure only degrades a map that already completed bootstrap.
+          // It cannot establish readiness by itself or revive a failed instance.
+          setBootstrapState((current) => (current === "ready" ? current : current));
           if (!tileFailureShownRef.current) {
             tileFailureShownRef.current = true;
             Alert.alert(
