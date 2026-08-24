@@ -157,6 +157,13 @@ export function SearchResultsMap({
     ],
   );
 
+  // Every generated document owns a unique bridge authority token. The token is
+  // deliberately not derived from the HTML string alone: A -> B -> A must still
+  // reject a delayed callback from the first A document.
+  const sourceEpoch = useMemo(() => Symbol("map-source-epoch"), [html]);
+  const activeSourceEpochRef = useRef(sourceEpoch);
+  activeSourceEpochRef.current = sourceEpoch;
+
   // Latest items, read inside the message handler without re-subscribing.
   const itemsRef = useRef<FeedItem[]>(items);
   itemsRef.current = items;
@@ -180,15 +187,22 @@ export function SearchResultsMap({
     [],
   );
 
-  // The WebView is keyed by `sig`, so a changed mapped-set reloads it — but this
-  // component does not remount, so reset load/selection/count ourselves and
-  // invalidate any in-flight cluster fetch from the previous page.
+  // The generated page can change even when the marker `sig` does not (theme,
+  // market, near-me, language, safe-area clearance). Rotate all page-specific
+  // authority without keying/remounting the WebView on the raw HTML payload.
   useEffect(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    lastViewportRef.current = null;
+    tileFailureShownRef.current = false;
     setBootstrapState("loading");
     setSelectedId(null);
     setServerTotal(null);
+    setAreaTotal(null);
     vpSeqRef.current++;
-  }, [sig]);
+  }, [sourceEpoch]);
 
   /**
    * The ONE place clusters reach the map.
@@ -326,6 +340,10 @@ export function SearchResultsMap({
 
   const onMessage = useCallback(
     (event: WebViewMessageEvent) => {
+      // React Native can deliver an already-queued callback after `source` has
+      // changed. Reject the superseded document before parsing or any side effect.
+      if (activeSourceEpochRef.current !== sourceEpoch) return;
+
       try {
         const msg = JSON.parse(event.nativeEvent.data) as MapBridgeMessage;
         if (msg.type === "ready") {
@@ -337,7 +355,6 @@ export function SearchResultsMap({
         } else if (msg.type === "tile_error") {
           // A tile failure only degrades a map that already completed bootstrap.
           // It cannot establish readiness by itself or revive a failed instance.
-          setBootstrapState((current) => (current === "ready" ? current : current));
           if (!tileFailureShownRef.current) {
             tileFailureShownRef.current = true;
             Alert.alert(
@@ -407,7 +424,7 @@ export function SearchResultsMap({
         // Ignore malformed bridge messages.
       }
     },
-    [scheduleFetchClusters, onOpenListingId, t],
+    [sourceEpoch, scheduleFetchClusters, onOpenListingId, t],
   );
 
   const selected = useMemo(
