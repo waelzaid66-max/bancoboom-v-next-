@@ -4,6 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { readCode } from "./_codeOnly.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -35,10 +36,34 @@ test("ErrorBoundary resets on retry and reports errors", () => {
   assert.match(src, /componentDidCatch/, "must catch render errors");
 });
 
-test("SessionContext documents offline-friendly cache path", () => {
-  const src = fs.readFileSync(SESSION, "utf8");
-  assert.match(src, /offline/i, "session layer must mention offline behavior");
-  assert.match(src, /AsyncStorage/, "must use AsyncStorage for local persistence");
+test("SessionContext survives a dead network: local read, local write, no throw", () => {
+  // This used to assert `/offline/i` — that the FILE MENTIONS the word.
+  // Measured 2026-08-24: all four occurrences of "offline" in SessionContext
+  // are inside comments, so the assertion had never tested anything, and it
+  // was the only assertion in the whole 42-script pack that failed once
+  // product comments were stripped. Replaced, not deleted: the behaviour it
+  // gestured at is real and can be asserted.
+  const src = readCode(SESSION);
+
+  // Reads come back from local storage, so a signed-in user opening the app
+  // with no network still sees their saves, searches and recents.
+  assert.match(
+    src,
+    /await\s+AsyncStorage\.getItem\(/,
+    "the session layer must hydrate from AsyncStorage, or a dead network shows an empty account",
+  );
+  // Writes are local-first and debounced.
+  assert.match(
+    src,
+    /AsyncStorage\.setItem\([^)]*\)\s*\.catch\(/,
+    "the local write must not throw when storage is unavailable",
+  );
+  // A failed read must degrade, never crash the provider.
+  assert.match(
+    src,
+    /catch\s*\{[\s\S]{0,80}\}/,
+    "the hydrate path must swallow storage failure rather than propagate it",
+  );
 });
 
 test("notification routing avoids sheet-only billing paths", () => {
