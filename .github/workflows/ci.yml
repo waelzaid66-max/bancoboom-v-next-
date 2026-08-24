@@ -178,6 +178,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Chain integrity gate
         run: node scripts/chain-integrity-gate.mjs
+      - name: API test DB safety guard
+        run: pnpm run test:api-test-db-safety
       - name: Production dependency security gate
         run: pnpm run security:audit
       - name: Production confidence (static, no secrets)
