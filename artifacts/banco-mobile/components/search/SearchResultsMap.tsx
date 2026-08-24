@@ -167,7 +167,7 @@ export function SearchResultsMap({
   // Every generated document owns a unique bridge authority token. The token is
   // deliberately not derived from the HTML string alone: A -> B -> A must still
   // reject a delayed callback from the first A document.
-  const sourceEpoch = useMemo(() => Symbol("map-source-epoch"), [html]);
+  const sourceEpoch = useMemo(() => Symbol("map-source-epoch"), [html, sig]);
   const activeSourceEpochRef = useRef(sourceEpoch);
 
   // Latest items, read inside the message handler without re-subscribing.
