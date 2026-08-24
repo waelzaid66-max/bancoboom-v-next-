@@ -1,5 +1,12 @@
 import { FeedItem, getMapClusters } from "@workspace/api-client-react";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ActivityIndicator, Alert, Linking, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
@@ -156,6 +163,9 @@ export function SearchResultsMap({
       criteria.nearRadiusKm,
     ],
   );
+  const committedSourceHtmlRef = useRef(html);
+  const activeSourceEpochRef = useRef(0);
+  const [sourceEpoch, setSourceEpoch] = useState(0);
 
   // Latest items, read inside the message handler without re-subscribing.
   const itemsRef = useRef<FeedItem[]>(items);
@@ -180,10 +190,16 @@ export function SearchResultsMap({
     [],
   );
 
-  // The generated page can change even when the marker `sig` does not (theme,
-  // market, near-me, language, safe-area clearance). Reset bootstrap authority
-  // for every new HTML source epoch without remounting the WebView itself.
-  useEffect(() => {
+  // The generated page can change even when the marker `sig` does not. Advance a
+  // committed source generation before native events can run, then reset all
+  // page-scoped React authority without remounting the WebView itself.
+  useLayoutEffect(() => {
+    if (committedSourceHtmlRef.current !== html) {
+      committedSourceHtmlRef.current = html;
+      const nextEpoch = activeSourceEpochRef.current + 1;
+      activeSourceEpochRef.current = nextEpoch;
+      setSourceEpoch(nextEpoch);
+    }
     setBootstrapState("loading");
     setSelectedId(null);
     setServerTotal(null);
@@ -326,6 +342,7 @@ export function SearchResultsMap({
 
   const onMessage = useCallback(
     (event: WebViewMessageEvent) => {
+      if (sourceEpoch !== activeSourceEpochRef.current) return;
       try {
         const msg = JSON.parse(event.nativeEvent.data) as MapBridgeMessage;
         if (msg.type === "ready") {
@@ -406,7 +423,7 @@ export function SearchResultsMap({
         // Ignore malformed bridge messages.
       }
     },
-    [scheduleFetchClusters, onOpenListingId, t],
+    [sourceEpoch, scheduleFetchClusters, onOpenListingId, t],
   );
 
   const selected = useMemo(
