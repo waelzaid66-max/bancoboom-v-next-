@@ -202,6 +202,78 @@ test("CAR unified header retains identity, search, map/list, save, filters, cate
   }
 
   assert.match(header, /<VehicleGlyph\b/, "vehicle categories must remain SVG glyph based");
+});
+
+// THE ICONS ARE PART OF THE CONTRACT, NOT DECORATION.
+//
+// Owner instruction 2026-08-24: "حافظ على الايقونات في قسم السيارات ومسارتها"
+// — preserve the Cars section's icons and the path they resolve through.
+//
+// The zero-loss guard above pins fourteen testIDs. Measured 2026-08-24: it does
+// NOT pin a single icon. A regenerated header that kept every testID and
+// replaced every glyph would leave this pack green. That is exactly the shape
+// of loss this file exists to prevent, so the icons are pinned here explicitly
+// before any header regeneration is handed to another agent.
+test("CAR header preserves every icon and the module they resolve through", () => {
+  // One import path. Icons resolve through components/icons.tsx, which is the
+  // lucide-backed compatibility layer — not the raw @expo/vector-icons.
+  assert.match(
+    header,
+    /import \{ Feather, Ionicons \} from "@\/components\/icons";/,
+    "Cars header icons must resolve through @/components/icons — swapping the module silently changes every glyph",
+  );
+  assert.match(
+    header,
+    /from "@\/components\/search\/car\/VehicleGlyph"/,
+    "the category glyphs must keep resolving through VehicleGlyph",
+  );
+
+  // The chrome icons, by name and by the control each one belongs to.
+  for (const [icon, meaning] of [
+    ["bell", "notifications"],
+    ["user", "profile"],
+    ["sliders", "filters"],
+    ["bookmark", "save-search"],
+    ["x", "clear/close"],
+  ]) {
+    assert.match(
+      header,
+      new RegExp(`<Feather\\s+name="${icon}"`),
+      `the ${meaning} icon (Feather "${icon}") was removed from the Cars header`,
+    );
+  }
+  assert.match(header, /<Ionicons\s+name="search"/, 'the search icon (Ionicons "search") was removed');
+  assert.match(
+    header,
+    /name=\{mapActive \? "list" : "map"\}/,
+    "the map/list toggle must keep BOTH glyphs — a single fixed icon hides which mode is active",
+  );
+
+  // All twenty-one category glyphs, in order. A regenerated strip that quietly
+  // drops the long tail (boats → military) is the loss this catches.
+  const CATEGORIES = [
+    "cars", "suv", "electric", "motorcycles", "trucks", "buses", "vans",
+    "heavy", "boats", "yachts", "ships", "aircraft", "jets", "helicopters",
+    "agricultural", "construction", "emergency", "military", "classic",
+    "luxury", "more",
+  ];
+  const block = header.slice(
+    header.indexOf("export const CAR_CATEGORIES"),
+    header.indexOf("export type CarHeroStat"),
+  );
+  assert.ok(block.length > 0, "CAR_CATEGORIES moved — update this guard");
+  for (const key of CATEGORIES) {
+    assert.match(
+      block,
+      new RegExp(`key: "${key}"`),
+      `the "${key}" vehicle category was dropped from the Cars strip`,
+    );
+  }
+  assert.equal(
+    (block.match(/key: "/g) ?? []).length,
+    CATEGORIES.length,
+    `the Cars category strip must carry exactly ${CATEGORIES.length} glyphs`,
+  );
   assert.match(
     header,
     /maxHeight:\s*DOCK_EXTRAS_MAX_HEIGHT\s*\*\s*p/,
