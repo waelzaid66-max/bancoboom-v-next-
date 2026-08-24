@@ -112,7 +112,8 @@ export function MapPinPicker({
   const insets = useSafeAreaInsets();
   const rowDir = isRTL ? "row-reverse" : "row";
   const [center, setCenter] = useState<Pin | null>(initial ?? null);
-  const [ready, setReady] = useState(false);
+  const [bootstrap, setBootstrap] = useState<"loading" | "ready" | "failed">("loading");
+  const [retryNonce, setRetryNonce] = useState(0);
 
   const framing = useMemo(() => {
     if (initial) return { ...initial, zoom: 15 };
@@ -124,14 +125,21 @@ export function MapPinPicker({
 
   useEffect(() => {
     if (!visible) return;
-    setReady(false);
+    setBootstrap("loading");
     setCenter(initial ?? null);
   }, [visible, initial]);
+
+  const retryMap = () => {
+    setBootstrap("loading");
+    setCenter(initial ?? null);
+    setRetryNonce((n) => n + 1);
+  };
 
   const onMessage = (e: WebViewMessageEvent) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data) as BridgeMsg;
-      if (msg.type === "ready") setReady(true);
+      if (msg.type === "ready") setBootstrap("ready");
+      if (msg.type === "error") setBootstrap("failed");
       if (msg.type === "center") setCenter({ lat: msg.lat, lng: msg.lng });
     } catch {
       /* ignore malformed */
@@ -175,14 +183,52 @@ export function MapPinPicker({
           </AppText>
 
           <View style={styles.mapWrap}>
-            {!ready ? (
+            {bootstrap === "loading" ? (
               <View style={styles.loading}>
                 <ActivityIndicator color={ACCENT} />
               </View>
             ) : null}
+            {bootstrap === "failed" ? (
+              <View style={styles.failed}>
+                <AppText style={[styles.failedTitle, { color: colors.foreground }]}>
+                  {t("search.mapUnavailableTitle")}
+                </AppText>
+                <AppText
+                  style={[
+                    styles.failedBody,
+                    { color: colors.mutedForeground, textAlign: "center" },
+                  ]}
+                >
+                  {t("search.mapUnavailableBody")}
+                </AppText>
+                <View style={[styles.failedActions, { flexDirection: rowDir }]}>
+                  <Pressable
+                    onPress={retryMap}
+                    style={[styles.failedAction, { backgroundColor: ACCENT }]}
+                    accessibilityRole="button"
+                  >
+                    <AppText style={styles.failedActionPrimaryText}>
+                      {t("common.retry")}
+                    </AppText>
+                  </Pressable>
+                  <Pressable
+                    onPress={onClose}
+                    style={[
+                      styles.failedAction,
+                      { backgroundColor: colors.secondary },
+                    ]}
+                    accessibilityRole="button"
+                  >
+                    <AppText style={[styles.failedActionText, { color: colors.foreground }]}>
+                      {t("common.close")}
+                    </AppText>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
             {visible ? (
               <WebView
-                key={`${framing.lat}:${framing.lng}:${framing.zoom}:${visible}`}
+                key={`${framing.lat}:${framing.lng}:${framing.zoom}:${visible}:${retryNonce}`}
                 originWhitelist={["*"]}
                 source={{ html }}
                 onMessage={onMessage}
@@ -266,6 +312,46 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  failed: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 3,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    backgroundColor: "rgba(0,0,0,0.78)",
+  },
+  failedTitle: {
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+    textAlign: "center",
+  },
+  failedBody: {
+    marginTop: 8,
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 19,
+  },
+  failedActions: {
+    marginTop: 18,
+    gap: 10,
+  },
+  failedAction: {
+    minWidth: 104,
+    minHeight: 44,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  failedActionPrimaryText: {
+    color: "#fff",
+    fontSize: 14,
+    fontFamily: "Cairo_700Bold",
+  },
+  failedActionText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
   },
   confirm: {
     marginHorizontal: 16,
