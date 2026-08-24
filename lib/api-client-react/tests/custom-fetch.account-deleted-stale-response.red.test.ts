@@ -94,3 +94,60 @@ test("RED: a delayed ACCOUNT_DELETED response from Session A must never tear dow
     "a stale Session-A tombstone must never run the currently registered Session-B teardown",
   );
 });
+
+test("RED: Session A token acquisition cannot inherit Session B teardown provenance", async () => {
+  const tokenGate = deferred<string | null>();
+  let tokenGetterCalls = 0;
+  let sessionATeardowns = 0;
+  let sessionBTeardowns = 0;
+
+  setAuthFailureHandler(SESSION_A, () => {
+    sessionATeardowns += 1;
+  });
+  setAuthTokenGetter(() => {
+    tokenGetterCalls += 1;
+    return tokenGate.promise;
+  });
+
+  globalThis.fetch = async (_input, init) => {
+    assert.equal(
+      new Headers(init?.headers).get("authorization"),
+      "Bearer session-a-token",
+      "the delayed request must still carry Session A's token",
+    );
+    return tombstoneResponse();
+  };
+
+  const requestFromSessionA = customFetch("https://api.example.test/v1/me", {
+    responseType: "json",
+  });
+
+  await Promise.resolve();
+  assert.equal(tokenGetterCalls, 1, "Session A token acquisition must be in flight");
+
+  setAuthFailureHandler(SESSION_B, () => {
+    sessionBTeardowns += 1;
+  });
+  tokenGate.resolve("session-a-token");
+
+  await assert.rejects(requestFromSessionA, (error: unknown) => {
+    assert.ok(error instanceof ApiError);
+    assert.equal(error.status, 401);
+    assert.equal(
+      (error.data as { error?: { code?: string } })?.error?.code,
+      "ACCOUNT_DELETED",
+    );
+    return true;
+  });
+
+  assert.equal(
+    sessionATeardowns,
+    0,
+    "Session A teardown must not run after Session A has been superseded",
+  );
+  assert.equal(
+    sessionBTeardowns,
+    0,
+    "a request carrying Session A's token must never inherit Session B teardown provenance",
+  );
+});
