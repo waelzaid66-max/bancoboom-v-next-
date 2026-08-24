@@ -141,14 +141,13 @@ describe("MapPinPicker mounted bootstrap fail-close", () => {
 
     const failedConfirm = view.getByTestId("create-map-pin-confirm");
     expect(failedConfirm.props.disabled).toBe(true);
-    act(() => {
-      failedConfirm.props.onPress();
-    });
+    fireEvent.press(failedConfirm);
     expect(onConfirm).not.toHaveBeenCalled();
 
     bridge({ type: "ready" });
     expect(view.getByText("search.mapUnavailableTitle")).toBeTruthy();
     expect(view.getByTestId("create-map-pin-confirm").props.disabled).toBe(true);
+    fireEvent.press(view.getByTestId("create-map-pin-confirm"));
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
