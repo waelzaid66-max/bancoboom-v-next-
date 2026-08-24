@@ -54,6 +54,10 @@ test("shared currency authority remains taxonomy-derived", () => {
   assert.match(markets, /YE:\s*["']YER["']/);
   assert.match(markets, /BH:\s*["']BHD["']/);
   assert.match(markets, /IQ:\s*["']IQD["']/);
+  assert.match(markets, /LB:\s*["']LBP["']/);
+  assert.match(markets, /MA:\s*["']MAD["']/);
+  assert.match(markets, /TN:\s*["']TND["']/);
+  assert.match(markets, /SD:\s*["']SDG["']/);
   assert.match(markets, /TR:\s*["']TRY["']/);
   assert.match(markets, /GB:\s*["']GBP["']/);
 });
@@ -69,12 +73,13 @@ test("map cluster query preserves the listing currency and price fields", () => 
   assert.match(searchService, /price_display/);
 });
 
-test("map-pin money preserves request and rental-period semantics", () => {
+test("map-pin money preserves request and rental branching without freezing localized copy", () => {
   const formatter = functionSlice(searchService, "mapPinPriceDisplay", "/**\n * Server-side map clustering");
-  assert.match(formatter, /if\s*\(args\.is_request\)\s*return\s*["']طلب سعر \/ Price requested["']/);
+
+  // This currency-authority lane must preserve the functional branches, but it
+  // deliberately does NOT promote today's mixed AR/EN literals to permanent
+  // localization authority. Parent #96 owns the separate copy/i18n contract.
+  assert.match(formatter, /if\s*\(args\.is_request\)\s*return\b/);
   assert.match(formatter, /args\.rental_term\s*===\s*["']furnished_daily["']/);
   assert.match(formatter, /args\.rental_term\s*===\s*["']annual_contract["']/);
-  assert.match(formatter, /\/يوم/);
-  assert.match(formatter, /\/سنة/);
-  assert.match(formatter, /\/شهر/);
 });
