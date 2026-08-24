@@ -248,6 +248,67 @@ describe("SearchResultsMap web host", () => {
       .toBeGreaterThan(0);
   });
 
+  // Both tests below close a RUNTIME_UNPROVEN gap named in
+  // audit/recovery/MAPS-CROSS-REPO-REUNION-2026-08-24.md. Measured 2026-08-24:
+  // breaking either capability in the source left the whole render suite green,
+  // so "present in source" was all anyone could honestly claim for them.
+
+  it("carries the Near Me centre and radius into the map, and only when Near Me is on", () => {
+    mountMap();
+    expect(mockBuildMapHtml).toHaveBeenCalled();
+    // Near Me is off in the default criteria: the map must receive no circle.
+    expect(mockBuildMapHtml.mock.calls[0][3]).toBeUndefined();
+
+    mockBuildMapHtml.mockClear();
+    mountMap({
+      ...CRITERIA,
+      nearMeEnabled: true,
+      nearLat: 30.05,
+      nearLng: 31.25,
+      nearRadiusKm: 25,
+    } as SearchCriteria);
+
+    expect(mockBuildMapHtml).toHaveBeenCalled();
+    expect(mockBuildMapHtml.mock.calls[0][3]).toEqual({
+      lat: 30.05,
+      lng: 31.25,
+      radiusKm: 25,
+    });
+  });
+
+  it("marks a single-listing pin bookable from the page item when the cluster omits it", async () => {
+    mockGetMapClusters.mockResolvedValue({
+      data: [
+        // count === 1 and a listing_id the page knows is bookable, with the
+        // server field absent — the host must fall back to the page item.
+        { lat: 0.25, lng: 0.25, count: 1, listing_id: "stay-in" },
+        // A different single pin the page does not know: not bookable.
+        { lat: 0.4, lng: 0.4, count: 1, listing_id: "unknown-id" },
+        // A real cluster is never a bookable pin.
+        { lat: 0.75, lng: 0.75, count: 4, listing_id: null },
+      ],
+    });
+
+    mountMap();
+
+    await act(async () => {
+      postFromMap({
+        type: "viewport",
+        bounds: { min_lat: 0, max_lat: 1, min_lng: 0, max_lng: 1 },
+        zoom: 10,
+      });
+      jest.advanceTimersByTime(300);
+    });
+
+    await waitFor(() => {
+      expect(mockSetClusters).toHaveBeenCalledWith([
+        expect.objectContaining({ listing_id: "stay-in", bookable: true }),
+        expect.objectContaining({ listing_id: "unknown-id", bookable: false }),
+        expect.objectContaining({ count: 4, bookable: false }),
+      ]);
+    });
+  });
+
   it("surfaces a trusted tile failure once without blocking listing results", () => {
     const view = mountMap();
 
