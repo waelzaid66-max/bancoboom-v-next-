@@ -153,6 +153,8 @@ const onOpenListingId = jest.fn();
 const onSave = jest.fn();
 const isSaved = jest.fn(() => false);
 
+type BridgeHandler = (event: { nativeEvent: { data: string } }) => void;
+
 function mapElement(criteria: any) {
   return (
     <SearchResultsMap
@@ -166,14 +168,20 @@ function mapElement(criteria: any) {
   );
 }
 
-function bridge(type: string): void {
-  const onMessage = mockLatestWebViewProps.onMessage as
-    | ((event: { nativeEvent: { data: string } }) => void)
-    | undefined;
+function currentBridgeHandler(): BridgeHandler {
+  const onMessage = mockLatestWebViewProps.onMessage as BridgeHandler | undefined;
   expect(onMessage).toEqual(expect.any(Function));
+  return onMessage!;
+}
+
+function sendBridge(handler: BridgeHandler, message: Record<string, unknown>): void {
   act(() => {
-    onMessage!({ nativeEvent: { data: JSON.stringify({ type }) } });
+    handler({ nativeEvent: { data: JSON.stringify(message) } });
   });
+}
+
+function bridge(type: string): void {
+  sendBridge(currentBridgeHandler(), { type });
 }
 
 function currentHtml(): string {
@@ -222,5 +230,39 @@ describe("SearchResultsMap bootstrap source epochs", () => {
 
     bridge("ready");
     expect(view.getByTestId("mock-map-overlay-chrome")).toBeTruthy();
+  });
+
+  it("RED: a stale ready callback from the previous HTML epoch cannot authorize the new page", () => {
+    const view = render(mapElement(CRITERIA));
+    const staleEpochHandler = currentBridgeHandler();
+    const beforeHtml = currentHtml();
+
+    view.rerender(mapElement(NEAR_ME_CRITERIA));
+
+    expect(currentHtml()).not.toBe(beforeHtml);
+    expect(view.queryByTestId("mock-map-overlay-chrome")).toBeNull();
+
+    sendBridge(staleEpochHandler, { type: "ready" });
+    expect(view.queryByTestId("mock-map-overlay-chrome")).toBeNull();
+
+    sendBridge(currentBridgeHandler(), { type: "ready" });
+    expect(view.getByTestId("mock-map-overlay-chrome")).toBeTruthy();
+  });
+
+  it("RED: a stale select callback from the previous HTML epoch cannot navigate after the rebuild", () => {
+    const view = render(mapElement(CRITERIA));
+    const staleEpochHandler = currentBridgeHandler();
+    const beforeHtml = currentHtml();
+
+    view.rerender(mapElement(NEAR_ME_CRITERIA));
+
+    expect(currentHtml()).not.toBe(beforeHtml);
+
+    sendBridge(staleEpochHandler, { type: "select", id: "old-epoch-off-page" });
+    expect(onOpenListingId).not.toHaveBeenCalled();
+
+    sendBridge(currentBridgeHandler(), { type: "select", id: "current-epoch-off-page" });
+    expect(onOpenListingId).toHaveBeenCalledTimes(1);
+    expect(onOpenListingId).toHaveBeenCalledWith("current-epoch-off-page");
   });
 });
