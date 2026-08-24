@@ -309,6 +309,29 @@ describe("SearchResultsMap web bootstrap fail-close", () => {
     expect(view.getByTestId("mock-map-overlay")).toBeTruthy();
   });
 
+  it("clears failed state on a same-marker srcDoc source epoch", () => {
+    const view = mountMap();
+    dispatchMapMessage({ type: "error" });
+    expect(view.getByText("search.mapUnavailableTitle")).toBeTruthy();
+
+    const previousWindow = currentIframeWindow();
+    const previousHtml = mockBuildMapHtml.mock.results.at(-1)?.value;
+    view.rerender(mapElement([MAPPED_ITEM], SAME_MARKER_NEXT_CRITERIA));
+
+    const nextHtml = mockBuildMapHtml.mock.results.at(-1)?.value;
+    expect(nextHtml).not.toBe(previousHtml);
+    expect(view.queryByText("search.mapUnavailableTitle")).toBeNull();
+    expect(view.queryByTestId("mock-map-overlay")).toBeNull();
+
+    dispatchMapMessage({ type: "ready" }, previousWindow);
+    expect(view.queryByTestId("mock-map-overlay")).toBeNull();
+
+    const nextWindow = currentIframeWindow();
+    expect(nextWindow).not.toBe(previousWindow);
+    dispatchMapMessage({ type: "ready" }, nextWindow);
+    expect(view.getByTestId("mock-map-overlay")).toBeTruthy();
+  });
+
   it("preserves trusted tile-failure alert-once behavior after readiness", () => {
     const view = mountMap();
     dispatchMapMessage({ type: "ready" });
