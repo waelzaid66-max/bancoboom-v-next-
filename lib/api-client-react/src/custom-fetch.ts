@@ -399,6 +399,14 @@ export async function customFetch<T = unknown>(
     headers.set("accept", DEFAULT_JSON_ACCEPT);
   }
 
+  // Capture teardown provenance before any await. Token acquisition can suspend
+  // while Clerk switches sessions; an old request must never inherit the new
+  // session's ACCOUNT_DELETED teardown authority.
+  const authFailureSnapshot: AuthFailureRequestSnapshot = {
+    sessionId: _authFailureSessionId,
+    generation: _authFailureGeneration,
+  };
+
   // Attach bearer token when an auth getter is configured and no
   // Authorization header has been explicitly provided.
   if (_authTokenGetter && !headers.has("authorization")) {
@@ -409,10 +417,6 @@ export async function customFetch<T = unknown>(
   }
 
   const requestInfo = { method, url: resolveUrl(input) };
-  const authFailureSnapshot: AuthFailureRequestSnapshot = {
-    sessionId: _authFailureSessionId,
-    generation: _authFailureGeneration,
-  };
 
   const response = await fetch(input, { ...init, method, headers });
 
