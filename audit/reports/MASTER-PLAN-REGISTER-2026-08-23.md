@@ -180,7 +180,7 @@ plus a chain assertion **on the confidence gate**, which today it does not menti
 
 # §7 · STANDING
 
-**Register: 34 classes · 9 at P0 · 45 corrections published.**
+**Register: 34 classes · 9 at P0 · 46 corrections published.**
 **All nine proven and patched, and now assembled: `origin/local/audit-union-20260823` carries **thirteen** team branches plus all nine P0 fixes — `A-8` resolved in favour of `fix/db-baseline-adoption-20260821` with the readiness probe taken from the other, one `fix/` branch reverted as RED-by-design, one maps branch judged superseded with nothing taken — and is green on every gate — chain 247/247, confidence 24/24, root `typecheck` 0, root `test` 0, API 518 passed on a disposable child database, baseline matrix 14/14, parity 40/40, guard-reachability 166 of 167. Seven patches in `audit/patches/`, each `git apply --check` clean against a pristine pre-fix tree.**
 **Sequencing: `P0-3` must not land without `P0-2` — alone it converts a wrong price into an empty one.**
 **Trunk candidate: `local/owner-assembly-20260822-r2` — 16 inputs, 135 commits, eight gates green, API 527 passed.**
