@@ -22,6 +22,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { readCode } from "./_codeOnly.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -1952,10 +1953,24 @@ test("Banks stays outside SECTION_ROUTE (dedicated business world)", () => {
 });
 
 test("Ads-first: Banks hub is brochure — no live intermediary directory API", () => {
-  const src = fs.readFileSync(BANKS, "utf8");
+  // The third assertion here used to be `assert.match(src, /explanatory
+  // brochure only/)` — a phrase that lives only in a JSX comment. It was the
+  // one assertion in this file that failed when product comments were
+  // stripped (measured 2026-08-24), and it enforced nothing: a live directory
+  // could be added while the sentence stayed. Replaced with the class it was
+  // gesturing at, which is enforceable and strictly wider than the two names
+  // below.
+  const src = readCode(BANKS);
   assert.doesNotMatch(src, /useGetFinancingIntermediaries/);
   assert.doesNotMatch(src, /listIntermediaries/);
-  assert.match(src, /explanatory brochure only/);
+  // No intermediary/partner directory data of ANY name. The generated client
+  // exposes useGetFinancingIntermediaries / getFinancingIntermediaries and
+  // friends; this hub renders none of them, whatever they get renamed to.
+  assert.doesNotMatch(
+    src,
+    /\b(use|get|list)[A-Za-z]*(Intermediar|PartnerDirectory)[A-Za-z]*\s*\(/,
+    "the Banks hub must stay a brochure — no live intermediary/partner directory call",
+  );
 });
 
 test("Banks brochure examples are non-card rows (no catalog illusion)", () => {
