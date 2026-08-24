@@ -290,10 +290,10 @@ export function MessageOutboxProvider({ children }: { children: React.ReactNode 
       build: (current: MessageTextOutboxEntry[]) => MessageTextOutboxEntry[],
     ) =>
       queueStorage(async () => {
-        if (ownerRef.current !== ownerUserId) throw abortError();
+        if (purgingRef.current || ownerRef.current !== ownerUserId) throw abortError();
         const next = build(entriesRef.current);
         await persist(ownerUserId, next);
-        if (ownerRef.current !== ownerUserId) throw abortError();
+        if (purgingRef.current || ownerRef.current !== ownerUserId) throw abortError();
         publish(next);
         return next;
       }),
@@ -588,8 +588,7 @@ export function MessageOutboxProvider({ children }: { children: React.ReactNode 
           const requestedDelay =
             error &&
             typeof error === "object" &&
-            typeof (error as { outboxStorageRetryMs?: unknown })
-              .outboxStorageRetryMs === "number"
+            typeof (error as { outboxStorageRetryMs?: unknown }).outboxStorageRetryMs === "number"
               ? (error as { outboxStorageRetryMs: number }).outboxStorageRetryMs
               : 2_000;
           if (processingReady(ownerUserId)) scheduleDrain(requestedDelay);
@@ -734,6 +733,9 @@ export function MessageOutboxProvider({ children }: { children: React.ReactNode 
 
   const enqueueText = useCallback(
     async (input: EnqueueTextInput): Promise<string> => {
+      if (purgingRef.current) {
+        throw new Error("Message outbox is closed for this account.");
+      }
       const current = authRef.current;
       const ownerUserId = current.userId;
       if (
@@ -754,7 +756,11 @@ export function MessageOutboxProvider({ children }: { children: React.ReactNode 
         now: Date.now(),
       });
       await queueStorage(async () => {
-        if (!sameIdentity(authRef.current, current) || ownerRef.current !== ownerUserId) {
+        if (
+          purgingRef.current ||
+          !sameIdentity(authRef.current, current) ||
+          ownerRef.current !== ownerUserId
+        ) {
           throw abortError();
         }
         assertMessageTextOutboxCapacity(entriesRef.current, entry.body);
@@ -767,7 +773,11 @@ export function MessageOutboxProvider({ children }: { children: React.ReactNode 
         }
         const next = [...entriesRef.current, entry];
         await persist(ownerUserId, next);
-        if (!sameIdentity(authRef.current, current) || ownerRef.current !== ownerUserId) {
+        if (
+          purgingRef.current ||
+          !sameIdentity(authRef.current, current) ||
+          ownerRef.current !== ownerUserId
+        ) {
           throw abortError();
         }
         publish(next);
@@ -780,7 +790,7 @@ export function MessageOutboxProvider({ children }: { children: React.ReactNode 
   const retry = useCallback(
     async (clientMessageId: string) => {
       const ownerUserId = ownerRef.current;
-      if (!ownerUserId || hydratedOwner !== ownerUserId) return;
+      if (!ownerUserId || hydratedOwner !== ownerUserId || purgingRef.current) return;
       await commitEntries(ownerUserId, (current) =>
         replaceEntry(current, clientMessageId, (entry) => ({
           ...entry,
@@ -798,7 +808,7 @@ export function MessageOutboxProvider({ children }: { children: React.ReactNode 
   const discard = useCallback(
     async (clientMessageId: string) => {
       const ownerUserId = ownerRef.current;
-      if (!ownerUserId || hydratedOwner !== ownerUserId) return;
+      if (!ownerUserId || hydratedOwner !== ownerUserId || purgingRef.current) return;
       await commitEntries(ownerUserId, (current) =>
         current.filter((entry) => entry.clientMessageId !== clientMessageId),
       );
