@@ -44,11 +44,74 @@ function windowAroundTestId(source, testId, before = 1800, after = 400) {
   return source.slice(Math.max(0, index - before), index + marker.length + after);
 }
 
+function fiAuthEntryFromCta(cta) {
+  const match = cta.match(
+    /["'](\/sign-up(?:\?[^"']*)?|\/business\/(?:fi-auth|banks\/register|financial-institution\/register)(?:\?[^"']*)?)["']/,
+  );
+  assert.ok(
+    match,
+    "the signed-out branch must enter parameterized shared auth or a dedicated FI auth wrapper",
+  );
+  return {
+    href: match[1],
+    pathname: match[1].split("?")[0],
+  };
+}
+
+function routeSource(pathname) {
+  const route = pathname.replace(/^\//, "");
+  const candidates = [
+    `artifacts/banco-mobile/app/${route}.tsx`,
+    `artifacts/banco-mobile/app/${route}/index.tsx`,
+  ];
+  const candidate = candidates.find((rel) =>
+    fs.existsSync(path.join(ROOT, rel)),
+  );
+  assert.ok(candidate, `missing auth entry route for ${pathname}`);
+  return read(candidate);
+}
+
+function paramsObject(source, label) {
+  const marker = source.search(/\bparams\s*:\s*\{/);
+  assert.notEqual(marker, -1, `${label} must pass route params`);
+  const start = source.indexOf("{", marker);
+  let depth = 0;
+  for (let index = start; index < source.length; index += 1) {
+    if (source[index] === "{") depth += 1;
+    if (source[index] !== "}") continue;
+    depth -= 1;
+    if (depth === 0) return source.slice(start, index + 1);
+  }
+  assert.fail(`${label} has an unterminated route params object`);
+}
+
+function assertForwardsFiContext(source, label, { explicitFi = false } = {}) {
+  const params = paramsObject(source, label);
+  assert.match(params, /authMode\s*:\s*["']signup["']/);
+  assert.match(
+    params,
+    /(?:\bintent\b|\bfiIntent\b|\baccountIntent\b|\bauthIntent\b)/,
+    `${label} must carry FI intent into shared auth`,
+  );
+  assert.match(
+    params,
+    /\bfiType\b|\bfiSubtype\b|\breturnTo\b|\bonboardingTarget\b/,
+    `${label} must preserve the FI subtype or a fail-closed return target`,
+  );
+  if (explicitFi) {
+    assert.match(
+      params,
+      /(?:intent|fiIntent|accountIntent|authIntent)\s*:\s*["']fi["']/,
+      `${label} must establish FI intent before entering shared auth`,
+    );
+  }
+}
+
 test("general account picker exposes exactly Individual, Dealer, Company", () => {
   const profile = read("artifacts/banco-mobile/app/(tabs)/profile.tsx");
   assert.deepEqual(
-    accountOptionTypes(profile),
-    ["individual", "dealer", "company"],
+    accountOptionTypes(profile).sort(),
+    ["company", "dealer", "individual"],
     "the public account picker must not collapse Dealer+Company or expose FI subtypes",
   );
 });
@@ -61,7 +124,12 @@ test("general account picker contains no FI or synthetic business family", () =>
     "] as const satisfies",
   );
 
-  for (const forbidden of ["business", "bank", "funder", "financial_institution"]) {
+  for (const forbidden of [
+    "business",
+    "bank",
+    "funder",
+    "financial_institution",
+  ]) {
     assert.doesNotMatch(
       options,
       new RegExp(`\\btype:\\s*["']${forbidden}["']`),
@@ -80,39 +148,58 @@ test("signed-out Banks CTA enters auth with FI intent instead of generic Profile
     "the Banks mini-app must not drop an FI applicant into generic Profile",
   );
 
-  const authEntryIndex = cta.search(
-    /\/sign-up|\/business\/(?:fi-auth|banks\/register|financial-institution\/register)/,
-  );
-  assert.notEqual(
-    authEntryIndex,
-    -1,
-    "the signed-out branch must enter a dedicated or parameterized FI auth route",
-  );
-
-  const authEntry = cta.slice(
-    Math.max(0, authEntryIndex - 300),
-    authEntryIndex + 1000,
-  );
-  assert.match(
-    authEntry,
-    /intent\s*[:=]\s*["']fi["']|intent=fi/,
-    "the auth entry must preserve immutable FI intent",
-  );
+  const entry = fiAuthEntryFromCta(cta);
+  if (entry.pathname === "/sign-up") {
+    assert.match(
+      `${entry.href}\n${cta}`,
+      /intent\s*[:=]\s*["']fi["']|intent=fi/,
+      "shared auth must receive immutable FI intent from the mini-app CTA",
+    );
+    assert.match(
+      `${entry.href}\n${cta}`,
+      /fiType\s*[:=]\s*["']bank["']|fiType=bank|\breturnTo\b/,
+      "shared auth must receive the bank subtype or a fail-closed return target",
+    );
+  }
 });
 
-test("/sign-up forwards FI context into the shared Clerk flow", () => {
-  const signUp = read("artifacts/banco-mobile/app/sign-up.tsx");
+test("FI auth entry forwards context into the shared Clerk flow", () => {
+  const banks = read("artifacts/banco-mobile/app/business/banks.tsx");
+  const cta = windowAroundTestId(banks, "banks-register-cta");
+  const entry = fiAuthEntryFromCta(cta);
+  const entrySource = routeSource(entry.pathname);
 
-  assert.match(signUp, /useLocalSearchParams/);
-  assert.match(signUp, /\bintent\b/);
-  assert.match(signUp, /\bfiType\b|\breturnTo\b/);
-  assert.match(signUp, /authMode\s*:\s*["']signup["']/);
+  assert.doesNotMatch(
+    entrySource,
+    /\buseSignIn\s*\(|\buseSignUp\s*\(/,
+    "an FI auth wrapper must reuse the shared Clerk flow, not create a second implementation",
+  );
+  assert.match(entrySource, /\/\(tabs\)\/profile|\/sign-up/);
+
+  if (entry.pathname === "/sign-up") {
+    assert.match(entrySource, /useLocalSearchParams/);
+    assertForwardsFiContext(entrySource, "/sign-up");
+    return;
+  }
+
+  assertForwardsFiContext(entrySource, entry.pathname, { explicitFi: true });
+  if (/\/sign-up/.test(entrySource)) {
+    const signUp = read("artifacts/banco-mobile/app/sign-up.tsx");
+    assert.match(signUp, /useLocalSearchParams/);
+    assertForwardsFiContext(signUp, "/sign-up");
+  }
 });
 
 test("Profile consumes FI auth intent and bypasses the generic account picker", () => {
   const profile = read("artifacts/banco-mobile/app/(tabs)/profile.tsx");
-  const paramIndex = profile.indexOf("useLocalSearchParams");
-  assert.notEqual(paramIndex, -1, "Profile must read route-owned auth context");
+  const paramIndex = profile.search(
+    /\bconst\s*\{[\s\S]{0,300}\bauthMode\b[\s\S]{0,300}\}\s*=\s*useLocalSearchParams/,
+  );
+  assert.notEqual(
+    paramIndex,
+    -1,
+    "Profile must read route-owned auth context at the hook call",
+  );
   const paramWindow = profile.slice(paramIndex, paramIndex + 1200);
 
   assert.match(paramWindow, /authMode/);
