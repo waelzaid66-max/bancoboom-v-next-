@@ -107,7 +107,7 @@ function ClerkLoadGate({
 }
 
 function AuthTokenBridge() {
-  const { getToken, signOut, userId } = useAuth();
+  const { getToken, sessionId, signOut, userId } = useAuth();
   const { prepareForSignOut } = useMessageOutbox();
   useEffect(() => {
     // getToken can reject while clerk-js is still initializing (or failed to
@@ -126,9 +126,9 @@ function AuthTokenBridge() {
     // Soft-deleted accounts reject with 401 ACCOUNT_DELETED while Clerk JWT
     // may still exist — unregister push while auth may still work, then clear
     // the local session so the user is not stuck (NOTIF-03).
-    setAuthFailureHandler(({ code }) => {
+    setAuthFailureHandler(sessionId, ({ code }) => {
       if (code !== "ACCOUNT_DELETED") return;
-      void (async () => {
+      return (async () => {
         try {
           await prepareForSignOut();
         } catch (error) {
@@ -144,11 +144,11 @@ function AuthTokenBridge() {
         } catch {
           // Best-effort — still sign out.
         }
-        await signOut().catch(() => {});
+        await signOut();
       })();
     });
-    return () => setAuthFailureHandler(null);
-  }, [prepareForSignOut, signOut]);
+    return () => setAuthFailureHandler(sessionId, null);
+  }, [prepareForSignOut, sessionId, signOut]);
 
   return null;
 }
