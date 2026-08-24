@@ -96,6 +96,12 @@ test("unknown / incomplete notification falls back to /notifications", () => {
   const fnStart = routing.indexOf("export function routeForNotification(");
   const fnEnd = routing.indexOf("export function routeForNotificationItem(");
   const body = routing.slice(fnStart, fnEnd);
+  // prose-assertion: intentional — this one deliberately requires a COMMENT.
+  // The fallback exists because of NOTIF-09 and the next reader needs to know
+  // why a null return is forbidden here; the marker is the traceability, and
+  // the two assertions below are the behaviour. Do not "fix" this by reading
+  // through the comment stripper: it would delete the only thing this line
+  // tests.
   assert.match(body, /\/\/ NOTIF-09/);
   assert.match(body, /return "\/notifications";\s*\n\}/);
   assert.doesNotMatch(body, /return null;/);
