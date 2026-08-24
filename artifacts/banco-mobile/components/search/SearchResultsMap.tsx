@@ -180,15 +180,15 @@ export function SearchResultsMap({
     [],
   );
 
-  // The WebView is keyed by `sig`, so a changed mapped-set reloads it — but this
-  // component does not remount, so reset load/selection/count ourselves and
-  // invalidate any in-flight cluster fetch from the previous page.
+  // The generated page can change even when the marker `sig` does not (theme,
+  // market, near-me, language, safe-area clearance). Reset bootstrap authority
+  // for every new HTML source epoch without remounting the WebView itself.
   useEffect(() => {
     setBootstrapState("loading");
     setSelectedId(null);
     setServerTotal(null);
     vpSeqRef.current++;
-  }, [sig]);
+  }, [html]);
 
   /**
    * The ONE place clusters reach the map.
@@ -337,7 +337,6 @@ export function SearchResultsMap({
         } else if (msg.type === "tile_error") {
           // A tile failure only degrades a map that already completed bootstrap.
           // It cannot establish readiness by itself or revive a failed instance.
-          setBootstrapState((current) => (current === "ready" ? current : current));
           if (!tileFailureShownRef.current) {
             tileFailureShownRef.current = true;
             Alert.alert(
