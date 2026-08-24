@@ -60,11 +60,25 @@ test("tile failure never establishes bootstrap readiness or revives failed state
   );
 });
 
-test("result-set rebuild resets bootstrap authority to loading", () => {
+test("every rebuilt iframe document starts a fresh loading epoch", () => {
+  const resetEffect = source.match(
+    /useEffect\s*\(\s*\(\)\s*=>\s*\{[\s\S]{0,900}setBootstrapState\s*\(\s*["']loading["']\s*\)[\s\S]{0,900}\}\s*,\s*\[([^\]]+)]\s*\)/,
+  );
+  assert.ok(
+    resetEffect,
+    "a document/source-keyed effect must reset bootstrap state before a later ready",
+  );
+
+  const dependencies = resetEffect[1].replace(/\s+/g, " ").trim();
+  assert.notEqual(
+    dependencies,
+    "sig",
+    "marker signature alone is not the iframe document authority because srcDoc also changes for market, Near-Me, locale, theme and safe-area inputs",
+  );
   assert.match(
-    source,
-    /useEffect\s*\(\s*\(\)\s*=>\s*\{[\s\S]{0,500}\(\s*["']loading["']\s*\)[\s\S]{0,500}\}\s*,\s*\[\s*sig\s*\]\s*\)/,
-    "a sig-keyed iframe/result-set rebuild must reset bootstrap state before a later ready",
+    dependencies,
+    /\bhtml\b|\b(?:document|source|page|bootstrap)(?:Epoch|Key|Signature|Sig)\b/i,
+    "bootstrap reset must follow the complete generated document source or an equivalent source-epoch identity",
   );
 });
 
