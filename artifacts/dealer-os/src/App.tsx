@@ -114,14 +114,14 @@ function ClerkQueryClientCacheInvalidator() {
 
 /** Soft-deleted accounts reject with 401 ACCOUNT_DELETED while Clerk session may linger. */
 function AuthFailureBridge() {
-  const { signOut } = useAuth();
+  const { sessionId, signOut } = useAuth();
   useEffect(() => {
-    setAuthFailureHandler(({ code }) => {
+    setAuthFailureHandler(sessionId, ({ code }) => {
       if (code !== "ACCOUNT_DELETED") return;
-      void signOut().catch(() => {});
+      return signOut();
     });
-    return () => setAuthFailureHandler(null);
-  }, [signOut]);
+    return () => setAuthFailureHandler(sessionId, null);
+  }, [sessionId, signOut]);
   return null;
 }
 
