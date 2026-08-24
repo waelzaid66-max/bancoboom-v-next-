@@ -1,0 +1,199 @@
+BANCO-RECON-02 — DELIVERABLE 7 — CROSS-REPO ORPHAN WORK INVENTORY
+DESTINATION_REPO=waelzaid66-max/bancoboom-v-next-
+DESTINATION_SCOPE=all fetched remote branch heads + all tags
+DESTINATION_REMOTE_BRANCHES=117
+DESTINATION_TAGS=0
+METHOD=fresh temporary clones; no-single-branch semantics; Git path union + blob/content-SHA comparison across refs
+
+REPO bancoboom
+TOTAL_DISTINCT_COMMITS=18
+TOTAL_REMOTE_BRANCHES=1
+LATEST_COMMIT_DATE=2026-07-28T23:31:02Z
+MISSING_PATH_COUNT=9
+CODE_COUNT=0
+RECORD_COUNT=6
+OTHER_COUNT=3
+MISSING_PATHS
+RECORD	.agents/memory/banco-expo-go-env.md
+RECORD	.agents/memory/env-var-shadows-secret.md
+RECORD	.agents/memory/expo-ci-auth-crash.md
+RECORD	.agents/memory/git-shallow-phantom-push.md
+RECORD	.agents/memory/package-firewall-cve-blocks.md
+RECORD	.agents/memory/replit-thread-exhaustion-pnpm.md
+OTHER	.github/workflows/sync-aws-virgen.yml
+OTHER	.github/workflows/sync-bancooom.yml
+OTHER	expo-qr.png
+
+REPO bancoboomstor
+TOTAL_DISTINCT_COMMITS=226
+TOTAL_REMOTE_BRANCHES=14
+LATEST_COMMIT_DATE=2026-08-09T16:11:12+01:00
+MISSING_PATH_COUNT=19
+CODE_COUNT=0
+RECORD_COUNT=19
+OTHER_COUNT=0
+MISSING_PATHS
+RECORD	audit/handoff/BRANCH-MAP-AND-COORDINATION-AR.md
+RECORD	audit/handoff/COPILOT-FULL-AUDIT-TO-PRIMARY-AGENT-2026-08-09.md
+RECORD	audit/handoff/COPILOT-REAUDIT-CURRENT-HEAD-66771d6-2026-08-09.md
+RECORD	audit/handoff/COPILOT-SECOND-PASS-VERIFIED-2026-08-09.md
+RECORD	audit/handoff/CORRECTED-MERGE-PLAN-EVIDENCE-AR.md
+RECORD	audit/handoff/CROSS-REPO-CONSOLIDATION-TIMELINE-2026-08-08-AR.md
+RECORD	audit/handoff/DAMAGE-REPORT-CLAUDE-AGENTS-AR.md
+RECORD	audit/handoff/FORENSIC-USER-JOURNEYS-AR.md
+RECORD	audit/handoff/MEMORY-DUMP-AND-FULL-AUDIT-FOR-CODEX-AR.md
+RECORD	audit/handoff/OPERABILITY-AUDIT-AR.md
+RECORD	audit/handoff/QA-DEEP-AUDIT-2026-08-08-AR.md
+RECORD	audit/handoff/SPEC-CARS-HERO-ONE-CONTAINER-AR.md
+RECORD	audit/handoff/TO-CODEX-CORRECTIONS-AND-ICON-TYPE-GAP-AR.md
+RECORD	audit/handoff/TO-CODEX-SOURCE-OF-TRUTH-AFTER-MIGRATION-AR.md
+RECORD	audit/handoff/TO-MANAGER-AGENT-INTEGRATION-AUDIT-AR.md
+RECORD	audit/handoff/TO-MANAGER-FULL-BRIEF-AR.md
+RECORD	audit/handoff/UNDERSTOOD-BUT-NOT-DONE-AR.md
+RECORD	audit/handoff/VERIFICATION-LEDGER-AR.md
+RECORD	audit/handoff/VERIFICATION-ROUND-2-AR.md
+
+REPO banco-with-wael
+TOTAL_DISTINCT_COMMITS=474
+TOTAL_REMOTE_BRANCHES=56
+LATEST_COMMIT_DATE=2026-08-01T09:06:45Z
+MISSING_PATH_COUNT=71
+CODE_COUNT=0
+RECORD_COUNT=69
+OTHER_COUNT=2
+MISSING_PATHS
+RECORD	audit/handoff/PASTE-REPLIT-UNIFY-MAIN-TIP-WAVE8-AR.md
+RECORD	docs/superpowers/handover/01-repository-health.md
+RECORD	docs/superpowers/handover/02-ux-audit.md
+RECORD	docs/superpowers/handover/03-visual-audit.md
+RECORD	docs/superpowers/handover/04-user-journeys.md
+RECORD	docs/superpowers/handover/05-screen-inventory.md
+RECORD	docs/superpowers/handover/06-miniapp-audit.md
+RECORD	docs/superpowers/handover/07-maps-audit.md
+RECORD	docs/superpowers/handover/08-search-audit.md
+RECORD	docs/superpowers/handover/09-globalization-audit.md
+RECORD	docs/superpowers/handover/10-currency-country.md
+RECORD	docs/superpowers/handover/11-previous-agent-pollution.md
+RECORD	docs/superpowers/handover/12-remaining-issues.md
+RECORD	docs/superpowers/handover/13-risk-register.md
+RECORD	docs/superpowers/handover/14-missing-features.md
+RECORD	docs/superpowers/handover/15-hidden-bugs.md
+RECORD	docs/superpowers/handover/16-technical-debt.md
+RECORD	docs/superpowers/handover/17-refactoring.md
+RECORD	docs/superpowers/handover/18-production-readiness.md
+RECORD	docs/superpowers/handover/19-executive-summary.md
+RECORD	docs/superpowers/handover/90-agent-knowledge-extraction.md
+RECORD	docs/superpowers/handover/README.md
+RECORD	reports/production-verification/60-PHASE-ZERO-MASTER-ENGINEERING-AUDIT.md
+RECORD	reports/production-verification/council/auditor/INTEL-DATA-02-rent-seed-static.md
+RECORD	reports/production-verification/council/auditor/INTEL-SEC-07-visibility-coverage.md
+RECORD	reports/production-verification/council/auditor/INTEL-URGENT-SEC-DEP-TO-DIRECTOR.md
+RECORD	reports/production-verification/council/auditor/INTEL-URGENT-WAKE90-DONE-TO-DIRECTOR.md
+RECORD	reports/production-verification/council/auditor/INTEL-VERIFY-SEC-DEP-01a.md
+RECORD	reports/production-verification/council/auditor/W8-AUD-86-replit-unify-noise-data.md
+RECORD	reports/production-verification/council/auditor/W8-AUD-87-chair-cockpit-precision.md
+RECORD	reports/production-verification/council/auditor/W8-AUD-88-chair-paste-peer.md
+RECORD	reports/production-verification/council/auditor/W8-AUD-89-chair-continuation.md
+RECORD	reports/production-verification/council/auditor/W8-AUD-90-chair-85-compliance-issues-triage.md
+RECORD	reports/production-verification/council/auditor/W8-AUD-91-standby-per-85.md
+RECORD	reports/production-verification/council/auditor/W8-AUD-URGENT-88-TO-CHAIR.md
+RECORD	reports/production-verification/council/auditor/W8-AUD-URGENT-90-TO-CHAIR.md
+RECORD	reports/production-verification/council/auditor/W8-AUD-URGENT-91-STANDBY-TO-CHAIR.md
+RECORD	reports/production-verification/council/auditor/W8-AUD-URGENT-CHAIR-COCKPIT-87.md
+RECORD	reports/production-verification/council/auditor/W8-AUD-URGENT-UNIFY-REPLIT-TO-CHAIR.md
+RECORD	reports/production-verification/council/auditor/W9-AUD-URGENT-90-TO-CHAIR.md
+RECORD	reports/production-verification/council/reliability/W7-REL-00-main-reverify.md
+RECORD	reports/production-verification/council/reliability/W7-REL-CHANNEL-TO-CHAIR.md
+RECORD	reports/production-verification/council/reliability/W7-REL-URGENT-TO-CHAIR.md
+RECORD	reports/production-verification/council/reliability/W8-REL-00-PRECISION-STAMP.md
+RECORD	reports/production-verification/council/reliability/W8-REL-00-STRICT-ACK.md
+RECORD	reports/production-verification/council/reliability/W8-REL-00-tranche-a-reverify.md
+RECORD	reports/production-verification/council/reliability/W8-REL-00-tranche-b-reverify.md
+RECORD	reports/production-verification/council/reliability/W8-REL-00-tranche-c-reack.md
+RECORD	reports/production-verification/council/reliability/W8-REL-00-tranche-d-reack.md
+RECORD	reports/production-verification/council/reliability/W8-REL-CHAIR-FULL-AUDIT.md
+RECORD	reports/production-verification/council/reliability/W8-REL-CHAIR-REVIEW.md
+RECORD	reports/production-verification/council/reliability/W8-REL-CHANNEL-TO-CHAIR.md
+RECORD	reports/production-verification/council/reliability/W8-REL-INCOMPLETE-CLOSEOUT-TO-CHAIR.md
+RECORD	reports/production-verification/council/reliability/W8-REL-PING-CHAIR-AGAIN.md
+RECORD	reports/production-verification/council/reliability/W8-REL-URGENT-TO-CHAIR.md
+RECORD	reports/production-verification/council/reliability/W9-REL-00-SEC-DEP-VERIFY.md
+RECORD	reports/production-verification/council/reliability/W9-REL-CHANNEL-TO-DIRECTOR.md
+RECORD	reports/production-verification/council/support/W7-SUP-40-ten-section-sot-index.md
+RECORD	reports/production-verification/council/support/W8-SUP-50-world-queue-board.md
+RECORD	reports/production-verification/council/support/W8-SUP-51-complete-closeout-for-chair.md
+RECORD	reports/production-verification/council/support/W8-SUP-52-dw801-stay-parity-adjudication.md
+RECORD	reports/production-verification/council/support/W8-SUP-53-maps-tools-inventory.md
+RECORD	reports/production-verification/council/support/W8-SUP-54-tranche-d-peer.md
+RECORD	reports/production-verification/council/support/W8-SUP-55-chair-plans-review.md
+RECORD	reports/production-verification/council/support/W8-SUP-56-ack-strict-orders-85.md
+RECORD	reports/production-verification/council/support/W8-SUP-57-wave9-team-ack.md
+RECORD	reports/production-verification/council/support/W8-SUP-58-director-plans-review.md
+RECORD	reports/production-verification/council/support/W8-SUP-59-all-director-plans-atlas.md
+RECORD	reports/production-verification/council/support/W8-SUP-CHANNEL-TO-CHAIR.md
+OTHER	.github/workflows/sync-aws-virgen.yml
+OTHER	.github/workflows/sync-bancooom.yml
+
+REPO aws-virgen
+TOTAL_DISTINCT_COMMITS=248
+TOTAL_REMOTE_BRANCHES=1
+LATEST_COMMIT_DATE=2026-07-10T18:55:00+03:00
+MISSING_PATH_COUNT=35
+CODE_COUNT=6
+RECORD_COUNT=0
+OTHER_COUNT=29
+MISSING_PATHS
+CODE	artifacts/api-server/dist/index.mjs
+CODE	artifacts/api-server/dist/pino-file.mjs
+CODE	artifacts/api-server/dist/pino-pretty.mjs
+CODE	artifacts/api-server/dist/pino-roll.mjs
+CODE	artifacts/api-server/dist/pino-worker.mjs
+CODE	artifacts/api-server/dist/thread-stream-worker.mjs
+OTHER	.github/workflows/sync-aws-virgen.yml
+OTHER	artifacts/admin-os/dist/public/assets/index-BJ02AfcK.css
+OTHER	artifacts/admin-os/dist/public/assets/index-IOzTbwe6.js
+OTHER	artifacts/admin-os/dist/public/banco-logo.png
+OTHER	artifacts/admin-os/dist/public/favicon.svg
+OTHER	artifacts/admin-os/dist/public/index.html
+OTHER	artifacts/admin-os/dist/public/opengraph.jpg
+OTHER	artifacts/admin-os/dist/public/robots.txt
+OTHER	artifacts/api-server/dist/index.mjs.map
+OTHER	artifacts/api-server/dist/pino-file.mjs.map
+OTHER	artifacts/api-server/dist/pino-pretty.mjs.map
+OTHER	artifacts/api-server/dist/pino-roll.mjs.map
+OTHER	artifacts/api-server/dist/pino-worker.mjs.map
+OTHER	artifacts/api-server/dist/thread-stream-worker.mjs.map
+OTHER	artifacts/dealer-os/dist/public/assets/index-Cza1csso.js
+OTHER	artifacts/dealer-os/dist/public/assets/index-CzwEMRL1.css
+OTHER	artifacts/dealer-os/dist/public/banco-logo.png
+OTHER	artifacts/dealer-os/dist/public/favicon.svg
+OTHER	artifacts/dealer-os/dist/public/index.html
+OTHER	artifacts/dealer-os/dist/public/logo.svg
+OTHER	artifacts/dealer-os/dist/public/opengraph.jpg
+OTHER	artifacts/dealer-os/dist/public/robots.txt
+OTHER	artifacts/landing/dist/public/assets/banco-logo-BQvTbe6u.png
+OTHER	artifacts/landing/dist/public/assets/index-B5dAhnyf.js
+OTHER	artifacts/landing/dist/public/assets/index-CNpbOdeJ.css
+OTHER	artifacts/landing/dist/public/favicon.svg
+OTHER	artifacts/landing/dist/public/index.html
+OTHER	artifacts/landing/dist/public/opengraph.jpg
+OTHER	artifacts/landing/dist/public/robots.txt
+
+Q14 — Is any CODE file missing from bancoboom-v-next-?
+YES
+aws-virgen	artifacts/api-server/dist/index.mjs
+aws-virgen	artifacts/api-server/dist/pino-file.mjs
+aws-virgen	artifacts/api-server/dist/pino-pretty.mjs
+aws-virgen	artifacts/api-server/dist/pino-roll.mjs
+aws-virgen	artifacts/api-server/dist/pino-worker.mjs
+aws-virgen	artifacts/api-server/dist/thread-stream-worker.mjs
+
+Q15 — for each missing CODE file, does identical CONTENT exist under a different path anywhere in bancoboom-v-next- refs?
+NO	aws-virgen	artifacts/api-server/dist/index.mjs	LEGACY_VERSIONS=1
+NO	aws-virgen	artifacts/api-server/dist/pino-file.mjs	LEGACY_VERSIONS=1
+NO	aws-virgen	artifacts/api-server/dist/pino-pretty.mjs	LEGACY_VERSIONS=1
+NO	aws-virgen	artifacts/api-server/dist/pino-roll.mjs	LEGACY_VERSIONS=1
+NO	aws-virgen	artifacts/api-server/dist/pino-worker.mjs	LEGACY_VERSIONS=1
+NO	aws-virgen	artifacts/api-server/dist/thread-stream-worker.mjs	LEGACY_VERSIONS=1
+
+FINDING_ONLY_NO_REPAIR=The only missing CODE paths are legacy compiled dist/*.mjs artifacts from aws-virgen; this inventory does not authorize copying or restoring them.
