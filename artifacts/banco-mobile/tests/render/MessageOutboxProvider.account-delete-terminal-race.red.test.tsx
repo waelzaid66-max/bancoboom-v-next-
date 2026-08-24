@@ -107,7 +107,7 @@ describe("MessageOutboxProvider terminal account-deletion race", () => {
     });
   });
 
-  it("RED: once terminal purge starts, a concurrent enqueue cannot recreate deleted-account durable state", async () => {
+  it("RED: once terminal purge starts, a concurrent enqueue is rejected and cannot recreate durable state", async () => {
     render(<Root />);
     await waitFor(() => expect(outbox.hydrated).toBe(true));
 
@@ -122,21 +122,18 @@ describe("MessageOutboxProvider terminal account-deletion race", () => {
 
     await waitFor(() => expect(removeItem).toHaveBeenCalledTimes(1));
 
-    let enqueuePromise!: Promise<string>;
-    act(() => {
-      enqueuePromise = outbox.enqueueText({
-        conversationId: "conversation-delete-race",
-        clientMessageId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-        body: "must never survive confirmed account deletion",
-      });
+    const enqueuePromise = outbox.enqueueText({
+      conversationId: "conversation-delete-race",
+      clientMessageId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      body: "must never survive confirmed account deletion",
     });
 
     await act(async () => {
       removeGate.resolve(undefined);
       await purgePromise;
-      await enqueuePromise;
     });
 
+    await expect(enqueuePromise).rejects.toThrow();
     expect(mockSendMessage).not.toHaveBeenCalled();
     expect(outbox.hydrated).toBe(false);
     expect(outbox.entries).toHaveLength(0);
