@@ -5,6 +5,12 @@
   "packageManager": "pnpm@11.9.0",
   "scripts": {
     "preinstall": "node scripts/preinstall-enforce-pnpm.mjs",
+    "setup": "node scripts/setup-local-env.mjs && pnpm install",
+    "dev": "pnpm --filter @workspace/api-server --filter @workspace/banco-web --filter @workspace/banco-website --parallel run dev",
+    "dev:mobile": "pnpm --filter @workspace/banco-mobile run dev",
+    "start": "docker compose -f docker-compose.prod.yml up -d --build",
+    "stop": "docker compose -f docker-compose.prod.yml down",
+    "logs": "docker compose -f docker-compose.prod.yml logs -f",
     "prebuild": "pnpm run workspace:verify",
     "build": "pnpm run typecheck && pnpm -r --workspace-concurrency=1 --if-present run build",
     "typecheck:libs": "tsc --build",
