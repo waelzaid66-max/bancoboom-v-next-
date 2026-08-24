@@ -1,0 +1,46 @@
+BANCO-RECON-01 — DELIVERABLE 1 — Replit runtime
+
+COMMAND:
+git status --porcelain
+NOT RUN: Replit shell is not exposed by the available connector. The Replit Agent was queried twice for this exact read-only collection and returned: "Replit Agent is still busy with an earlier request for this app. This question was NOT submitted and no work was queued, to avoid interrupting that work."
+
+COMMAND:
+git branch --show-current
+NOT RUN: same reason as above.
+
+COMMAND:
+git log --oneline -5
+NOT RUN: same reason as above.
+
+COMMAND:
+git rev-parse HEAD
+NOT RUN: same reason as above.
+
+COMMAND:
+git remote -v
+NOT RUN: same reason as above.
+
+COMMAND:
+cat .replit
+NOT RUN: same reason as above.
+
+COMMAND:
+node -v && pnpm -v
+NOT RUN: same reason as above.
+
+COMMAND:
+env | grep -oE '^(REPLIT_[A-Z_]*|REPL_ID|EXPO_[A-Z_]*|PORT|NODE_ENV|DATABASE_URL)=' | sort
+NOT RUN: same reason as above. No environment value was read or exposed.
+
+COMMAND:
+ls -la artifacts/banco-mobile/static-build/web/ 2>&1 | head -5
+NOT RUN: same reason as above.
+
+Q1 Is the Replit workspace tree dirty (uncommitted changes)?
+NOT RUN: current workspace shell output unavailable.
+
+Q2 Which branch is checked out?
+NOT RUN: current workspace shell output unavailable.
+
+Q3 Does `git log` on Replit match origin, or has the workspace diverged?
+NOT RUN: current workspace shell output unavailable.

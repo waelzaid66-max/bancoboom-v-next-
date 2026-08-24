@@ -1,0 +1,45 @@
+BANCO-RECON-01 — DELIVERABLE 2 — CI truth
+
+COMMAND:
+gh run list --limit 20 --json databaseId,name,headBranch,status,conclusion,createdAt
+NOT RUN: gh CLI is not exposed in the current connector environment.
+
+FALLBACK COMMAND ACTUALLY RUN:
+GitHub REST GET https://api.github.com/repos/waelzaid66-max/bancoboom-v-next-/actions/runs?per_page=20
+RAW NEWEST FAILED RUN FACTS FROM RESPONSE:
+id=32783759814
+name=CI
+head_branch=main
+head_sha=43727917143b68e0c393bdcb4a7f78563df963ed
+status=completed
+conclusion=failure
+created_at=2026-08-24T22:15:17Z
+html_url=https://github.com/waelzaid66-max/bancoboom-v-next-/actions/runs/32783759814
+
+COMMAND:
+gh run view 32783759814 --log-failed | tail -60
+NOT RUN: gh CLI is not exposed in the current connector environment.
+
+FALLBACK COMMAND ACTUALLY RUN:
+GitHub workflow jobs query for run 32783759814
+RAW JOB RESULT:
+97611207865 | Mobile regression (static) | completed | failure | logs_url=null | steps=null
+97611207988 | Mobile bundle (Expo web export) | completed | failure | logs_url=null | steps=null
+97611208147 | ESLint (scripts) | completed | failure | logs_url=null | steps=null
+97611208149 | Typecheck & build | completed | failure | logs_url=null | steps=null
+97611208154 | Production gates (static) | completed | failure | logs_url=null | steps=null
+97611208192 | API tests (Postgres) | completed | failure | logs_url=null | steps=null
+97611208209 | GCP config gate | completed | failure | logs_url=null | steps=null
+
+FALLBACK COMMAND ACTUALLY RUN:
+GitHub job-log download for job 97611208149
+RAW ERROR:
+GitHub API error 404: ﻿<?xml version="1.0" encoding="utf-8"?><Error><Code>BlobNotFound</Code><Message>The specified blob does not exist.
+RequestId:d6cdc3c8-f01e-00a3-3b18-34ad78000000
+Time:2026-08-24T22:30:06.8837796Z</Message></Error>
+
+Q4 What is the exact failure reason of the newest failed run? Quote the line.
+NOT RUN / NOT AVAILABLE: no executed job steps or failed-job log text was returned. The only exact retrievable failure line is the log-download error above: "<Code>BlobNotFound</Code><Message>The specified blob does not exist."
+
+Q5 Is it a billing lock, a test failure, or something else?
+UNDETERMINED FROM EXECUTABLE EVIDENCE. The run is marked failure, but steps=null and failed-job logs are unavailable; neither billing lock nor test failure is proven by the facts retrieved.

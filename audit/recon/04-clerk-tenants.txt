@@ -1,0 +1,16 @@
+BANCO-RECON-01 — DELIVERABLE 4 — Clerk tenant facts
+
+COMMAND TEMPLATE REQUESTED:
+curl -s "https://<frontend-api-host>/v1/environment?__clerk_api_version=2024-10-01&_clerk_js_version=5.0.0" | python3 -c "import sys,json;d=json.load(sys.stdin);print(json.dumps({'social':{k:v.get('enabled') for k,v in d['user_settings']['social'].items()},'ident':d['auth_config']['identification_strategies']},indent=1))"
+
+TEST TENANT:
+NOT RUN: current Replit preview publishable-key/tenant host could not be read because the Replit Agent was busy and no Replit shell/env connector is exposed. No key was read or printed.
+
+LIVE TENANT:
+NOT RUN: no verified live tenant host was available from an executed source in this task. No guess was made.
+
+Q8 Which tenant host does the Replit preview use? (decode the pk_ prefix, host only)
+NOT RUN: current preview key/host unavailable from executed evidence.
+
+Q9 Which social providers are enabled on it? On the live tenant?
+NOT RUN: no Clerk environment request executed.

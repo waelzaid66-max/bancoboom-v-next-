@@ -1,0 +1,32 @@
+BANCO-RECON-01 — DELIVERABLE 3 — live outbox facts
+
+TARGET:
+DATABASE THE PREVIEW ACTUALLY USES
+
+COMMAND:
+SELECT count(*) FILTER (WHERE completed_at IS NULL) AS pending,
+       count(*) FILTER (WHERE completed_at IS NOT NULL) AS done,
+       max(attempt_count) AS max_attempts,
+       count(*) FILTER (WHERE attempt_count > 12) AS over_12
+FROM message_notification_outbox;
+NOT RUN: the current tool environment has no direct shell/database connector for the Replit preview database, and the Replit Agent was busy and did not accept the read-only request.
+
+COMMAND:
+SELECT count(*) FILTER (WHERE completed_at IS NULL) AS pending,
+       count(*) FILTER (WHERE completed_at IS NOT NULL) AS done,
+       max(attempt_count) AS max_attempts,
+       count(*) FILTER (WHERE attempt_count > 12) AS over_12
+FROM billing_receipt_outbox;
+NOT RUN: same reason as above.
+
+COMMAND:
+SELECT attempt_count, left(last_error, 120), count(*)
+FROM message_notification_outbox
+WHERE completed_at IS NULL GROUP BY 1,2 ORDER BY 1 DESC LIMIT 20;
+NOT RUN: same reason as above.
+
+Q6 What is the highest attempt_count in each outbox?
+NOT RUN: no live preview DB query executed.
+
+Q7 Are there rows that will never complete? How many, and what is the error?
+NOT RUN: no live preview DB query executed.
