@@ -7,10 +7,19 @@ import { SearchResultsMap } from "@/components/search/SearchResultsMap.web";
 import type { SearchCriteria } from "@/lib/searchParams";
 
 const mockGetMapClusters = jest.fn();
-const mockBuildMapHtml = jest.fn(() => "<html>map</html>");
+const mockBuildMapHtml = jest.fn((...args: unknown[]) => {
+  const center = args[2] as { lat?: number; lng?: number } | undefined;
+  return `<html>map:${center?.lat ?? "unknown"}:${center?.lng ?? "unknown"}</html>`;
+});
 const mockSetClusters = jest.fn();
 const mockAlert = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
-const mockIframeWindow = { BANCO_MAP: { setClusters: mockSetClusters } };
+
+type MockIframeWindow = {
+  BANCO_MAP: { setClusters: typeof mockSetClusters };
+  epoch: number;
+};
+
+let mockIframeWindows: MockIframeWindow[] = [];
 let mockMessageHandler: ((event: MessageEvent) => void) | null = null;
 
 jest.mock("@workspace/api-client-react", () => ({
@@ -86,7 +95,10 @@ jest.mock("@/hooks/useColors", () => ({
 }));
 
 jest.mock("@/lib/searchTaxonomy", () => ({
-  marketCountryMapCenter: () => ({ lat: 30, lng: 31, zoom: 10 }),
+  marketCountryMapCenter: (country: string) =>
+    country === "SA"
+      ? { lat: 24.7136, lng: 46.6753, zoom: 10 }
+      : { lat: 30, lng: 31, zoom: 10 },
 }));
 
 jest.mock("react-native-safe-area-context", () => ({
@@ -137,11 +149,19 @@ const CRITERIA = {
   listingMode: "all",
 } as SearchCriteria;
 
-function mapElement(items: FeedItem[] = [MAPPED_ITEM]) {
+const SAME_MARKER_NEXT_CRITERIA = {
+  ...CRITERIA,
+  marketCountry: "SA",
+} as SearchCriteria;
+
+function mapElement(
+  items: FeedItem[] = [MAPPED_ITEM],
+  criteria: SearchCriteria = CRITERIA,
+) {
   return (
     <SearchResultsMap
       items={items}
-      criteria={CRITERIA}
+      criteria={criteria}
       onOpenListing={jest.fn()}
       onOpenListingId={jest.fn()}
       isSaved={() => false}
@@ -149,18 +169,33 @@ function mapElement(items: FeedItem[] = [MAPPED_ITEM]) {
   );
 }
 
+function createIframeNode() {
+  const contentWindow: MockIframeWindow = {
+    BANCO_MAP: { setClusters: mockSetClusters },
+    epoch: mockIframeWindows.length + 1,
+  };
+  mockIframeWindows.push(contentWindow);
+  return { contentWindow };
+}
+
+function currentIframeWindow(): MockIframeWindow {
+  const current = mockIframeWindows[mockIframeWindows.length - 1];
+  expect(current).toBeDefined();
+  return current;
+}
+
 function mountMap(items: FeedItem[] = [MAPPED_ITEM]) {
   return render(mapElement(items), {
     createNodeMock: (element) =>
-      element.type === "iframe" ? { contentWindow: mockIframeWindow } : null,
+      element.type === "iframe" ? createIframeNode() : null,
   });
 }
 
-function dispatchMapMessage(payload: object, source: unknown = mockIframeWindow) {
+function dispatchMapMessage(payload: object, source?: unknown) {
   act(() => {
     mockMessageHandler?.({
       data: JSON.stringify(payload),
-      source,
+      source: source ?? currentIframeWindow(),
     } as unknown as MessageEvent);
   });
 }
@@ -171,6 +206,7 @@ describe("SearchResultsMap web bootstrap fail-close", () => {
     mockBuildMapHtml.mockClear();
     mockSetClusters.mockReset();
     mockAlert.mockClear();
+    mockIframeWindows = [];
     mockMessageHandler = null;
 
     Object.defineProperty(globalThis, "window", {
@@ -244,6 +280,33 @@ describe("SearchResultsMap web bootstrap fail-close", () => {
     expect(view.queryByTestId("mock-map-overlay")).toBeNull();
 
     dispatchMapMessage({ type: "ready" });
+    expect(view.getByTestId("mock-map-overlay")).toBeTruthy();
+  });
+
+  it("resets same-marker srcDoc source epoch and rejects the previous window", () => {
+    const view = mountMap();
+    dispatchMapMessage({ type: "ready" });
+    expect(view.getByTestId("mock-map-overlay")).toBeTruthy();
+
+    const previousWindow = currentIframeWindow();
+    view.rerender(mapElement([MAPPED_ITEM], SAME_MARKER_NEXT_CRITERIA));
+
+    expect(mockBuildMapHtml).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ lat: 24.7136, lng: 46.6753 }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(view.queryByTestId("mock-map-overlay")).toBeNull();
+
+    dispatchMapMessage({ type: "ready" }, previousWindow);
+    expect(view.queryByTestId("mock-map-overlay")).toBeNull();
+
+    const nextWindow = currentIframeWindow();
+    expect(nextWindow).not.toBe(previousWindow);
+    dispatchMapMessage({ type: "ready" }, nextWindow);
     expect(view.getByTestId("mock-map-overlay")).toBeTruthy();
   });
 
