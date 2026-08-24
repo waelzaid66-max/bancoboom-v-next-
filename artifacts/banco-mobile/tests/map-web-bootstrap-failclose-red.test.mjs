@@ -11,33 +11,86 @@ function countLiteral(value, needle) {
   return value.split(needle).length - 1;
 }
 
-test("web map host explicitly consumes bootstrap error messages", () => {
+function bodyBetween(startNeedle, endNeedle) {
+  const start = source.indexOf(startNeedle);
+  assert.notEqual(start, -1, `missing ${startNeedle}`);
+  const end = source.indexOf(endNeedle, start + startNeedle.length);
+  assert.notEqual(end, -1, `missing ${endNeedle} after ${startNeedle}`);
+  return source.slice(start, end);
+}
+
+test("web map owns an explicit loading-ready-failed bootstrap state", () => {
+  assert.match(source, /["']loading["']/);
+  assert.match(source, /["']ready["']/);
+  assert.match(source, /["']failed["']/);
   assert.match(
     source,
-    /msg\.type\s*===\s*["']error["']/,
-    "web SearchResultsMap must explicitly handle the map bootstrap error bridge message",
+    /useState(?:<[^>]+>)?\s*\(\s*["']loading["']\s*\)/,
+    "bootstrap authority must begin in loading state",
   );
 });
 
-test("existing localized map-unavailable authority remains available", () => {
-  assert.match(source, /search\.mapUnavailableTitle/);
-  assert.match(source, /search\.mapUnavailableBody/);
+test("ready is the only success bridge and bootstrap error becomes terminal failed", () => {
+  const readyBranch = bodyBetween('msg.type === "ready"', 'msg.type === "error"');
+  assert.match(
+    readyBranch,
+    /\(\s*["']ready["']\s*\)/,
+    "ready bridge must establish usable map state",
+  );
+
+  const errorBranch = bodyBetween('msg.type === "error"', 'msg.type === "tile_error"');
+  assert.match(
+    errorBranch,
+    /\(\s*["']failed["']\s*\)/,
+    "bootstrap error must establish terminal failed state",
+  );
 });
 
-test("existing web bridge capabilities remain present while bootstrap parity is repaired", () => {
-  for (const messageType of ["tile_error", "viewport", "area", "locate_error"]) {
+test("tile failure is degraded-ready and cannot revive a bootstrap-failed instance", () => {
+  const tileBranch = bodyBetween('msg.type === "tile_error"', 'msg.type === "viewport"');
+  assert.match(
+    tileBranch,
+    /failed[\s\S]{0,160}\?[\s\S]{0,80}failed[\s\S]{0,160}ready|failed[\s\S]{0,240}ready/,
+    "tile_error must preserve failed bootstrap state while allowing degraded ready otherwise",
+  );
+});
+
+test("result-set rebuild resets bootstrap authority to loading", () => {
+  assert.match(
+    source,
+    /useEffect\s*\(\s*\(\)\s*=>\s*\{[\s\S]{0,500}\(\s*["']loading["']\s*\)[\s\S]{0,500}\}\s*,\s*\[\s*sig\s*\]\s*\)/,
+    "a sig-keyed iframe/result-set rebuild must reset bootstrap state before a later ready",
+  );
+});
+
+test("failed state renders localized unavailable UI and normal chrome is ready-gated", () => {
+  assert.match(source, /search\.mapUnavailableTitle/);
+  assert.match(source, /search\.mapUnavailableBody/);
+  assert.match(
+    source,
+    /===\s*["']failed["'][\s\S]{0,1600}search\.mapUnavailableTitle[\s\S]{0,900}search\.mapUnavailableBody/,
+    "failed state must render the localized unavailable surface",
+  );
+  assert.match(
+    source,
+    /===\s*["']ready["'][\s\S]{0,1200}<MapOverlayChrome\b/,
+    "MapOverlayChrome must be rendered only from usable ready state",
+  );
+});
+
+test("existing web bridge and iframe safety capabilities remain present", () => {
+  for (const messageType of ["viewport", "area", "draw_mode", "select", "locate_error"]) {
     assert.ok(
       countLiteral(source, `msg.type === "${messageType}"`) >= 1,
       `${messageType} bridge handling must remain present`,
     );
   }
 
-  assert.match(source, /<MapOverlayChrome\b/);
+  assert.match(
+    source,
+    /event\.source\s*!==\s*iframeRef\.current\?\.contentWindow/,
+    "message bridge must remain fenced to the current iframe source",
+  );
   assert.match(source, /sandbox="allow-scripts allow-same-origin"/);
   assert.match(source, /allow="geolocation"/);
-});
-
-test("web map keeps draw/select message handling in the same bridge", () => {
-  assert.match(source, /msg\.type\s*===\s*["']draw_mode["']/);
-  assert.match(source, /msg\.type\s*===\s*["']select["']/);
 });
