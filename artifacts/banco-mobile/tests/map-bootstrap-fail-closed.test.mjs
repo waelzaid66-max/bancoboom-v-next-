@@ -21,10 +21,12 @@ test("native map bootstrap has explicit loading ready failed states", () => {
   assert.match(source, /setBootstrapState\("loading"\)/);
 });
 
-test("only ready bridge message marks bootstrap successful", () => {
+test("ready bridge message cannot revive a failed WebView instance", () => {
   const readyBranch = branchBetween('if (msg.type === "ready")', '} else if (msg.type === "error")');
-  assert.match(readyBranch, /setBootstrapState\("ready"\)/);
-  assert.doesNotMatch(readyBranch, /failed/);
+  assert.match(
+    readyBranch,
+    /setBootstrapState\(\(current\) => \(current === "failed" \? current : "ready"\)\)/,
+  );
 });
 
 test("bootstrap error fails closed and surfaces bounded unavailable UI", () => {
@@ -39,11 +41,12 @@ test("bootstrap error fails closed and surfaces bounded unavailable UI", () => {
   assert.match(source, /bootstrapState === "ready"[\s\S]*?<MapOverlayChrome/);
 });
 
-test("tile failure is degradation and cannot revive failed bootstrap", () => {
+test("tile failure is degradation only and cannot establish bootstrap readiness", () => {
   const tileBranch = branchBetween('else if (msg.type === "tile_error")', '} else if (msg.type === "locate_error")');
-  assert.match(
+  assert.doesNotMatch(
     tileBranch,
-    /setBootstrapState\(\(current\) => \(current === "failed" \? current : "ready"\)\)/,
+    /setBootstrapState\([^\n]*"ready"/,
+    "tile_error must not transition loading or failed bootstrap state to ready",
   );
   assert.match(tileBranch, /tileFailureShownRef/);
   assert.match(tileBranch, /Alert\.alert/);
