@@ -1,31 +1,58 @@
 BANCO-RECON-01 — DELIVERABLE 5
 
-COMMAND REQUESTED:
-git log --author="<your identity>" --since=2026-08-01 --format='%h|%ad|%s' --date=short
+IDENTITY RESOLUTION COMMAND:
+for s in 501bd4e720a4d3d86f484a0750845bdb7100169f c123e17b631abe36b6c4d283b6cca31bf2e91751 7bb6366f5d759d2abdac9d980e36e6715f9d4924; do echo "__SHA__=$s"; git cat-file -t "$s" 2>&1; git show -s --format='%H|%an|%ae|%ad|%s' --date=short "$s" 2>&1; done
+RAW OUTPUT:
+SHA=501bd4e720a4d3d86f484a0750845bdb7100169f
+commit
+501bd4e720a4d3d86f484a0750845bdb7100169f|Banco Group|waelzaid66@gmail.com|2026-08-22|test(api): lock cleanup retry and shell-disabled DB admin commands
+SHA=c123e17b631abe36b6c4d283b6cca31bf2e91751
+commit
+c123e17b631abe36b6c4d283b6cca31bf2e91751|Banco Group|waelzaid66@gmail.com|2026-08-22|fix(test): harden DB cleanup and direct command execution
+SHA=7bb6366f5d759d2abdac9d980e36e6715f9d4924
+commit
+7bb6366f5d759d2abdac9d980e36e6715f9d4924|Banco Group|waelzaid66@gmail.com|2026-08-22|fix(mobile): keep deleted-account outbox terminal
 
-IDENTITY DISCOVERY REQUESTED:
-git config user.name
-git config user.email
+COMMAND:
+git log --author="Banco Group" --since=2026-08-01 --format='%h|%ad|%s' --date=short
+RAW OUTPUT:
+4f2c81c|2026-08-21|docs(audit): record lint scope and remaining coverage
+875406e|2026-08-21|chore(lint): remove audited dead bindings
+f1188fa|2026-08-21|docs(audit): record dealer sort verification boundary
+8396b39|2026-08-21|fix(api): honor dealer listing sort cursors
+08222f0|2026-08-21|fix(lint): allow declared Express augmentation
+3951c72|2026-08-21|fix(ci): validate canonical assembly pushes
+8051943|2026-08-21|fix(i18n): sync authenticated language preference
+5f44c86|2026-08-21|fix(maps): surface OSM tile failures
+1ccdbac|2026-08-21|fix(workspace): lock authoritative origin to BANCO BOOM NEXT
+64af93f|2026-08-21|docs(recovery): reconcile prior manager plans at current canonical
+26b1fc0|2026-08-21|fix(maintenance): restore safe clone-origin handling and OSM attribution
 
-RAW RESULT STATUS:
-NOT RUN: the Replit Agent reported that the local Git user.name is empty and therefore the requested author-filter command expanded into an unbounded/all-commits result. The follow-up response did not return the raw `git config user.name; git config user.email` stdout or a bounded commit list before the Agent became busy. No identity was substituted or guessed.
+COMMAND PER SHA:
+git show --name-only --format='' <sha> | sed '/^$/d'; git merge-base --is-ancestor <sha> origin/canonical/vnext-assembly; printf '__CANONICAL_EXIT__=%s\n' "$?"
+RAW OUTPUT SUMMARY PRESERVING FILE NAMES AND EXIT CODES:
+4f2c81c|files=audit/recovery/CANONICAL-CAPABILITY-LEDGER.md,audit/recovery/CODEX-RECOVERY-BACKLOG.md,audit/recovery/RECOVERY-REGRESSION-REGISTER.md,audit/recovery/VNEXT-BATCH-LEDGER.md,audit/recovery/VNX-LINT-02-AUDITED-DEAD-BINDINGS-2026-08-21.md|CANONICAL_EXIT=0
+875406e|files=artifacts/api-server/src/lib/slidingWindow.ts,artifacts/api-server/src/lib/uploadClaims.test.ts,artifacts/api-server/src/lib/uploadClaims.ts,artifacts/api-server/src/seed-verify.ts,artifacts/api-server/src/seed.ts,artifacts/api-server/src/services/AdminService.ts,artifacts/api-server/src/services/FeedService.ts,artifacts/api-server/src/services/FinancingService.ts,artifacts/api-server/src/services/ImportOrderService.ts,artifacts/api-server/src/services/LeadService.ts,artifacts/api-server/src/services/MarketInsightsService.test.ts,artifacts/api-server/src/services/NormalizationService.db.test.ts,artifacts/api-server/src/services/ProfileService.ts,lib/db/src/schema/index.ts|CANONICAL_EXIT=0
+f1188fa|files=audit/recovery/CANONICAL-CAPABILITY-LEDGER.md,audit/recovery/CODEX-RECOVERY-BACKLOG.md,audit/recovery/RECOVERY-REGRESSION-REGISTER.md,audit/recovery/VNEXT-BATCH-LEDGER.md,audit/recovery/VNX-DEALER-01-SORT-CURSOR-INTEGRITY-2026-08-21.md|CANONICAL_EXIT=0
+8396b39|files=artifacts/api-server/src/controllers/dealerController.ts,artifacts/api-server/src/services/ListingService.journey.test.ts,artifacts/api-server/src/services/ListingService.ts,artifacts/api-server/src/validators/schemas.ts|CANONICAL_EXIT=0
+08222f0|files=audit/recovery/VNX-LINT-01-EXPRESS-DECLARATIONS-2026-08-21.md,eslint.config.mjs|CANONICAL_EXIT=0
+3951c72|files=.github/workflows/ci-website-docker.yml,.github/workflows/ci-website.yml,.github/workflows/ci.yml,audit/recovery/VNX-CI-01-CANONICAL-ACTIONS-2026-08-21.md,scripts/chain-integrity-gate.mjs|CANONICAL_EXIT=0
+8051943|files=artifacts/api-server/src/validators/languagePreference.contract.test.ts,artifacts/banco-mobile/app/_layout.tsx,artifacts/banco-mobile/context/LanguageContext.tsx,artifacts/banco-mobile/context/LanguagePreferenceSync.tsx,artifacts/banco-mobile/package.json,artifacts/banco-mobile/tests/language-sync-guard.test.mjs,artifacts/banco-mobile/tests/render-coverage-guard.test.mjs,artifacts/banco-mobile/tests/render/LanguagePreferenceSync.render.test.tsx,audit/recovery/VNX-LANG-01-PREFERENCE-SYNC-2026-08-21.md,lib/api-client-react/src/generated/api.schemas.ts,lib/api-client-react/src/generated/api.ts,lib/api-spec/openapi.yaml,lib/api-zod/src/generated/api.ts|CANONICAL_EXIT=0
+5f44c86|files=artifacts/banco-mobile/components/search/SearchResultsMap.tsx,artifacts/banco-mobile/components/search/SearchResultsMap.web.tsx,artifacts/banco-mobile/components/search/mapHtml.ts,artifacts/banco-mobile/constants/i18n.ts,artifacts/banco-mobile/tests/i18n-usage.test.mjs,artifacts/banco-mobile/tests/map-chrome-guard.test.mjs,artifacts/banco-mobile/tests/render-coverage-guard.test.mjs,artifacts/banco-mobile/tests/render/SearchResultsMap.web.render.test.tsx,audit/recovery/VNX-MAPS-01-TILE-FAILURE-2026-08-21.md|CANONICAL_EXIT=0
+1ccdbac|files=scripts/workspace-verify.mjs|CANONICAL_EXIT=0
+64af93f|files=audit/recovery/CURRENT-MANAGER-RECONCILIATION-2026-08-21.md|CANONICAL_EXIT=0
+26b1fc0|files=artifacts/banco-mobile/components/search/mapHtml.ts,scripts/workspace-verify.mjs|CANONICAL_EXIT=0
 
-PER-COMMIT FILE LIST / REACHABILITY:
-NOT RUN: no valid bounded commit list for "your identity" was obtained, so no per-SHA `git show --name-only` / `git merge-base --is-ancestor` claims are recorded.
+COMMAND: git status --porcelain
+RAW OUTPUT:
 
 Q10 Which of your commits are NOT reachable from canonical?
-NOT RUN: author identity was not established by raw command output; no commit set can be attributed safely.
+None among the commits returned by the exact git log command above; every merge-base ancestry check returned exit 0.
+COMMAND BASIS: git merge-base --is-ancestor <sha> origin/canonical/vnext-assembly for each returned SHA
 
 Q11 Is there any work of yours that exists only in the Replit workspace and in no commit?
-NOT RUN: attribution to "your identity" is not established. Workspace-level fact only: `git status --porcelain` returned empty and `git status --porcelain | wc -l` returned 0, so there are no uncommitted workspace changes at the time of capture.
+No uncommitted workspace changes were observed at capture time.
+COMMAND BASIS: git status --porcelain returned empty
 
-COMMAND BASIS FOR WORKSPACE-LEVEL FACT:
-git status --porcelain
-RAW OUTPUT:
-
-
-git status --porcelain | wc -l
-RAW OUTPUT:
-0
-
-No estimate was used.
+LIMITATION:
+The resolved Git author identity `Banco Group` is shared by repository commits; the exact requested git log command is scoped to the currently checked-out history and is not a unique cross-branch identity for this assistant. No broader attribution was inferred.
