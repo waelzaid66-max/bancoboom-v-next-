@@ -1,214 +1,189 @@
-# BANCO — Deployment Source of Truth (SoT)
+# BANCO — Deployment Source of Truth
 
-**Generated:** 2026-07-30 (restituted) · **Reconciled:** 2026-08-09
-**Authority:** Lead DevOps + Monorepo Architect
-**Rule:** Verified paths only. No invented services.
+**Reconciled:** 2026-08-25  
+**Repository:** `waelzaid66-max/bancoboom-v-next-`  
+**Release branch:** `release/golden-vnext-20260825`
 
-## Locked identity
+This document controls deployment identity. Historical reports and archived
+repositories may explain lineage or provide rollback evidence, but they cannot
+override this file, the current Git tree, or the executable workspace verifier.
 
-| Field | Value |
-|-------|--------|
-| **ONLY deploy SoT repository** | `https://github.com/waelzaid66-max/bancoboomstor` |
-| **Mobile package / bundle** | `com.bancooom.app` |
-| **App scheme** | `bancooom` |
-| **App display name** | `BANCO` |
-| **Coolify compose file** | `docker-compose.coolify.yml` |
-| **Coolify click checklist** | **`COOLIFY_DEPLOY_NOW.md`** (start here) |
-| **OPS go-live checklist** | **`OPS_GO_LIVE_CHECKLIST.md`** (tick boxes after merge) |
-| **Production inventory (harmony)** | **`reports/production-verification/57-PRODUCTION-INVENTORY-HARMONY.md`** |
-| **OpenAPI codegen harmony** | **`reports/production-verification/58-OPENAPI-CODEGEN-HARMONY.md`** |
-| **Mobile full-product audit (no fixes)** | **`reports/production-verification/59-MOBILE-FULL-PRODUCT-AUDIT.md`** |
-| **Live cutover proof** | `pnpm ops:live-cutover` |
-| **Package manager** | `pnpm@11.9.0` |
-| **Node (Docker)** | **24** |
+## 1. Locked identity
 
-> **Pre-consolidation repos (`banco-with-wael`, `bancoo`, `bancoboom`, …) are NOT Coolify SoT.**
-> Do not enter them in Coolify. Do not ship store builds from their package ids.
+| Field | Authority |
+|---|---|
+| Git repository | `waelzaid66-max/bancoboom-v-next-` |
+| Release branch | `release/golden-vnext-20260825` |
+| Coolify compose | `docker-compose.coolify.yml` |
+| Coolify runbook | `COOLIFY_DEPLOY_NOW.md` |
+| Operator checklist | `OPS_GO_LIVE_CHECKLIST.md` |
+| Mobile application | `artifacts/banco-mobile` |
+| Android package | `com.bancooom.app` |
+| iOS bundle identifier | `com.bancooom.app` |
+| Expo scheme | `bancooom` |
+| EAS project | `45f092c8-52f9-4272-880f-48e6b721126f` |
+| Package manager | `pnpm@11.9.0` |
+| Docker/CI Node | 24 |
 
----
+The executable `scripts/workspace-verify.mjs` accepts only the current vNEXT
+repository origin. A release checkout from another repository is invalid even if
+that repository contains an older green build.
 
-## STEP 0 — Recovery context
+## 2. Lineage and rollback
 
-| Item | State |
-|------|--------|
-| Prior mistake | Agent environment was bound to `bancoo`; certification was briefly delivered there |
-| Correct local SoT commit (pre-restitution add-ons) | `442e68a` on `cursor/production-gap-certification-5cf0` |
-| Mobile identity on SoT | **`com.bancooom.app`** (verified) |
-| This document | Reconciled against **`bancoboomstor`** after repository consolidation |
+The current Product line descends from the verified `bancoboomstor` staging
+baseline. That old commit remains useful for comparison and rollback analysis.
+It is not an independent source to merge, cherry-pick, or configure in Coolify.
 
-See also: `reports/production-verification/53-SOT-RECOVERY-AND-MOBILE-RESTITUTION.md`
+Rules:
 
----
+- do not deploy `bancoboomstor`, `banco-with-wael`, `bancoo`, `bancoboom`,
+  `aws-virgen`, or a Replit-local Git history;
+- do not copy complete historical files into the release branch;
+- do not deploy floating `main`;
+- deploy one reviewed commit from the release branch;
+- record that exact commit in Coolify/EAS evidence and rollback notes.
 
-## 1. Repository shape
+## 3. Monorepo applications
 
-### Present
+| Workspace | Production role | Release mechanism |
+|---|---|---|
+| `artifacts/api-server` | REST API, jobs, integration services | Coolify service `api` |
+| `artifacts/banco-website` | Canonical Next consumer/marketing | Coolify service `banco-website` |
+| `artifacts/landing` | Landing page | Built into Nginx service `web` |
+| `artifacts/dealer-os` | Dealer/market OS at `/market/` | Built into Nginx service `web` |
+| `artifacts/admin-os` | Admin OS at `/admin/` | Built into Nginx service `web` |
+| `artifacts/banco-web` | Frozen optional Next twin | Profile `legacy-banco-web`; off by default |
+| `artifacts/banco-mobile` | Expo SDK 54 native Android/iOS app | EAS, never Coolify |
+| `artifacts/mockup-sandbox` | Development/mockup workspace | Never deployed |
 
-- `artifacts/*` — applications
-- `lib/*` — shared libraries
-- `scripts/` — tooling
-- `deploy/coolify/` — Coolify Dockerfiles + nginx + well-known
-- `deploy/aws/`, `deploy/gcp/` — alternate clouds (not Coolify SoT)
-- `docker-compose.coolify.yml` — **Coolify definitive**
-- `docker-compose.prod.yml` — generic prod
-- `docker-compose.test.yml` — test Postgres only
-- Root `Dockerfile` — AWS EB / GCP path (not Coolify compose)
+Shared packages live under `lib/*`; release commands must run from the monorepo
+root so shared TypeScript, generated clients, taxonomy, DB and app consumers are
+verified together.
 
-### Absent
+## 4. Coolify topology
 
-`apps/`, `packages/`, `services/`, `docker/`, `infra/`, `tools/`, `turbo.json`, `nx.json`, Redis service, separate Worker container, separate Cron container.
+The definitive service graph is in `docker-compose.coolify.yml`:
 
-### Artifact packages
+```text
+postgres (healthy)
+  └─ manual migrate profile
+       └─ api (/api/readyz)
+            ├─ banco-website
+            └─ web (Nginx: landing + /market + /admin + /api proxy)
+```
 
-| Folder | Package name | Coolify? |
-|--------|--------------|----------|
-| `artifacts/api-server` | `@workspace/api-server` | Yes → `api` |
-| `artifacts/banco-web` | `@workspace/banco-web` | Yes → `banco-web` |
-| `artifacts/banco-website` | `@workspace/banco-website` | Yes → `banco-website` |
-| `artifacts/landing` | `@workspace/landing` | Yes → inside `web` |
-| `artifacts/dealer-os` | `@workspace/dealer-os` | Yes → inside `web` `/market/` |
-| `artifacts/admin-os` | `@workspace/admin-os` | Yes → inside `web` `/admin/` |
-| `artifacts/banco-mobile` | `@workspace/banco-mobile` | **No** — EAS only |
-| `artifacts/mockup-sandbox` | `@workspace/mockup-sandbox` | **No** |
+`banco-web` is profile-gated and must not be enabled by default.
 
-Cron jobs run **in-process** inside `api` (`artifacts/api-server/src/jobs`).
+The migration service does not auto-run. The operator must keep the sequence:
 
----
+1. build the exact release commit;
+2. start Postgres;
+3. classify the database and create a restore point;
+4. run committed migrations;
+5. start and verify API readiness;
+6. start `banco-website` and `web`;
+7. perform public-origin smoke;
+8. build native mobile from the same exact commit.
 
-## 2. Deployable services (Coolify compose)
+## 5. Database authority
 
-| Service | Folder | Dockerfile | Context | Port | Health | Depends on |
-|---------|--------|------------|---------|------|--------|------------|
-| `postgres` | image `postgres:16` | — | — | 5432 internal | `pg_isready` | — |
-| `migrate` | `lib/db` via API builder | `deploy/coolify/Dockerfile.api` target `builder` | `.` | — | — | postgres healthy |
-| `api` | `artifacts/api-server` | `deploy/coolify/Dockerfile.api` | `.` | 8080 | **`/api/readyz`** | postgres healthy |
-| `banco-web` | `artifacts/banco-web` | `deploy/coolify/Dockerfile.banco-web` | `.` | 3000 | `/api/healthz` | api healthy |
-| `banco-website` | `artifacts/banco-website` | `deploy/coolify/Dockerfile.banco-website` | `.` | 3000 (host 3001) | `/api/healthz` | api healthy |
-| `web` | landing+dealer-os+admin-os | `deploy/coolify/Dockerfile.web` | `.` | 80 | `/nginx-health` | api healthy |
+- Fresh empty database: run every committed migration; never baseline it.
+- Existing pre-journal database: baseline only after independent exact schema
+  equivalence is proven for the adoption boundary.
+- Non-empty, a backup file, or a successful connection is not equivalence proof.
+- Never use schema push or a forced baseline to make an error disappear.
+- Stop deployment when migration, journal, backup, or rollback evidence is
+  incomplete.
 
-Nginx map (`deploy/coolify/nginx.conf`): `/` landing · `/market/` dealer-os · `/admin/` admin-os · `/api/` → api:8080 · `/.well-known/` AASA/assetlinks.
+Full migration policy remains in `lib/db/MIGRATIONS.md`.
 
----
+## 6. Mobile authority
 
-## 3. Coolify deployment order
+`artifacts/banco-mobile/app.json` and `eas.json` define:
 
-1. `postgres`
-2. `migrate` — **manual**: `docker compose --profile migrate run --rm migrate`
-3. `api`
-4. `banco-web` + `banco-website` + `web` (parallel after API healthy)
-5. Mobile — EAS after API is publicly reachable
+- Expo SDK 54 / React Native 0.81.5;
+- Android API 36;
+- local application version authority;
+- production Android AAB;
+- Android/iOS auto-increment;
+- VCS-required builds;
+- dedicated Android notification small icon;
+- no production `EAS_NO_VCS` inheritance;
+- no repo-local store credential path.
 
-The ungated default Compose set starts `api` as soon as Postgres is healthy; it
-does not wait for the manual migration profile. For a first or schema-bearing
-release, build the exact approved SHA without `up`, then use the controlled
-service order below.
+The only repository release entry point is:
 
----
+```bash
+pnpm run mobile:verify
+pnpm run mobile:eas -- production <android|ios|all> <build|build-and-submit>
+```
 
-## 4. Coolify resource settings (exact)
+The EAS wrapper must verify that every build ID reports the exact Git SHA of the
+checkout before it may submit that build.
 
-| Field | Value |
-|-------|--------|
-| Resource type | **Docker Compose** |
-| Repository URL | `https://github.com/waelzaid66-max/bancoboomstor` |
-| Compose path | `docker-compose.coolify.yml` |
-| Branch | `main` (after merge) or the restitution PR branch until merged |
-| Build | Per-service Dockerfiles under `deploy/coolify/` |
-| Reverse proxy | Coolify Traefik |
+## 7. Required environment boundaries
 
-Documented example domains (`docs/DEPLOY_COOLIFY.md`): `api.yourdomain.com`, `app.yourdomain.com`, apex, `static.yourdomain.com` — **examples only**.
+Secrets remain outside Git. Coolify owns runtime server secrets; EAS owns native
+build-time public configuration and store credentials.
 
----
+At minimum, Coolify must receive:
 
-## 5. Dockerfiles used by Coolify (only these)
+```text
+POSTGRES_PASSWORD
+CLERK_SECRET_KEY
+SESSION_SECRET
+PAYMENT_CONFIG_ENCRYPTION_KEY
+OBJECT_STORAGE_PROVIDER=s3
+AWS_REGION
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+S3_BUCKET
+PUBLIC_OBJECT_SEARCH_PATHS
+PRIVATE_OBJECT_DIR
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+VITE_CLERK_PUBLISHABLE_KEY
+BANCO_WEBSITE_URL
+```
 
-1. `deploy/coolify/Dockerfile.api`
-2. `deploy/coolify/Dockerfile.banco-web`
-3. `deploy/coolify/Dockerfile.banco-website`
-4. `deploy/coolify/Dockerfile.web`
+At minimum, EAS production must receive:
 
-Ignore for Coolify: root `Dockerfile`, `deploy/aws/*`, `deploy/gcp/Dockerfile.api`.
+```text
+EXPO_PUBLIC_DOMAIN or EXPO_PUBLIC_API_BASE_URL
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+EXPO_PUBLIC_PUBLIC_APP_URL
+EXPO_PUBLIC_ROUTER_ORIGIN
+```
 
----
+No secret values belong in source, reports, logs, comments, or chat.
 
-## 6. Environment variable names (no values)
+## 8. Evidence hierarchy
 
-### Compose-required (`:?`)
+From strongest to weakest:
 
-`POSTGRES_PASSWORD` · `CLERK_SECRET_KEY` · `SESSION_SECRET` · `PAYMENT_CONFIG_ENCRYPTION_KEY`
+1. runtime/device/provider evidence tied to one exact release commit;
+2. clean exact-checkout build/test output;
+3. source and diff review;
+4. current report explicitly rebound to the exact commit;
+5. historical report, agent prose, screenshot or old branch.
 
-### postgres
+A literal-only guard failure is not a Product defect until the protected behavior
+is reproduced. An unexecuted gate is `UNDETERMINED`, not RED and not GREEN.
 
-`POSTGRES_USER` · `POSTGRES_PASSWORD` · `POSTGRES_DB`
+## 9. Promotion boundary
 
-### api (wired in `docker-compose.coolify.yml`)
+The release branch may move only by a reviewed fast-forward commit. No direct
+historical merge, broad cherry-pick, force-push, generated-file selection, or
+whole-host replacement is permitted.
 
-`PORT` · `NODE_ENV` · `DATABASE_URL` · `CLERK_SECRET_KEY` · `CLERK_PUBLISHABLE_KEY` · `SESSION_SECRET` · `PAYMENT_CONFIG_ENCRYPTION_KEY` · `CORS_ALLOWED_ORIGINS` · `PUBLIC_API_BASE_URL` · `PUBLIC_APP_URL` · `ADMIN_EMAILS` · `OPENAI_API_KEY` · `OPENAI_MODEL` · `RESEND_API_KEY` · `EMAIL_FROM` · `PAYMOB_*` · `OBJECT_STORAGE_PROVIDER` · `AWS_REGION` · `S3_BUCKET` · **`AWS_ACCESS_KEY_ID`** · **`AWS_SECRET_ACCESS_KEY`** · `PUBLIC_OBJECT_SEARCH_PATHS` · `PRIVATE_OBJECT_DIR` · `ERROR_ALERT_WEBHOOK` · `LOG_LEVEL` · `LOG_DIR` · `CRON_TIMEZONE` · `API_HOST_PORT`
+Promotion to the default/canonical release ref occurs only after:
 
-### banco-web build / runtime
+- workspace verify, typecheck, root build and tests;
+- isolated PostgreSQL lifecycle and migration proof;
+- Docker images and Coolify smoke;
+- native Expo export and EAS artifact provenance;
+- physical Android/iOS journeys for headers, Maps, Messenger, Auth/accounts,
+  media, notifications, RTL/LTR and navigation;
+- backup and rollback evidence.
 
-Build: `BANCO_WEB_URL` · `BANCO_WEB_MARKET_URL` · `BANCO_WEB_ADMIN_URL` · `NEXT_PUBLIC_*` (Clerk, maps, store URLs, feature flags) · hardcoded `NEXT_PUBLIC_API_URL=http://api:8080`
-Runtime: `PORT` · `NODE_ENV` · `CLERK_SECRET_KEY` · `BANCO_WEB_HOST_PORT`
-
-### banco-website
-
-Build: `BANCO_WEBSITE_URL` · `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` · `NEXT_PUBLIC_CLERK_PROXY_URL`
-Runtime: `PORT` · `NODE_ENV` · `CLERK_SECRET_KEY` · `BANCO_WEBSITE_HOST_PORT`
-
-### web (Vite)
-
-`VITE_CLERK_PUBLISHABLE_KEY` · `VITE_CLERK_PROXY_URL` · `VITE_API_BASE_URL` · `VITE_MARKET_URL` · `VITE_ADMIN_URL` · `VITE_APP_ANDROID_URL` · `VITE_APP_IOS_URL` · `WEB_HOST_PORT`
-
-### Mobile (EAS — not compose)
-
-`EXPO_PUBLIC_DOMAIN` **or** `EXPO_PUBLIC_API_BASE_URL` · `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` · `EXPO_PUBLIC_PUBLIC_APP_URL` · `EXPO_PUBLIC_ROUTER_ORIGIN` · optional `EXPO_PUBLIC_CLERK_PROXY_URL`
-
----
-
-## 7. Dependencies
-
-| Question | Answer |
-|----------|--------|
-| API before Postgres? | **No** |
-| Web before API? | **No** |
-| Migrate before Postgres? | **No** — Postgres first |
-| Redis? | **Does not exist** |
-| Separate worker/cron containers? | **Do not exist** |
-
----
-
-## 8. Mobile notes (international app)
-
-- Identity: **`com.bancooom.app`** only on this SoT
-- Deep-link merge: `app.config.ts` unions env host with `app.json` multi-host set
-- Runtime deps live in `dependencies` (not only `devDependencies`)
-- Well-known templates: `deploy/coolify/well-known/*` with `REPLACE_*` placeholders
-- EAS: `artifacts/banco-mobile/eas.json` + `release/EAS_BUILD.md`
-
----
-
-## FIRST DEPLOYMENT CHECKLIST
-
-□ Coolify → Docker Compose → repo **`waelzaid66-max/bancoboomstor`** → file **`docker-compose.coolify.yml`**
-□ Set `POSTGRES_PASSWORD` `CLERK_SECRET_KEY` `SESSION_SECRET` `PAYMENT_CONFIG_ENCRYPTION_KEY`
-□ Set S3: `OBJECT_STORAGE_PROVIDER=s3` + `AWS_*` / `S3_BUCKET` / object paths
-□ Set build-time `NEXT_PUBLIC_*` / `VITE_*` / public URLs
-
-### Controlled service order
-
-□ Pin the exact approved release SHA and build images without starting services
-□ Start only **postgres** and wait for `pg_isready`
-□ Classify the database before any stamp: a fresh empty database runs the
-committed migrations directly and is never baselined
-□ For an existing pre-journal database, independently prove its live schema is
-equivalent to the exact committed migration state for the release SHA; only then
-run `baseline` once
-□ Run the committed **migrate** profile and require exit 0
-□ Start **api** and require `/api/readyz` = 200
-□ Start **banco-web** / **banco-website** / **web** after API readiness
-□ Configure domains on Traefik
-□ Fill well-known `REPLACE_*` · redeploy `web`
-□ EAS bake `EXPO_PUBLIC_*` for `com.bancooom.app`
-□ Final smoke
-
-**End of SoT.** Deploy only from this file + `docker-compose.coolify.yml` on **`bancoboomstor`**.
+Until those checks close on one commit, status is **Release Candidate — NO-GO**.

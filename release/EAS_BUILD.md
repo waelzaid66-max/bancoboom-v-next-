@@ -1,75 +1,175 @@
-# Mobile — real device build (EAS)
+# BANCO Mobile — Exact-SHA EAS Build and Submission
 
-**Why:** Expo Go over the Replit tunnel cannot reach Metro ("Could not connect to
-development server"), and Replit has no iOS Simulator. The only way to run the
-real app on a phone is a **standalone build (EAS)** — it bundles the JS and talks
-to the **production API**, with no Replit/Metro dependency.
+BANCO Mobile is the Expo SDK 54 native application under
+`artifacts/banco-mobile`. It is built from the current vNEXT release repository,
+not from Replit, an archived clone, Expo Go, or a locally reconstructed tree.
 
-## Build profiles (`artifacts/banco-mobile/eas.json`)
-- `preview` — installable **APK**, uses the production environment. Use this to
-  test the real app on your Android phone.
-- `development` — dev‑client APK (hot reload on device).
-- `production` — Play Store **app‑bundle** (final release).
+## Authority
 
-## One‑time: set the build‑time env vars (baked into the app)
-The app reads these `EXPO_PUBLIC_*` vars at build time (see `app/_layout.tsx`
-and `app.config.ts`). `eas.json` has **no** `env` block — values must live in
-the EAS **production** environment (dashboard) or be passed at build time.
+| Field | Value |
+|---|---|
+| Repository | `waelzaid66-max/bancoboom-v-next-` |
+| Release branch | `release/golden-vnext-20260825` |
+| Android package | `com.bancooom.app` |
+| iOS bundle identifier | `com.bancooom.app` |
+| EAS project ID | `45f092c8-52f9-4272-880f-48e6b721126f` |
+| Expo | SDK 54 |
+| React Native | 0.81.5 |
+| Android target | API 36 |
+| Release entry point | root `pnpm run mobile:eas` |
 
-| Var | What | Required |
-|---|---|---|
-| `EXPO_PUBLIC_DOMAIN` **or** `EXPO_PUBLIC_API_BASE_URL` | API host (`https://<domain>/api/...`) or full API base URL | ✅ one of them |
-| `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk publishable key (`pk_live_...`) | ✅ |
-| `EXPO_PUBLIC_CLERK_PROXY_URL` | Clerk proxy (only if used) | optional |
-| `EXPO_PUBLIC_PUBLIC_APP_URL` | canonical web URL for share + App/Universal Links host | ✅ for store |
-| `EXPO_PUBLIC_ROUTER_ORIGIN` | deep-link origin for expo-router (production store builds) | ✅ for store |
+Do not call a direct interactive `eas submit` during release. The repository
+wrapper builds, captures the EAS build IDs, re-reads each build, and rejects any
+artifact whose Git commit does not equal the release checkout.
 
-**If API env unset in a production binary:** `_layout.tsx` logs FATAL and
-relative `/api` calls fail. **If Clerk key unset:** app renders signed-out after
-Clerk load timeout.
+## EAS production environment
 
-Set them in the EAS **production** environment (dashboard → Project → Environment
-variables, scope = production), or via CLI:
-```bash
-cd artifacts/banco-mobile
-eas env:create --environment production --name EXPO_PUBLIC_DOMAIN --value api.YOURDOMAIN
-eas env:create --environment production --name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value pk_live_...
-eas env:create --environment production --name EXPO_PUBLIC_PUBLIC_APP_URL --value https://banco.today
-eas env:create --environment production --name EXPO_PUBLIC_ROUTER_ORIGIN --value https://banco.today
+Set these in the EAS production environment; do not commit values:
+
+```text
+EXPO_PUBLIC_DOMAIN or EXPO_PUBLIC_API_BASE_URL
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+EXPO_PUBLIC_PUBLIC_APP_URL
+EXPO_PUBLIC_ROUTER_ORIGIN
 ```
 
-### Store blockers outside the binary (OPS — not fixed by EAS build alone)
+Optional only when actually configured:
 
-| Item | Why it blocks store / deep links |
-|------|----------------------------------|
-| Hosted `/.well-known/apple-app-site-association` | Repo ships template under `deploy/coolify/well-known/` — must replace `REPLACE_APPLE_TEAM_ID`, redeploy `web`, and point DNS at Coolify |
-| Hosted `/.well-known/assetlinks.json` | Repo ships template — must replace `REPLACE_PLAY_APP_SIGNING_SHA256` + DNS → Coolify |
-| DNS `banco.today` → Coolify | Apex currently Replit placeholder; `www` is Hostinger Horizons — App Links verification fails |
-| EAS credentials (Apple + Google Play) | Required for signed iOS/Android store builds |
-| `NSFaceIDUsageDescription` | Present in `app.json` (biometric unlock + delete-account confirm) |
-
-Do **not** ship store builds until AASA/assetlinks are served on the production
-host **with real Team ID / SHA-256** and DNS points at Coolify. Bundle/package id: `com.bancooom.app`.
-
-`eas.json` profiles:
-- `preview` — internal APK (Android) + iOS device build; uses production env vars.
-- `production` — Play **app-bundle** + iOS with `autoIncrement` on build number.
-- `app.json` — `android.versionCode`, `ios.buildNumber` (local source; EAS `appVersionSource: local`).
-
-## Build + install
-```bash
-cd artifacts/banco-mobile
-npx eas login                                             # once
-npx eas build --platform android --profile preview        # → produces an APK URL
+```text
+EXPO_PUBLIC_CLERK_PROXY_URL
 ```
-Open the APK URL on your phone → install → the app runs against the production API
-(real data, real auth). For iOS, `--platform ios` needs an Apple Developer account.
 
-## Before store submission
-- Set `EXPO_PUBLIC_ROUTER_ORIGIN` in the EAS **production** environment to your
-  canonical web domain (e.g. `https://banco.app`). Dev/preview builds omit it —
-  `app.config.ts` defaults to `https://replit.com/` so local Expo Go is unchanged.
-- Bump `versionCode` (Android) / set `buildNumber` (iOS) per release.
-- Backend secrets live server‑side (Replit): `OPENAI_API_KEY` (real `sk-...`),
-  `RESEND_API_KEY`, Object Storage; Clerk dashboard: OTP + Google/Apple.
-  **Paymob remains disabled** until explicitly approved.
+Server secrets such as Clerk secret keys, storage credentials, payment secrets,
+OpenAI keys and email provider keys do not belong in EAS public variables.
+
+## Before any native build
+
+The public API and links must already be reachable from devices:
+
+```text
+https://banco.today/api/readyz
+https://banco.today/.well-known/apple-app-site-association
+https://banco.today/.well-known/assetlinks.json
+```
+
+Replace all well-known placeholders with the real Apple Team ID and Google Play
+App Signing SHA-256, redeploy the `web` service, and verify DNS points to the
+approved Coolify stack.
+
+## Verify the exact checkout
+
+From repository root:
+
+```bash
+corepack enable
+corepack prepare pnpm@11.9.0 --activate
+pnpm install --frozen-lockfile
+pnpm run workspace:verify
+pnpm run mobile:verify
+```
+
+`mobile:verify` runs the release preflight, Mobile TypeScript, the Mobile test
+chain and the Expo build/export path. It must not modify tracked files.
+
+## Internal device build
+
+Android installable preview:
+
+```bash
+pnpm run mobile:eas -- preview android build
+```
+
+iOS device preview:
+
+```bash
+pnpm run mobile:eas -- preview ios build
+```
+
+Preview uses the production EAS environment but is not store submission evidence.
+Record the build ID and test it on the intended physical devices.
+
+## Production build
+
+Android AAB:
+
+```bash
+pnpm run mobile:eas -- production android build
+```
+
+iOS production artifact:
+
+```bash
+pnpm run mobile:eas -- production ios build
+```
+
+Both platforms:
+
+```bash
+pnpm run mobile:eas -- production all build
+```
+
+For every build retain:
+
+- exact Git commit;
+- EAS build ID;
+- platform;
+- application version/build number;
+- artifact identity/fingerprint;
+- EAS status;
+- device test evidence.
+
+The wrapper fails when EAS metadata does not report the expected Git commit or
+when the build is not finished successfully.
+
+## Store submission
+
+Submission is an explicit second authority. It may run only on the production
+profile and only for the exact build IDs produced by the same wrapper invocation.
+
+```bash
+pnpm run mobile:eas -- production android build-and-submit
+pnpm run mobile:eas -- production ios build-and-submit
+```
+
+For non-interactive iOS submission, configure the required App Store Connect app
+identity in EAS configuration/secrets. Never commit a service-account key or App
+Store credential file.
+
+## Physical-device acceptance
+
+Minimum Android and iOS matrix:
+
+- first launch, splash, fonts and icons;
+- Clerk sign-in, email verification, MFA, reset and SSO where enabled;
+- Individual, Dealer and Company account journeys;
+- Bank/Funder mini-app-owned Financial Institution journey;
+- Home/Discover and all mini-app headers;
+- CAR header controls and Map/List preservation;
+- Maps load/failure, near-me, draw area, clusters and navigation;
+- Messenger list/thread/send/retry/read/unread/media/listing context;
+- listing create/edit/media upload;
+- profile, settings, sign-out and account deletion;
+- push registration, notification icon and deep-link routing;
+- AR/EN, RTL/LTR, keyboard, safe areas, back navigation and font scaling;
+- offline, retry, loading, empty and error states.
+
+Expo Web or a Replit preview is useful diagnostic evidence but cannot certify
+native device behavior.
+
+## No-Go conditions
+
+Do not submit when any of the following is true:
+
+- checkout is dirty or origin is not the vNEXT repository;
+- exact Git commit is not recorded;
+- Mobile verification fails or was not run;
+- EAS build metadata lacks/mismatches the Git commit;
+- API/staging is not reachable;
+- Clerk production tenant/key agreement is unproven;
+- object storage upload is unproven;
+- well-known link files contain placeholders;
+- physical-device owner journeys are failed or `UNDETERMINED`;
+- rollback artifacts are missing.
+
+No report title, branch name or green test from another SHA can override these
+conditions.

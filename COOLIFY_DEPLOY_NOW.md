@@ -1,202 +1,201 @@
-# COOLIFY DEPLOY NOW — BANCO (foolproof)
+# BANCO — COOLIFY DEPLOY NOW
 
-**Read this file first.** It replaces hours of guessing.
+This is the operator entry point for the current BANCO vNEXT monorepo.
+Historical repositories are comparison and rollback evidence only.
 
-| Field | Exact value |
-|-------|-------------|
-| **ONLY GitHub repo** | `https://github.com/waelzaid66-max/bancoboomstor` |
-| **Do NOT use** | `banco-with-wael`, `bancoo`, `bancoboom`, or any pre-consolidation clone |
-| **Compose file path** | `docker-compose.coolify.yml` |
-| **Coolify resource type** | **Docker Compose** (not Dockerfile, not Nixpacks, not Static) |
-| **Branch to deploy** | **`main`**, only after CI is green on the exact approved release SHA |
-| **Live cutover proof** | `pnpm ops:live-cutover` (must exit 0 before Live Production Ready) |
-| **Mobile** | Expo EAS (`com.bancooom.app`) — **not** a Coolify container |
+## Release authority
 
----
+| Field | Required value |
+|---|---|
+| GitHub repository | `waelzaid66-max/bancoboom-v-next-` |
+| Release branch | `release/golden-vnext-20260825` |
+| Compose file | `docker-compose.coolify.yml` |
+| Resource type | Coolify **Docker Compose** |
+| Package manager | `pnpm@11.9.0` |
+| Node | 24 |
+| Mobile package / bundle | `com.bancooom.app` |
+| Mobile release path | Expo EAS through `pnpm mobile:eas` |
 
-## 1. Create the Coolify resource (exact clicks)
+Never configure Coolify, EAS, a deployment bot, or a local release checkout from
+`bancoboomstor`, `banco-with-wael`, `bancoo`, `bancoboom`, `aws-virgen`, or any
+other historical clone. The last green `bancoboomstor` commit is a rollback and
+comparison point; it is not the deploy source.
 
-1. Coolify → **New Resource** → **Docker Compose**
-2. Connect Git → select **`waelzaid66-max/bancoboomstor`**
-3. Compose path = **`docker-compose.coolify.yml`**
-4. Branch = **`main`**
-5. Save — **do not Deploy yet**
+Do not deploy a floating `main`. Record and deploy one approved commit from the
+release branch. Set `GIT_SHA` and `BUILD_ID` to that exact commit where Coolify
+does not inject `SOURCE_COMMIT` automatically.
 
----
+## What the monorepo deploys
 
-## 2. Name map (stop the confusion)
+| Compose service | Runtime | Purpose |
+|---|---|---|
+| `postgres` | PostgreSQL 16 | Internal production database |
+| `migrate` | One-off profile | Applies committed migrations; never auto-starts |
+| `api` | Node/Express | BANCO API on container port 8080 |
+| `banco-website` | Next.js | Canonical Next consumer/marketing surface |
+| `web` | Nginx + Vite | Landing, Dealer OS at `/market/`, Admin OS at `/admin/`, `/api/` proxy |
+| `banco-web` | Next.js | Frozen optional twin; profile `legacy-banco-web`, off by default |
 
-| Compose **service** name | Docker **image** name | What it actually is | Public port |
-|--------------------------|------------------------|---------------------|-------------|
-| `postgres` | `postgres:16` | Database | internal only |
-| `migrate` | (build, profile `migrate`) | One-off committed migrations — **not** auto-started | — |
-| `api` | `banco-api:latest` | Node API | **8080** · health **`/api/readyz`** |
-| `banco-web` | `banco-web:latest` | Frozen Next twin (**profile `legacy-banco-web`**, off by default) | **3000** |
-| `banco-website` | `banco-website:latest` | Canonical Next marketing/consumer | **3001** host |
-| `web` | `banco-web-static:latest` | **Nginx** = landing + `/market/` + `/admin/` + SEO + `/.well-known/` + `/api/` proxy | **80** |
+BANCO Mobile is not a Coolify container. It is the Expo SDK 54 native app under
+`artifacts/banco-mobile` and is built separately through EAS.
 
-**Critical:** service `web` ≠ image name containing “web” in a vague sense.
-`web` = nginx static front. `banco-web` = Next.js. Different things.
+## Coolify resource setup
 
-Ignore for Coolify: root `Dockerfile`, `deploy/aws/*`, `deploy/gcp/*`.
+1. New Resource → Docker Compose.
+2. Select repository `waelzaid66-max/bancoboom-v-next-`.
+3. Select branch `release/golden-vnext-20260825`.
+4. Compose path: `docker-compose.coolify.yml`.
+5. Record the exact commit to be deployed; do not deploy yet.
+6. Map the apex domain to service `web`, port 80.
 
----
+Default production services are `postgres`, `api`, `banco-website`, and `web`.
+Do not enable `legacy-banco-web` unless there is an explicit release decision.
 
-## 3. Domain mapping — recommended first deploy (single origin)
+## Required environment names
 
-Map your apex (e.g. `banco.today`) to service **`web`** port **80**.
+Values belong in Coolify/EAS secret stores and must never be committed.
 
-That one origin gives you:
+### API and database
 
-| Path | Serves |
-|------|--------|
-| `/` | Landing |
-| `/market/` | Dealer OS |
-| `/admin/` | Admin OS |
-| `/api/` | Proxied to `api:8080` |
-| `/l/` `/listing/` `/sitemap.xml` `/robots.txt` | Proxied to API (share/SEO — not the SPA) |
-| `/.well-known/` | AASA + assetlinks (replace `REPLACE_*` later) |
-| `/nginx-health` | Liveness |
-
-The ungated default Compose set is `postgres` + `api` + `banco-website` +
-`web`. **Do not use the one-click/default Deploy before committed migrations
-have succeeded**: `api` depends on Postgres health, not on the manual `migrate`
-profile. Follow the controlled order in §5. Frozen twin `banco-web` is
-**profile-gated** (`legacy-banco-web`) — do not enable unless you still need the
-old Next twin.
-
-Optional later (split origins):
-
-| Service | Example host |
-|---------|----------------|
-| `api` | `api.banco.today` |
-| `banco-website` | marketing host |
-| `banco-web` | only with `COMPOSE_PROFILES=legacy-banco-web` |
-
-Do **not** start by putting the apex on `banco-website` and `web` on a random static subdomain unless you already understand Traefik path routing — that caused past confusion.
-
----
-
-## 4. Environment variables (set BEFORE first Deploy)
-
-### Hard-required (API will not stay up without these)
-
-```
-POSTGRES_PASSWORD=<strong>
-CLERK_SECRET_KEY=sk_live_...
-SESSION_SECRET=<32+ random>
-PAYMENT_CONFIG_ENCRYPTION_KEY=<32+ hex>
+```text
+POSTGRES_PASSWORD
+CLERK_SECRET_KEY
+SESSION_SECRET
+PAYMENT_CONFIG_ENCRYPTION_KEY
 OBJECT_STORAGE_PROVIDER=s3
-AWS_REGION=<region>
-S3_BUCKET=<bucket>
-AWS_ACCESS_KEY_ID=<key>
-AWS_SECRET_ACCESS_KEY=<secret>
-PUBLIC_OBJECT_SEARCH_PATHS=<public prefix path>
-PRIVATE_OBJECT_DIR=<private prefix path>
+AWS_REGION
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+S3_BUCKET
+PUBLIC_OBJECT_SEARCH_PATHS
+PRIVATE_OBJECT_DIR
 ```
 
-Notes:
+### Build-time web identity
 
-- Compose builds `DATABASE_URL` from `POSTGRES_*` — you do **not** need a separate `DATABASE_URL` for this Coolify compose.
-- Never set `OBJECT_STORAGE_PROVIDER=replit` on Coolify (API refuses start).
-
-### Build-time (bake into JS — set before first build)
-
-```
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...
-VITE_CLERK_PUBLISHABLE_KEY=pk_live_...   # same publishable key for Vite SPAs
-BANCO_WEBSITE_URL=https://<your-apex-or-marketing-host>
-VITE_WEB_URL=https://<your-apex>         # recommended — landing DomainRouter absolute hops
-# Only if COMPOSE_PROFILES includes legacy-banco-web:
-# BANCO_WEB_URL=https://<legacy-next-host>
+```text
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+VITE_CLERK_PUBLISHABLE_KEY
+BANCO_WEBSITE_URL
+VITE_WEB_URL
 ```
 
-Recommended for CORS / Paymob / proxy later:
+Recommended production routing variables:
 
-```
-CORS_ALLOWED_ORIGINS=https://banco.today,https://www.banco.today
-PUBLIC_API_BASE_URL=https://banco.today
-PUBLIC_APP_URL=https://banco.today
+```text
+CORS_ALLOWED_ORIGINS
+PUBLIC_API_BASE_URL
+PUBLIC_APP_URL
+CLERK_PUBLISHABLE_KEY
+GIT_SHA
+BUILD_ID
 TRUST_PROXY_HOPS=2
 ```
 
-Full reference: `docs/DEPLOY_COOLIFY.md`.
+## Controlled deployment order
 
----
+### 1. Verify the exact checkout
 
-## 5. Deploy + migrate order
+From the repository root:
 
-### Build the exact release without starting it
+```bash
+corepack enable
+corepack prepare pnpm@11.9.0 --activate
+pnpm install --frozen-lockfile
+pnpm run workspace:verify
+pnpm run typecheck
+npm run build
+```
 
-Fill env and pin Coolify's checkout to the exact approved release SHA. From the
-stack terminal/SSH, build the release images without starting the default
-services:
+A guard failure that only pins an incidental name is not a Product defect. Run
+`scripts/guard-quality-audit.mjs` before changing Product code because of a guard.
+
+### 2. Build images without starting the default stack
 
 ```bash
 docker compose -f docker-compose.coolify.yml build migrate api banco-website web
 ```
 
-### Controlled service start
+### 3. Start Postgres only
 
-1. Start only `postgres` and wait until it is healthy (`pg_isready`).
-2. Run the manual committed migrations from that same exact-SHA checkout:
+```bash
+docker compose -f docker-compose.coolify.yml up -d postgres
+docker compose -f docker-compose.coolify.yml ps postgres
+```
+
+Create and verify a backup/restore point before any existing production database
+change.
+
+### 4. Classify and migrate the database
+
+- A fresh empty database runs committed migrations directly.
+- An existing pre-journal database must first be proven schema-equivalent to the
+  exact historical adoption boundary. Non-empty is not equivalence proof.
+- Never run `baseline` on production merely to silence a migration error.
+
+Normal migration command:
 
 ```bash
 docker compose -f docker-compose.coolify.yml --profile migrate run --rm migrate
 ```
 
-A fresh empty database runs that command directly. For an existing pre-journal
-database, independently prove its live schema is equivalent to the exact
-committed migration state for the release SHA, then run
-`pnpm --filter @workspace/db run baseline` once before `migrate`; a non-empty
-database is not equivalence proof. Full policy:
-`lib/db/MIGRATIONS.md`.
+Stop on any migration failure. Do not start the API against a partly migrated DB.
 
-3. Start `api`, wait for **`/api/readyz`**, then start `banco-website` and `web`
-   (plus profile-gated `banco-web` only if explicitly required).
-4. Smoke after DNS points here:
+### 5. Start the application services
 
 ```bash
-curl -fsS https://<apex>/nginx-health
-curl -fsS https://<apex>/api/readyz
-curl -fsS https://<apex>/.well-known/assetlinks.json
-pnpm ops:live-cutover -- --base https://<apex> --www https://www.<apex> --allow-placeholders
+docker compose -f docker-compose.coolify.yml up -d --build api
+curl -fsS http://127.0.0.1:${API_HOST_PORT:-8080}/api/readyz
+docker compose -f docker-compose.coolify.yml up -d --build banco-website web
 ```
 
-See also `OPS_GO_LIVE_CHECKLIST.md` and `reports/production-verification/56-LIVE-CUTOVER-BASELINE.md`.
+Only after API readiness may the public web surfaces receive traffic.
 
----
+### 6. Smoke the public origin
 
-## 6. Mobile (separate from Coolify)
+```bash
+curl -fsS https://banco.today/nginx-health
+curl -fsS https://banco.today/api/readyz
+curl -fsS https://banco.today/.well-known/assetlinks.json
+curl -fsSI https://banco.today/.well-known/apple-app-site-association
+pnpm ops:live-cutover -- --base https://banco.today --www https://www.banco.today
+```
 
-Package: **`com.bancooom.app`** · scheme **`bancooom`** · name **`BANCO`**
+Require JSON from API and well-known endpoints, not Replit/Horizons HTML.
 
-EAS dashboard must bake at least:
+## Native mobile release
 
-- `EXPO_PUBLIC_DOMAIN` or `EXPO_PUBLIC_API_BASE_URL`
-- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`
-- `EXPO_PUBLIC_PUBLIC_APP_URL`
-- `EXPO_PUBLIC_ROUTER_ORIGIN`
+Run from the same clean exact Git commit:
 
-See `release/EAS_BUILD.md`.
+```bash
+pnpm run mobile:verify
+pnpm run mobile:eas -- production android build
+pnpm run mobile:eas -- production ios build
+```
 
----
+The EAS wrapper captures the build IDs and rejects a build whose Git commit does
+not equal the checkout commit. Store submission is a separate explicit action:
 
-## 7. If something “looks broken”
+```bash
+pnpm run mobile:eas -- production android build-and-submit
+pnpm run mobile:eas -- production ios build-and-submit
+```
 
-| Symptom | Likely cause |
-|---------|----------------|
-| API never healthy | Missing required env / S3 / Clerk secret |
-| Next routes 503 auth | Missing `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` at **build** time |
-| Admin/dealer white error | Missing `VITE_CLERK_PUBLISHABLE_KEY` at **build** time |
-| Wrong site on apex | Apex mapped to `banco-website` instead of `web` |
-| Uploads fail | S3 env incomplete |
-| Deep links fail | DNS not on Coolify yet + `REPLACE_*` still in well-known |
+Do not submit `latest`, do not use a repo-local credential file, and do not issue
+a direct interactive `eas submit` that is not bound to an exact build ID.
 
----
+## Go / No-Go boundary
 
-## 8. Authority
+GO requires all of the following on one exact release commit:
 
-- SoT doc: `docs/DEPLOYMENT_SOURCE_OF_TRUTH.md`
-- Current RC evidence: `audit/reports/RC1-VALIDATION-2026-08-09.md`
-- Pre-consolidation repositories are **not** Coolify SoT.
+- clean install, workspace verification, typecheck, root build;
+- API tests on an isolated PostgreSQL database;
+- Docker image build and migration proof;
+- API readiness and public-origin smoke;
+- Mobile tests and Expo export;
+- Android/iOS EAS build IDs bound to the same Git SHA;
+- owner journeys on physical devices: headers, Maps, Messenger, Auth/accounts,
+  uploads, notifications, RTL/LTR and back/navigation;
+- backup and rollback evidence.
+
+Anything not executed is `UNDETERMINED`, not a defect and not a PASS.
