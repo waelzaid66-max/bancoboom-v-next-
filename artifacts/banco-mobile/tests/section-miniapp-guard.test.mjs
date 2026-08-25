@@ -184,20 +184,39 @@ test("section route files exist on disk", () => {
 
 test("Search catalogue chrome is gated off Discover (MOB-05)", () => {
   const searchTab = fs.readFileSync(SEARCH_TAB, "utf8");
+  // These three assertions used to look for `viewState !== "discover"` ANYWHERE
+  // in the file, plus two loose `[\s\S]*` pairings. The file carries the gate
+  // TWICE — once on the filter button, once on CategoryTabs/engines — so any one
+  // occurrence satisfied all three, and opening either gate on its own left the
+  // pack green.
+  //
+  // Measured 2026-08-25 by mutation, against the owner's own screenshot
+  // complaint — "شريط اختيارات وسط الأيقونات", recorded in
+  // audit/handoff/OWNER-SCREENSHOT-FORENSIC-DISCOVER-ENTER-AR.md:
+  //
+  //   open the filter-button gate alone   → 43/43 packs PASS  ← the strip returns
+  //   open the CategoryTabs gate alone    → 43/43 packs PASS  ← the strip returns
+  //   open BOTH at once                   → caught
+  //
+  // A guard that fires only when every instance is removed simultaneously is
+  // counting presence, not placement. Each gate is now bound to the control it
+  // protects, so opening either one fails on its own.
+  const gate = String.raw`viewState\s*!==\s*["']discover["']`;
+
   assert.match(
     searchTab,
-    /viewState\s*!==\s*["']discover["']/,
-    "search.tsx must hide CategoryTabs/engines while Discover is showing",
+    new RegExp(`${gate}\\s*\\?\\s*\\(\\s*<Pressable`),
+    "the shared filter button must sit behind its own Discover gate — filters live in mini-apps",
   );
   assert.match(
     searchTab,
-    /<CategoryTabs[\s\S]*?viewState\s*!==\s*["']discover["']|<Fragment>[\s\S]*CategoryTabs|viewState\s*!==\s*["']discover["'][\s\S]*CategoryTabs/,
-    "CategoryTabs must sit behind the Discover gate",
+    new RegExp(`${gate}\\s*\\?\\s*\\(\\s*<>\\s*<CategoryTabs`),
+    "CategoryTabs must sit behind its own Discover gate immediately, not merely somewhere in the file",
   );
-  assert.match(
-    searchTab,
-    /viewState\s*!==\s*["']discover["'][\s\S]*filter-toggle|filter-toggle[\s\S]*viewState\s*!==\s*["']discover["']/,
-    "Discover must not show the shared filter toggle (filters live in mini-apps)",
+  assert.equal(
+    (searchTab.match(new RegExp(gate, "g")) ?? []).length,
+    2,
+    "exactly two Discover gates are expected here; a third, or one fewer, means the chrome moved and this contract must be re-read against the screen",
   );
 });
 
