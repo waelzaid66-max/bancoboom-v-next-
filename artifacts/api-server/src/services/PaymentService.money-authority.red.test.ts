@@ -1,0 +1,196 @@
+import { describe, expect, it } from "vitest";
+import type { PaymentOption } from "@workspace/db";
+import { computeOffers } from "./PaymentService";
+
+function option(overrides: Partial<PaymentOption> = {}): PaymentOption {
+  return {
+    id: "00000000-0000-0000-0000-000000000001",
+    listingId: "00000000-0000-0000-0000-000000000002",
+    mode: "seller_installment",
+    downPayment: "20000",
+    monthlyPayment: "5000",
+    durationMonths: 12,
+    isIslamicCompliant: false,
+    provider: "seller",
+    providerName: null,
+    annualRatePct: null,
+    profitRatePct: null,
+    ...overrides,
+  };
+}
+
+type OfferProjectionContext = {
+  currency: string;
+  locale: "ar" | "en";
+  calculationBasis?: "quoted_monthly";
+};
+
+/**
+ * RED-only adapter. It deliberately ignores listing currency/locale/calculation
+ * basis because the current Product engine has no authority for those concepts.
+ * Keeping the adapter local prevents this evidence test from preselecting the
+ * final Product API shape.
+ */
+function projectCurrentOffers(
+  options: PaymentOption[],
+  listingPriceCash: string | number,
+  context: OfferProjectionContext,
+): ReturnType<typeof computeOffers> {
+  void context;
+  return computeOffers(options, listingPriceCash);
+}
+
+function expectNoUnsafePublicMoney(result: ReturnType<typeof computeOffers>) {
+  for (const offer of result.offers) {
+    for (const value of [
+      offer.monthly_display,
+      offer.down_payment_display,
+      offer.total_payable_display,
+    ]) {
+      if (value == null) continue;
+      expect(value).not.toMatch(/(?:^|\s)[-−]|NaN|Infinity/);
+    }
+  }
+}
+
+describe("FIN-OFFER money authority RED contract", () => {
+  for (const currency of ["SAR", "AED", "USD", "EUR"] as const) {
+    it(`projects ${currency} from listing authority instead of hard-coded EGP`, () => {
+      const result = projectCurrentOffers([option()], 100000, {
+        currency,
+        locale: "en",
+      });
+
+      expect(result.offers).toHaveLength(1);
+      expect(result.offers[0].monthly_display).toContain(currency);
+      expect(result.offers[0].down_payment_display).toContain(currency);
+      expect(result.offers[0].total_payable_display).toContain(currency);
+      expect(result.best_offer_badge).toContain(currency);
+    });
+  }
+
+  it("does not leak generic English financing system labels into Arabic projection", () => {
+    const result = projectCurrentOffers([option()], 100000, {
+      currency: "SAR",
+      locale: "ar",
+    });
+
+    const systemProjection = [
+      result.offers[0]?.provider_badge,
+      result.best_offer_badge,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    expect(systemProjection).not.toMatch(
+      /Seller Plan|Bank Finance|Dealer Finance|Supplier Finance|\bIslamic\b|\bfrom\b|\/mo\b/,
+    );
+  });
+
+  it("preserves a conventional quoted monthly instead of silently replacing it with rate math", () => {
+    const result = projectCurrentOffers(
+      [
+        option({
+          monthlyPayment: "5000",
+          downPayment: "0",
+          durationMonths: 12,
+          annualRatePct: "0",
+        }),
+      ],
+      120000,
+      { currency: "EGP", locale: "en", calculationBasis: "quoted_monthly" },
+    );
+
+    expect(result.offers[0]?.monthly_display).toBe("5K EGP");
+  });
+
+  it("preserves an Islamic quoted monthly instead of silently replacing it with profit math", () => {
+    const result = projectCurrentOffers(
+      [
+        option({
+          mode: "bank_finance",
+          monthlyPayment: "5000",
+          downPayment: "20000",
+          durationMonths: 10,
+          isIslamicCompliant: true,
+          provider: "bank",
+          providerName: "CIB",
+          profitRatePct: "10",
+        }),
+      ],
+      100000,
+      { currency: "EGP", locale: "en", calculationBasis: "quoted_monthly" },
+    );
+
+    expect(result.offers[0]?.monthly_display).toBe("5K EGP");
+  });
+
+  it("never projects a negative stored monthly as public money even if the engine chooses to degrade instead of reject", () => {
+    const result = computeOffers(
+      [
+        option({
+          downPayment: "0",
+          monthlyPayment: "-5000",
+          annualRatePct: null,
+        }),
+      ],
+      100000,
+    );
+
+    expectNoUnsafePublicMoney(result);
+  });
+
+  it("never projects a negative down payment as public money even if the engine chooses to degrade instead of reject", () => {
+    const result = computeOffers(
+      [
+        option({
+          downPayment: "-10000",
+          monthlyPayment: "5000",
+          annualRatePct: null,
+        }),
+      ],
+      100000,
+    );
+
+    expectNoUnsafePublicMoney(result);
+  });
+
+  it("keeps a real provider business name verbatim under Arabic projection", () => {
+    const result = projectCurrentOffers(
+      [
+        option({
+          provider: "bank",
+          providerName: "CIB Auto Finance",
+        }),
+      ],
+      100000,
+      { currency: "EGP", locale: "ar" },
+    );
+
+    expect(result.offers[0]?.provider).toBe("bank");
+    expect(result.offers[0]?.provider_badge).toBe("CIB Auto Finance");
+  });
+
+  it("preserves the Islamic public no-rate invariant", () => {
+    const result = projectCurrentOffers(
+      [
+        option({
+          mode: "bank_finance",
+          isIslamicCompliant: true,
+          provider: "bank",
+          providerName: "CIB",
+          profitRatePct: "10",
+        }),
+      ],
+      100000,
+      { currency: "AED", locale: "en" },
+    );
+
+    const offer = result.offers[0];
+    expect(offer).toBeDefined();
+    expect(offer).not.toHaveProperty("rate");
+    expect(offer).not.toHaveProperty("apr");
+    expect(offer).not.toHaveProperty("annual_rate_pct");
+    expect(offer).not.toHaveProperty("profit_rate_pct");
+  });
+});
