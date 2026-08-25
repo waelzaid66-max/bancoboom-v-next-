@@ -113,9 +113,9 @@ no repair is authorised by this batch.
   A capability implemented entirely inside a non-exported function, or as JSX in
   a screen, is invisible to it. The `authRedirect` finding surfaced because that
   module exported its API; a private equivalent elsewhere would not have.
-- The four repositories in the prior inventory were **not** re-swept with the
-  symbol method. Their `CODE_COUNT=0` rests on the older path+SHA method, which
-  this batch has just shown to be blind to the divergent class.
+- ~~The four repositories in the prior inventory were not re-swept with the~~
+  ~~symbol method.~~ **Closed by the addendum below: all four were re-swept.**
+
 - No CI evidence. Per `VNX-CI-02`, Actions has not executed a step since
   2026-08-14; every result here is a local execution.
 
@@ -158,3 +158,112 @@ PostgreSQL migrations or scale, Clerk, storage, Paymob, push/email delivery,
 Docker/Coolify runtime, backup/restore, rollback, EAS signing, or store release.
 Production remains NO-GO until the external gates in
 `CANONICAL-PRODUCTION-GATE-MATRIX.md` are exercised on one immutable commit.
+
+---
+
+# Addendum — the four prior repositories re-swept, and the gap closed
+
+## Decision
+
+The owner directed both follow-ups. The four repositories `BANCO-RECON-02`
+covered were re-swept with the symbol method, and the one genuine gap was
+restored under a mutation-proven contract.
+
+| Field | Evidence |
+| --- | --- |
+| Base | `7fe8656` on `main` |
+| Product commit | The commit containing this addendum |
+| Repositories re-swept | `bancoboom`, `bancoboomstor`, `banco-with-wael`, `aws-virgen` |
+| Source paths examined | 8,849 across the four |
+| Classification | 5 × `SUPERSEDE`/`ALREADY_PRESERVED` · 1 × `RECOVER`, executed |
+
+## Verification ledger — the re-sweep
+
+| Repository | Paths | MISSING | DIVERGENT | Symbols absent here |
+| --- | --- | --- | --- | --- |
+| `bancoboom` | 2,033 | 8 | 250 | **0** |
+| `bancoboomstor` | 2,628 | 19 | 1 | **0** |
+| `banco-with-wael` | 2,568 | 77 | 2 | **0** |
+| `aws-virgen` | 1,620 | 146 | 340 | **6** |
+
+`BANCO-RECON-02`'s `CODE_COUNT=0` conclusion is **upheld for three of the four**
+under the stricter method. `aws-virgen` produced six candidates, each adjudicated
+individually:
+
+| Symbol | Verdict |
+| --- | --- |
+| `notifyPaymentSuccess`, `schedulePaymentSuccess`, `schedulePaymentFailed` | `SUPERSEDE` — the legacy form was `void notifyPaymentSuccess(...).catch(...)`, fire-and-forget off the transaction, lost on crash. This repository enqueues inside the transaction via `enqueueBillingReceipt(tx, …)` and drains through `processBillingReceiptOutbox`. Strictly more durable |
+| `getSocialLinksForUserId` | `ALREADY_PRESERVED` — `socialLinks` lives in the schema, validators and `ListingService`; the named ProfileService helper was inlined |
+| `marketCountryConditions` | `ALREADY_PRESERVED` — market filtering is inline in `SearchService` (lines 706–759) |
+| **`notificationRequiresAuth`** | **`RECOVER` — restored below** |
+
+## The gap, measured before repair
+
+Two symbols from two different legacy repositories answer one question — what
+may a signed-out user reach — and both were absent:
+
+```
+banco.store   isAllowedSignedOutPath · savePendingAuthRedirect · consumePendingAuthRedirect
+aws-virgen    notificationRequiresAuth
+```
+
+Measured consequences on `main` before this batch:
+
+- `lib/notificationRouting.ts` exported `routeForNotification` and
+  `routeForNotificationItem` and **carried no auth gate at all**.
+- Three push destinations had no `isSignedIn` check of their own:
+  `app/messages/[id].tsx`, `app/import/order/[id].tsx`, `app/bookings.tsx`.
+- `setAuthFailureHandler` returns early for any code other than
+  `ACCOUNT_DELETED`, so a plain 401 routes nobody anywhere.
+- `app/(tabs)/profile.tsx` reads only `authMode` and pushes to the onboarding
+  href after success — no intended target is carried or restored.
+
+**Severity is a journey defect, not a security one, and that was verified rather
+than assumed:** the server guards every one of those routes —
+`conversations.ts` 8 × `requireAuth`, `import-orders.ts` 9 ×, `bookings.ts` 3 ×.
+No data was reachable. What was lost is that a signed-out user tapping a push,
+or deep-linking to a listing, is sent to sign in and then abandoned on the
+profile tab.
+
+## RED → GREEN evidence
+
+`lib/authRedirect.ts` restored, with `notificationRequiresAuth` placed beside the
+whitelist rather than in the routing module — separating them is how they drifted
+apart. Contract executed against a real storage stub, not asserted about:
+
+| Contract | Result |
+| --- | --- |
+| Only `/profile` and `/legal/*` reachable signed-out; `/legalese` and `/profiles` are not | PASS |
+| `/listing/*` is the only guest-openable push destination; `/listings/mine` is not | PASS |
+| An empty destination fails closed | PASS |
+| The target survives a round trip and is consumed exactly once, disk cleared | PASS |
+| A cold start reads the target from disk with no in-memory mirror — the OAuth case | PASS |
+| Unavailable storage degrades to memory and never throws | PASS |
+
+Mutation-proven load-bearing, each executed and reverted:
+
+| Mutation | Result |
+| --- | --- |
+| Widen the legal gate to a bare `startsWith("/legal")` | **FAIL** — `/legalese` caught |
+| Let an unknown push destination through without auth | **FAIL** |
+| Stop clearing the consumed target | **FAIL** — a second read would replay it |
+
+## Explicitly unproven
+
+- **The module is restored and contract-tested; it is not yet wired.** No screen
+  calls `savePendingAuthRedirect` and `profile.tsx` does not consume it. Wiring
+  changes a user-visible journey across 21 screens and belongs with the product
+  owner, not with a recovery batch.
+- The three unguarded destination screens are **recorded, not fixed**. Adding a
+  gate to them is the same product decision.
+- No CI evidence. Per `VNX-CI-02`, Actions has not executed a step since
+  2026-08-14.
+
+## Verification ledger — battery
+
+| Gate | Result |
+| --- | --- |
+| `test:auth-redirect` | 5/5 PASS, wired into the mobile chain |
+| Mobile guard packs | **43/43** PASS (42 before this batch), each executed independently |
+| Chain integrity | 247/247 PASS |
+| Root TypeScript | PASS, exit 0 |
