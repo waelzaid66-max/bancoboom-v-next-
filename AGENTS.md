@@ -1,162 +1,151 @@
-# BANCO vNEXT Monorepo Operating Contract
+# BANCO vNEXT Monorepo Operating Contract — Reconciliation Hold
 
-This repository — `waelzaid66-max/bancoboom-v-next-` — is the only active BANCO
-vNEXT source repository. Historical repositories, Replit-local histories,
-recovery branches, old reports and prior canonical SHAs are evidence or rollback
-references only; they are never build, merge or deployment authorities.
+Repository `waelzaid66-max/bancoboom-v-next-` is the only active BANCO vNEXT
+source repository. Historical repositories and branches remain read-only
+comparison, provenance and rollback evidence. They are never wholesale merge,
+build or deployment authorities.
 
-## Current authorities
+## Current state — binding
 
-| Authority | Value |
+`release/golden-vnext-20260825` is a preserved **comparison candidate**, not a
+certified release and not yet the complete Product union. Do not deploy it, tag
+it, submit EAS builds from it, point Coolify at it, or promote it while this hold
+is active.
+
+The previous statement that this candidate had only the FI account-entry defect
+left was too strong and is superseded. Exact final-blob checks found accepted
+Product semantics on PR #100 that are absent from the current candidate, while
+other current-main files supersede PR #100. Therefore neither tree may replace
+the other wholesale.
+
+Relevant immutable comparison points:
+
+| Role | Exact ref |
 |---|---|
-| Product source frozen for release | `release/golden-vnext-20260825` |
-| Active deployment runbook | `COOLIFY_DEPLOY_NOW.md` |
-| Deployment source of truth | `docs/DEPLOYMENT_SOURCE_OF_TRUTH.md` |
-| Go-live checklist | `OPS_GO_LIVE_CHECKLIST.md` |
-| Native release guide | `release/EAS_BUILD.md` |
-| Root compile gate | `npm run build` |
-| Package manager | `pnpm@11.9.0` |
+| Last repeatedly green stable control | `bancoboomstor@a3db5bd8c3edd060d35078aefeec709297abbad9` |
+| Current broad Product tree | `main@5c330bb8ab332be207bc39d9375c7434fd0ac1dd` |
+| Current P0 receiving candidate | `integration/p0-reconciliation-20260824@a4ea3a077c6d3f7354401085dab6f12a9d3b683a` |
+| Preserved release-control comparison candidate | `release/golden-vnext-20260825` |
 
-`main` may contain later research or accepted development, but it is not a
-floating deployment source. The golden release branch is not automatically
-updated from `main`. A new Product delta may enter golden only when an actual
-blocker is reproduced on the exact golden SHA and the bounded correction is
-independently reviewed.
+These refs are comparison inputs. None is automatically the final release base.
+Age, branch name, commit count, report volume and a historical green badge do not
+decide the winner.
 
-Do not work on or deploy `canonical/vnext-assembly`. Do not merge or cherry-pick
-a historical branch wholesale. Do not configure Coolify, EAS or a local release
-checkout from `bancoboomstor`, `banco-with-wael`, `bancoo`, `bancoboom`,
-`aws-virgen` or another clone.
+## Directly proven current reconciliation facts
+
+- `app/_layout.tsx` is byte-identical between current main and PR #100; its Auth
+  session-handler integration is not missing from main.
+- `MapPinPicker.tsx` is byte-identical between current main and PR #100.
+- PR #100 `MessageOutboxContext.tsx` contains account-deletion terminal-purge
+  fences on enqueue, queued persistence, retry and discard that current main and
+  the preserved candidate do not contain byte-identically.
+- PR #100 `custom-fetch.ts` captures auth-failure session/generation provenance
+  before asynchronous token acquisition and rejects stale ACCOUNT_DELETED
+  responses; current main and the preserved candidate do not contain that exact
+  request snapshot.
+- Current-main `SearchResultsMap.tsx` contains later generated-page source-epoch,
+  stale-publication and cache-rotation authority beyond PR #100's earlier
+  bootstrap-only implementation. Selecting PR #100 wholesale would regress it.
+- Android notification-icon source and EAS release hardening exist on the
+  preserved comparison candidate, but this does not make its Product tree
+  complete.
+
+## Required base-selection process
+
+Before any Product repair, build a path-and-capability matrix across the exact
+comparison refs. Every differing Product path must receive one classification:
+
+- `BYTE_IDENTICAL`
+- `CURRENT_SUPERSEDES`
+- `RECEIVER_ONLY_ACCEPTED`
+- `STABLE_ONLY_VALID`
+- `REGRESSED_IN_CURRENT`
+- `TEST_OR_AUDIT_ONLY`
+- `UNKNOWN_RUNTIME`
+
+For every non-identical Product path, trace the producer, persistence/API
+boundary, mounted consumer, focused tests and later modifying authority. A Git
+ancestry difference alone is not loss proof. A report or PR body alone is not
+acceptance proof.
+
+If necessary, construct two immutable candidates:
+
+1. stable control plus only proven current-only deltas;
+2. current receiver plus only proven stable-only/restoration deltas.
+
+Run the same exact build, disposable-DB, Expo, mounted render, physical-device,
+Maps, Messenger, header, provider and rollback matrix against both. Select the
+smaller complete reproducibly green candidate. Do not combine by whole-branch
+merge or full-file historical restore.
+
+## Current Product and release lanes
+
+The FI account-entry boundary is source-proven, but it is not the only open
+Product/reconciliation item. It remains on Product hold until the lossless base
+is selected and its RED contract is rebound to that exact SHA.
+
+Other current evidence that must be reconciled rather than silently dropped
+includes:
+
+- account-deletion and Message Outbox terminal fencing;
+- stale Auth request/session provenance;
+- native and web Maps source-epoch/bootstrap behavior;
+- CAR owner-visible header/dock completeness;
+- map currency authority;
+- privacy/account-deletion retention and post-tombstone writers;
+- notification/outbox lifecycle and provider/device acceptance.
+
+Separate Product-source defects from execution and release blockers. The
+following are not permission for Product rewrites:
+
+- live database identity and migration-data postconditions remain unverified;
+- the only tag-triggered AWS workflow targets an unratified incomplete stack;
+- Coolify, Clerk, storage, push/email, Paymob, DNS, EAS signing, store submission,
+  backup/restore and physical-device journeys remain external/runtime gates;
+- hosted CI badges without executed steps and logs are non-evidence.
 
 ## Session opening protocol
 
-Before changing any file or interpreting a failure:
+Before changing a file or interpreting a failure:
 
-1. Confirm the Git remote identifies `bancoboom-v-next-`.
-2. Record the branch, exact HEAD and `git status --short --branch`.
-3. Confirm `pnpm --version` is `11.9.0`; use Corepack when necessary.
-4. Run `pnpm run workspace:verify` from the repository root.
-5. Read the active release authorities above before reading historical reports.
-6. Run `node scripts/guard-quality-audit.mjs` before treating any guard failure
-   as a Product defect.
-7. Trace the real producer, persistence/API boundary and mounted consumer before
-   authorizing a fix.
+1. record repository, branch, exact HEAD and `git status --short --branch`;
+2. confirm `pnpm --version` is exactly `11.9.0`;
+3. run `pnpm run workspace:verify` from the one authoritative worktree;
+4. read this hold and the newest binding coordination comment;
+5. run `node scripts/guard-quality-audit.mjs` before believing a guard failure;
+6. compare final trees and blobs, not only ancestry or report prose;
+7. reproduce behavior before authorizing a Product change;
+8. write `UNDETERMINED` when runtime or external evidence is missing.
 
-If evidence is missing, record `UNDETERMINED`. Never convert an unexecuted gate,
-a red badge without steps/logs, a report title, an agent statement, a literal
-string mismatch, a filename change or a path typo into a Product defect.
+## Writer and safety law
 
-## Guard and audit quality law
-
-A static guard is useful only when it protects a stable contract such as an API
-field, persisted schema value, route contract, accessibility identifier or
-required configuration. A guard that pins an incidental workflow label,
-function name, variable name, comment, whitespace or implementation spelling is
-not release authority.
-
-For every failing guard:
-
-1. classify it with `guard-quality-audit.mjs`;
-2. inspect the current environment and exact source;
-3. reproduce the protected behavior through a mounted, integration or runtime
-   check when possible;
-4. fix Product only when behavior is actually wrong;
-5. otherwise correct or retire the guard in a separate bounded change.
-
-Do not open a new audit/RED branch merely because another branch exists or an old
-report says a capability is missing. Existing audit and test branches remain
-forensic evidence unless their behavior reproduces on the exact golden SHA.
-
-## Monorepo and release topology
-
-BANCO is one production system with separate release mechanisms:
-
-- `artifacts/api-server`: Node/Express API and in-process jobs — Coolify `api`.
-- `artifacts/banco-website`: canonical Next consumer/marketing — Coolify
-  `banco-website`.
-- `artifacts/landing`, `artifacts/dealer-os`, `artifacts/admin-os`: built into
-  Nginx service `web`, served at `/`, `/market/` and `/admin/`.
-- `artifacts/banco-web`: optional frozen Next twin, profile
-  `legacy-banco-web`; off by default.
-- `artifacts/banco-mobile`: original Expo SDK 54 / React Native native app — EAS
-  Android/iOS, never a Coolify container.
-- `artifacts/mockup-sandbox`: development workspace only; never deployed.
-- `lib/*`: shared DB, API client, taxonomy, search and integration contracts.
-
-Release gates run from the monorepo root so shared packages and all consumers are
-verified together. Package-level success is not a monorepo release certificate.
-
-## Account architecture — binding owner law
-
-The server-authoritative account types are exactly:
-
-1. `individual`
-2. `dealer`
-3. `company`
-4. `financial_institution`
-
-The general account/signup surface presents the first three only. Bank and
-financing-company/funder are regulated subtypes under one
-`financial_institution` role. A new FI journey begins from the Banks & Funders
-mini-app and preserves its FI intent through sign-up, email verification, MFA,
-password reset and SSO into FI onboarding.
-
-“Separate FI account path” means separate onboarding, KYC, subscription,
-permissions, workspace and inbox authority. It does not authorize a second Clerk
-identity or a duplicate BANCO user row for the same principal.
-
-The FI entry-boundary defect is currently the only authorized Product correction
-before golden build/device acceptance. Its acceptance must be mounted and
-behavioral; source-regex/string tests may locate the defect but cannot certify the
-journey.
-
-## Protected Product foundations
-
-Preserve unless an exact-golden behavioral failure proves otherwise:
-
-- native mini-app and section isolation;
-- section headers and shared host boundaries;
-- Search criteria, filters, saved search, Map/List and results-count authority;
-- Maps clustering, viewport sequencing, draw area, Near Me, selection and
-  provider attribution;
-- Messenger idempotency, durable outbox, read/unread and private-media access;
-- Clerk session generation and account-deletion terminality;
-- API/DB migration authority, payment idempotency and notification durability;
-- AR/EN, RTL/LTR, accessibility, Safe Area and Android/iOS navigation behavior.
-
-Do not introduce a second state authority, duplicate auth flow, global filter
-store, mega-component, broad formatter pass, generated-client hand edit, schema
-push, automatic production migration or provider rewrite to make a gate green.
-
-## Writer and branch law
-
+- No Product writer starts from the preserved golden branch while this hold is
+  active.
 - One bounded writer owns a shared host at a time.
-- Start every Product candidate from the exact current golden SHA after a fresh
-  collision check.
-- Modify the smallest semantic hunk and stop for review.
-- Shared manifests, package scripts and generated contracts are semantic-union
-  surfaces; never select one feature branch's entire file blindly.
-- Do not force-push, reset, stash, delete branches or delete historical records
-  as part of Product closure.
-- Do not sync moving `main` into golden during acceptance.
-- Do not deploy, submit stores, rotate secrets or touch production data without
-  explicit owner authorization and exact-SHA evidence.
+- Never merge or cherry-pick an old branch wholesale.
+- Never replace a current shared file with an old full-file blob.
+- Shared manifests, generated contracts and package files require semantic union.
+- Never force-push, reset, stash, delete branches or delete historical evidence.
+- Never use a Replit-local tree as source authority.
+- Never run production baseline/migrate, deploy, tag, submit stores, rotate
+  secrets or alter external providers without exact-SHA acceptance and explicit
+  Owner authorization.
 
-## Release evidence
+## Release boundary
 
-A golden candidate is promoted only when one exact SHA has:
+A final candidate exists only when one exact SHA has:
 
-1. clean frozen install, workspace verification, whole-workspace typecheck,
-   tests and root build;
-2. isolated PostgreSQL lifecycle, committed migration and API-suite proof;
-3. Docker/Coolify image build, API readiness and public-origin smoke;
-4. Mobile tests, Expo export and EAS build IDs bound to the same Git SHA;
-5. physical Android/iOS owner journeys for headers, Maps, Messenger, accounts,
-   media, notifications, RTL/LTR and navigation;
-6. backup, rollback and artifact provenance.
+1. lossless semantic-union proof;
+2. frozen install, workspace verification, whole-workspace typecheck and root
+   build;
+3. full Mobile and API suites on an isolated PostgreSQL lifecycle;
+4. committed migration and data-postcondition proof;
+5. Docker/Coolify image, readiness and public-origin smoke;
+6. EAS Android/iOS build IDs tied to the same Git SHA;
+7. physical-device owner journeys for headers, Maps, Messenger, accounts, media,
+   notifications, AR/EN, RTL/LTR and navigation;
+8. backup, restore and rollback evidence.
 
-Anything not executed is `UNDETERMINED`. The final compile command remains:
+Anything not executed is `UNDETERMINED`. Production remains `NO-GO`.
 
-```bash
-npm run build
-```
+Run npm run build only after an exact lossless candidate exists.
