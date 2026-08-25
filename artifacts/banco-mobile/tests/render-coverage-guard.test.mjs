@@ -105,6 +105,14 @@ const RENDER_CRITICAL = [
     claim: "the native WebView map fails closed on bootstrap error, reaches ready honestly, and keeps tile failure degraded without reviving failed bootstrap",
   },
   {
+    source: "components/search/SearchResultsMap.tsx",
+    symbol: "SearchResultsMap",
+    suite: "tests/render/SearchResultsMap.bootstrap-source-epoch.red.test.tsx",
+    staticGuard: "tests/map-bootstrap-fail-closed.test.mjs",
+    claim:
+      "the native WebView map starts a fresh bootstrap authority epoch whenever its generated page source changes without requiring a marker-set remount",
+  },
+  {
     source: "components/MapPinPicker.tsx",
     symbol: "MapPinPicker",
     suite: "tests/render/MapPinPicker.render.test.tsx",

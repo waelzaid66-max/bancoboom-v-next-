@@ -1860,9 +1860,23 @@ const CHECKS = [
       // Both halves matter: claiming a sequence before the await orders nothing
       // on its own, and comparing against a counter that is never incremented
       // always passes.
+      //
+      // The comparison used to be required as the SOLE condition of its `if`.
+      // Measured 2026-08-25: the source-epoch work makes the guard compound —
+      //
+      //   if (activeSourceEpochRef.current !== sourceEpoch ||
+      //       seq !== vpSeqRef.current) return;
+      //
+      // which returns in every case the single condition did, and more. The old
+      // pattern failed that strictly stronger form: a correct refactor breaking
+      // a guard is the address-pinned failure mode, not a defect.
+      //
+      // So the comparison is now required to guard a `return` rather than to be
+      // the whole condition. Deleting it still fails — proven by mutation both
+      // ways before this was relaxed.
       return (
         /const\s+seq\s*=\s*\+\+vpSeqRef\.current/.test(code) &&
-        /if\s*\(\s*seq\s*!==\s*vpSeqRef\.current\s*\)\s*return/.test(code)
+        /if\s*\([^)]*\bseq\s*!==\s*vpSeqRef\.current\b[^)]*\)\s*return/.test(code)
       );
     },
     why: "A slow cluster response must never repaint the map for a viewport the user has already left",

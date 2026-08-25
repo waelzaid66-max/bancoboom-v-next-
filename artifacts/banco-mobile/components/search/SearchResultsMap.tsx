@@ -1,5 +1,12 @@
 import { FeedItem, getMapClusters } from "@workspace/api-client-react";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ActivityIndicator, Alert, Linking, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
@@ -157,6 +164,12 @@ export function SearchResultsMap({
     ],
   );
 
+  // Every generated document owns a unique bridge authority token. The token is
+  // deliberately not derived from the HTML string alone: A -> B -> A must still
+  // reject a delayed callback from the first A document.
+  const sourceEpoch = useMemo(() => Symbol("map-source-epoch"), [html, sig]);
+  const activeSourceEpochRef = useRef(sourceEpoch);
+
   // Latest items, read inside the message handler without re-subscribing.
   const itemsRef = useRef<FeedItem[]>(items);
   itemsRef.current = items;
@@ -180,15 +193,31 @@ export function SearchResultsMap({
     [],
   );
 
-  // The WebView is keyed by `sig`, so a changed mapped-set reloads it — but this
-  // component does not remount, so reset load/selection/count ourselves and
-  // invalidate any in-flight cluster fetch from the previous page.
-  useEffect(() => {
+  // The generated page can change even when the marker `sig` does not (theme,
+  // market, near-me, language, safe-area clearance). Rotate all page-specific
+  // authority without keying/remounting the WebView on the raw HTML payload.
+  useLayoutEffect(() => {
+    activeSourceEpochRef.current = sourceEpoch;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    lastViewportRef.current = null;
+    tileFailureShownRef.current = false;
+    // The cluster cache is keyed on (criteriaSig, viewport) and carries no
+    // source identity, so an entry computed for the PREVIOUS marker set is a
+    // cache hit for the new one at the same viewport. The publish guard cannot
+    // catch that: it compares the epoch of the CALLER, and after a rotation the
+    // caller is the current epoch — it is the DATA that is stale.
+    //
+    // Every other page-specific authority is rotated here; this was the one that
+    // was not.
+    clusterCacheRef.current.clear();
     setBootstrapState("loading");
     setSelectedId(null);
     setServerTotal(null);
     vpSeqRef.current++;
-  }, [sig]);
+  }, [sourceEpoch]);
 
   /**
    * The ONE place clusters reach the map.
@@ -203,7 +232,12 @@ export function SearchResultsMap({
    * line, against `lib/geoArea.ts`, where the maths has tests.
    */
   const publish = useCallback(
-    (clusters: MapClusterMarker[], total: number) => {
+    (
+      epoch: symbol,
+      clusters: MapClusterMarker[],
+      total: number,
+    ) => {
+      if (activeSourceEpochRef.current !== epoch) return;
       const shape = areaRef.current;
       const shown = filterByArea(clusters, shape);
       setServerTotal(total);
@@ -219,17 +253,21 @@ export function SearchResultsMap({
 
   const fetchClusters = useCallback(
     async (viewport: MapViewport) => {
+      if (activeSourceEpochRef.current !== sourceEpoch) return;
       const seq = ++vpSeqRef.current;
       const cacheKey = clusterCacheKey(criteriaSig, viewport);
       const cached = clusterCacheRef.current.get(cacheKey);
       if (cached) {
-        publish(cached.clusters, cached.total);
+        publish(sourceEpoch, cached.clusters, cached.total);
         return;
       }
 
       try {
         const res = await getMapClusters(buildMapClusterParams(criteria, viewport));
-        if (seq !== vpSeqRef.current) return;
+        if (
+          activeSourceEpochRef.current !== sourceEpoch ||
+          seq !== vpSeqRef.current
+        ) return;
         const clusters = res.data ?? [];
         const priceById = new Map(
           itemsRef.current.map((i) => [i.id, i.price_display]),
@@ -274,12 +312,12 @@ export function SearchResultsMap({
           const oldest = cache.keys().next().value;
           if (oldest !== undefined) cache.delete(oldest);
         }
-        publish(enriched, total);
+        publish(sourceEpoch, enriched, total);
       } catch {
         // Leave the current markers in place; the map degrades to the loaded page.
       }
     },
-    [criteria, criteriaSig],
+    [criteria, criteriaSig, publish, sourceEpoch],
   );
 
   const scheduleFetchClusters = useCallback(
@@ -326,18 +364,21 @@ export function SearchResultsMap({
 
   const onMessage = useCallback(
     (event: WebViewMessageEvent) => {
+      // React Native can deliver an already-queued callback after `source` has
+      // changed. Reject the superseded document before parsing or any side effect.
+      if (activeSourceEpochRef.current !== sourceEpoch) return;
+
       try {
         const msg = JSON.parse(event.nativeEvent.data) as MapBridgeMessage;
         if (msg.type === "ready") {
-          setBootstrapState("ready");
+          setBootstrapState((current) => (current === "failed" ? current : "ready"));
         } else if (msg.type === "error") {
           // Leaflet/bootstrap failure is terminal for this WebView instance.
           // Fail closed: do not expose overlay controls over a dead/grey map.
           setBootstrapState("failed");
         } else if (msg.type === "tile_error") {
-          // A tile failure is a degraded ready map, not a bootstrap failure.
-          // Never let it revive an instance that already failed bootstrap.
-          setBootstrapState((current) => (current === "failed" ? current : "ready"));
+          // A tile failure only degrades a map that already completed bootstrap.
+          // It cannot establish readiness by itself or revive a failed instance.
           if (!tileFailureShownRef.current) {
             tileFailureShownRef.current = true;
             Alert.alert(
@@ -407,7 +448,7 @@ export function SearchResultsMap({
         // Ignore malformed bridge messages.
       }
     },
-    [scheduleFetchClusters, onOpenListingId, t],
+    [sourceEpoch, scheduleFetchClusters, onOpenListingId, t],
   );
 
   const selected = useMemo(
