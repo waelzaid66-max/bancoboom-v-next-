@@ -67,7 +67,12 @@ TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/banco-eas.XXXXXX")"
 cleanup() {
   rm -rf "$TMP_DIR"
 }
-trap cleanup EXIT INT TERM HUP
+on_signal() {
+  trap - INT TERM HUP
+  exit 130
+}
+trap cleanup EXIT
+trap on_signal INT TERM HUP
 
 log() { printf 'BANCO_EAS: %s\n' "$*"; }
 
@@ -76,13 +81,30 @@ log "branch=${GIT_BRANCH:-detached}"
 log "git_sha=$GIT_SHA"
 log "profile=$PROFILE platform=$PLATFORM action=$ACTION"
 
-pnpm run mobile:preflight
 pnpm run mobile:verify
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "BANCO_EAS_INVALID: mobile verification modified tracked files" >&2
+  git status --short >&2
+  exit 1
+fi
+
+if [[ "$ACTION" == "build-and-submit" && ( "$PLATFORM" == "ios" || "$PLATFORM" == "all" ) ]]; then
+  node - "$MOBILE_DIR/eas.json" <<'NODE'
+const fs = require("node:fs");
+const config = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const ascAppId = config?.submit?.production?.ios?.ascAppId;
+if (typeof ascAppId !== "string" || ascAppId.trim() === "") {
+  console.error("BANCO_EAS_INVALID: submit.production.ios.ascAppId must be configured before non-interactive iOS submission");
+  process.exit(1);
+}
+NODE
+fi
 
 cd "$MOBILE_DIR"
 EAS=(pnpm exec eas)
 
-ACCOUNT="$(${EAS[@]} whoami --non-interactive 2>/dev/null | tail -n 1)"
+ACCOUNT="$("${EAS[@]}" whoami --non-interactive 2>/dev/null | tail -n 1)"
 [[ -n "$ACCOUNT" ]] || {
   echo "BANCO_EAS_INVALID: Expo authentication failed" >&2
   exit 1
@@ -157,18 +179,6 @@ NODE
   log "verified_build platform=$BUILD_PLATFORM id=$VERIFIED_ID git_sha=$GIT_SHA"
 
   if [[ "$ACTION" == "build-and-submit" ]]; then
-    if [[ "$BUILD_PLATFORM" == "ios" ]]; then
-      node - "$MOBILE_DIR/eas.json" <<'NODE'
-const fs = require("node:fs");
-const config = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-const ascAppId = config?.submit?.production?.ios?.ascAppId;
-if (typeof ascAppId !== "string" || ascAppId.trim() === "") {
-  console.error("BANCO_EAS_INVALID: submit.production.ios.ascAppId must be configured before non-interactive iOS submission");
-  process.exit(1);
-}
-NODE
-    fi
-
     "${EAS[@]}" submit \
       --profile production \
       --platform "$BUILD_PLATFORM" \
