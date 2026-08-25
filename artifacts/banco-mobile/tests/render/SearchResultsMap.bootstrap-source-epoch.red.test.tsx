@@ -4,6 +4,7 @@ import { act, render } from "@testing-library/react-native";
 import { SearchResultsMap } from "@/components/search/SearchResultsMap";
 
 const mockGetMapClusters = jest.fn();
+const mockInjectJavaScript = jest.fn();
 let mockLatestWebViewProps: Record<string, any> = {};
 
 jest.mock("@workspace/api-client-react", () => ({
@@ -14,10 +15,13 @@ jest.mock("react-native-webview", () => {
   const ReactRuntime = jest.requireActual<typeof import("react")>("react");
   const Native = jest.requireActual<typeof import("react-native")>("react-native");
   return {
-    WebView: (props: Record<string, unknown>) => {
+    WebView: ReactRuntime.forwardRef((props: Record<string, unknown>, ref) => {
       mockLatestWebViewProps = props;
+      ReactRuntime.useImperativeHandle(ref, () => ({
+        injectJavaScript: mockInjectJavaScript,
+      }));
       return ReactRuntime.createElement(Native.View, { testID: "mock-webview" });
-    },
+    }),
   };
 });
 
@@ -148,6 +152,12 @@ const ITEM = {
   price_display: "EGP 100",
 } as any;
 
+const ITEM_B = {
+  ...ITEM,
+  coordinates: { lat: 30.15, lng: 31.25 },
+  price_display: "EGP 200",
+} as any;
+
 const onOpenListing = jest.fn();
 const onOpenListingId = jest.fn();
 const onSave = jest.fn();
@@ -155,10 +165,10 @@ const isSaved = jest.fn(() => false);
 
 type BridgeHandler = (event: { nativeEvent: { data: string } }) => void;
 
-function mapElement(criteria: any) {
+function mapElement(criteria: any, items = [ITEM]) {
   return (
     <SearchResultsMap
-      items={[ITEM]}
+      items={items}
       criteria={criteria}
       onOpenListing={onOpenListing}
       onOpenListingId={onOpenListingId}
@@ -192,6 +202,7 @@ describe("SearchResultsMap bootstrap source epochs", () => {
   beforeEach(() => {
     mockLatestWebViewProps = {};
     mockGetMapClusters.mockReset();
+    mockInjectJavaScript.mockReset();
     onOpenListing.mockReset();
     onOpenListingId.mockReset();
     onSave.mockReset();
@@ -264,5 +275,52 @@ describe("SearchResultsMap bootstrap source epochs", () => {
     sendBridge(currentBridgeHandler(), { type: "select", id: "current-epoch-off-page" });
     expect(onOpenListingId).toHaveBeenCalledTimes(1);
     expect(onOpenListingId).toHaveBeenCalledWith("current-epoch-off-page");
+  });
+
+  it("RED: a new mapped-result epoch cannot publish stale item-derived cluster enrichment", async () => {
+    jest.useFakeTimers();
+    try {
+      mockGetMapClusters.mockResolvedValue({
+        data: [
+          {
+            lat: 30.1,
+            lng: 31.2,
+            count: 1,
+            listing_id: ITEM.id,
+          },
+        ],
+      });
+
+      const viewport = {
+        type: "viewport",
+        bounds: { min_lat: 29.9, max_lat: 30.3, min_lng: 31.0, max_lng: 31.4 },
+        zoom: 10,
+      };
+
+      const view = render(mapElement(CRITERIA, [ITEM]));
+      bridge("ready");
+      sendBridge(currentBridgeHandler(), viewport);
+      await act(async () => {
+        jest.runOnlyPendingTimers();
+        await Promise.resolve();
+      });
+      expect(mockGetMapClusters).toHaveBeenCalledTimes(1);
+      expect(mockInjectJavaScript.mock.calls.flat().join("\n")).toContain("EGP 100");
+
+      view.rerender(mapElement(CRITERIA, [ITEM_B]));
+      bridge("ready");
+      mockInjectJavaScript.mockClear();
+      sendBridge(currentBridgeHandler(), viewport);
+      await act(async () => {
+        jest.runOnlyPendingTimers();
+        await Promise.resolve();
+      });
+
+      const currentEpochInjection = mockInjectJavaScript.mock.calls.flat().join("\n");
+      expect(currentEpochInjection).not.toContain("EGP 100");
+      expect(currentEpochInjection).toContain("EGP 200");
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
