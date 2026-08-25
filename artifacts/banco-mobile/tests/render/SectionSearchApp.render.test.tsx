@@ -248,6 +248,10 @@ jest.mock("@/components/search/car/CarsHomeHeader", () => {
           testID: "mock-car-open-filters",
           onPress: props.onOpenFilters as jest.Mock,
         }),
+        ReactRuntime.createElement(Native.Pressable, {
+          testID: "mock-car-open-map",
+          onPress: props.onOpenMap as jest.Mock,
+        }),
       ),
   };
 });
@@ -611,7 +615,7 @@ describe("SectionSearchApp", () => {
     expect(view.getByTestId("mock-car-pinned")).toBeTruthy();
     expect(view.getByTestId("mock-results-surface")).toBeTruthy();
 
-    fireEvent.press(view.getByTestId("section-map-toggle"));
+    fireEvent.press(view.getByTestId("mock-car-open-map"));
     await waitFor(() =>
       expect(view.queryByTestId("mock-search-results-map")).toBeNull(),
     );

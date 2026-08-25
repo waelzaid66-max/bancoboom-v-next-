@@ -1,14 +1,12 @@
 /**
- * Renderer proof for the strongest historical Cars header.
+ * Renderer proof for the CAR B-OOM unified native header.
  *
- * Commit 310028d fixed a fake collapse: the hero and its plate had to return
- * their real height to the results surface, not merely fade. The static guard
- * protects the arithmetic in source; this suite mounts the current component,
- * drives the shared scroll value, and proves the rendered geometry changes
- * while the buyer's controls remain reachable.
+ * The hero and browse-context bands must return real height to the results/map
+ * viewport; primary search/map-list/save/filter actions remain reachable.
  */
 import React from "react";
 import { fireEvent, render } from "@testing-library/react-native";
+import { View } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
 
 import {
@@ -173,13 +171,15 @@ describe("CarsHomeHeader", () => {
     mockIsRTL = false;
   });
 
-  it("mounts the full current identity and every pinned browse control", () => {
+  it("mounts the identity and every primary native browse control", () => {
     const view = render(header());
 
     for (const id of [
       "cars-home-header",
       "cars-boom-brand",
       "cars-hero",
+      "cars-unified-dock",
+      "cars-dock-extras",
       "section-search-open",
       "cars-header-map",
       "section-save-search",
@@ -213,36 +213,84 @@ describe("CarsHomeHeader", () => {
     expect(callbacks.onOpenProfile).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps search and filters reachable when optional inventory bands are absent", () => {
+  it("keeps primary actions reachable without optional inventory bands", () => {
     const view = render(header({ categories: [], stats: [] }));
 
     expect(view.queryByTestId("cars-category-strip")).toBeNull();
     expect(view.queryByTestId("cars-stats-strip")).toBeNull();
+    expect(view.getByTestId("cars-unified-dock")).toBeTruthy();
     expect(view.getByTestId("section-search-open")).toBeTruthy();
     expect(view.getByTestId("section-filter-toggle")).toBeTruthy();
     expect(view.getByTestId("cars-header-map")).toBeTruthy();
   });
 
-  it("reclaims the real hero height at the historical collapse threshold", () => {
+  it("contains parent-owned CAR axes inside the one dock", () => {
+    const controlsSlot = <View testID="parent-car-axes" />;
+    const view = render(header({ controlsSlot }));
+
+    expect(view.getByTestId("cars-controls-slot")).toBeTruthy();
+    expect(view.getByTestId("cars-unified-dock")).toContainElement(
+      view.getByTestId("parent-car-axes"),
+    );
+  });
+
+  it("reclaims hero and browse-context height on scroll", () => {
     const scrollY = { value: 0 } as SharedValue<number>;
-    const view = render(header({ scrollY }));
+    const controlsSlot = <View testID="parent-car-axes" />;
+    const view = render(header({ scrollY, controlsSlot }));
 
     expect(view.getByTestId("cars-hero")).toHaveStyle({
       height: 244,
       opacity: 1,
       marginBottom: 12,
     });
+    expect(view.getByTestId("cars-dock-extras")).toHaveStyle({
+      opacity: 1,
+      maxHeight: 300,
+      marginTop: 7,
+    });
+
     scrollY.value = 96;
-    view.rerender(header({ scrollY }));
+    view.rerender(header({ scrollY, controlsSlot }));
 
     expect(view.getByTestId("cars-hero")).toHaveStyle({
       height: 0,
       opacity: 0,
       marginBottom: 0,
     });
+    expect(view.getByTestId("cars-dock-extras")).toHaveStyle({
+      opacity: 0,
+      maxHeight: 0,
+      marginTop: 0,
+    });
     expect(view.getByTestId("section-search-open")).toBeTruthy();
     expect(view.getByTestId("section-filter-toggle")).toBeTruthy();
-    expect(view.getByTestId("cars-category-strip")).toBeTruthy();
+    expect(view.getByTestId("cars-header-map")).toBeTruthy();
+    expect(view.getByTestId("section-save-search")).toBeTruthy();
+  });
+
+  it("forces compact map state and turns the map hit into a list affordance", () => {
+    const controlsSlot = <View testID="parent-car-axes" />;
+    const view = render(
+      header({ compact: true, mapActive: true, controlsSlot }),
+    );
+
+    expect(view.getByTestId("cars-hero")).toHaveStyle({
+      height: 0,
+      opacity: 0,
+      marginBottom: 0,
+    });
+    expect(view.getByTestId("cars-dock-extras")).toHaveStyle({
+      opacity: 0,
+      maxHeight: 0,
+      marginTop: 0,
+    });
+    expect(view.getByTestId("icon-list")).toBeTruthy();
+    expect(view.getByTestId("cars-header-map").props.accessibilityState).toMatchObject({
+      selected: true,
+    });
+    expect(view.getByTestId("section-search-open")).toBeTruthy();
+    expect(view.getByTestId("section-filter-toggle")).toBeTruthy();
   });
 
   it("uses the logical back direction in Arabic", () => {
