@@ -57,7 +57,9 @@ requireValue(easConfig.cli?.appVersionSource === "local", "EAS appVersionSource 
 requireValue(easConfig.build?.production?.android?.buildType === "app-bundle", "production Android build must be an app-bundle");
 requireValue(easConfig.build?.production?.android?.autoIncrement === true, "production Android version must auto-increment");
 requireValue(easConfig.build?.production?.ios?.autoIncrement === true, "production iOS build number must auto-increment");
-requireValue(!profileHasEnv(easConfig, "production", "EAS_NO_VCS"), "production must not inherit EAS_NO_VCS");
+for (const profileName of Object.keys(easConfig.build ?? {})) {
+  requireValue(!profileHasEnv(easConfig, profileName, "EAS_NO_VCS"), `${profileName} must not inherit EAS_NO_VCS`);
+}
 requireValue(!easConfig.submit?.production?.android?.serviceAccountKeyPath, "Android submit credentials must not be coupled to a repo-local file path");
 
 for (const [key, value] of Object.entries(easConfig.submit?.production?.ios ?? {})) {
