@@ -12,9 +12,6 @@
       "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
-      "env": {
-        "EAS_NO_VCS": "1"
-      },
       "android": {
         "buildType": "apk"
       },
@@ -25,9 +22,6 @@
     "simulator": {
       "extends": "base",
       "distribution": "internal",
-      "env": {
-        "EAS_NO_VCS": "1"
-      },
       "ios": {
         "simulator": true
       },
@@ -39,9 +33,6 @@
       "extends": "base",
       "environment": "production",
       "distribution": "internal",
-      "env": {
-        "EAS_NO_VCS": "1"
-      },
       "android": {
         "buildType": "apk"
       },
@@ -64,14 +55,9 @@
   "submit": {
     "production": {
       "android": {
-        "serviceAccountKeyPath": "./google-service-account.json",
         "track": "internal"
       },
-      "ios": {
-        "appleId": "",
-        "ascAppId": "",
-        "appleTeamId": ""
-      }
+      "ios": {}
     }
   }
 }
