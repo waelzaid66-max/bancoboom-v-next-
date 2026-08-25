@@ -123,7 +123,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/banco-logo.png",
+          "icon": "./assets/images/notification-icon.png",
           "color": "#000000"
         }
       ],
@@ -140,8 +140,8 @@
         "expo-build-properties",
         {
           "android": {
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
             "packagingOptions": {
               "exclude": [
                 "META-INF/versions/9/OSGI-INF/MANIFEST.MF"

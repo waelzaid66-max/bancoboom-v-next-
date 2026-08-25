@@ -21,6 +21,7 @@ import type { WebViewMessageEvent } from "react-native-webview";
 import { LEAFLET_CSS, LEAFLET_JS } from "@/components/search/mapVendorInline";
 
 type Pin = { lat: number; lng: number };
+type MapPinBootstrapState = "loading" | "ready" | "failed";
 
 type BridgeMsg =
   | { type: "ready" }
@@ -112,7 +113,8 @@ export function MapPinPicker({
   const insets = useSafeAreaInsets();
   const rowDir = isRTL ? "row-reverse" : "row";
   const [center, setCenter] = useState<Pin | null>(initial ?? null);
-  const [ready, setReady] = useState(false);
+  const [bootstrapState, setBootstrapState] =
+    useState<MapPinBootstrapState>("loading");
 
   const framing = useMemo(() => {
     if (initial) return { ...initial, zoom: 15 };
@@ -124,19 +126,26 @@ export function MapPinPicker({
 
   useEffect(() => {
     if (!visible) return;
-    setReady(false);
+    setBootstrapState("loading");
     setCenter(initial ?? null);
-  }, [visible, initial]);
+  }, [visible, initial, marketCountry]);
 
   const onMessage = (e: WebViewMessageEvent) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data) as BridgeMsg;
-      if (msg.type === "ready") setReady(true);
+      if (msg.type === "ready") {
+        setBootstrapState((current) =>
+          current === "failed" ? current : "ready",
+        );
+      }
+      if (msg.type === "error") setBootstrapState("failed");
       if (msg.type === "center") setCenter({ lat: msg.lat, lng: msg.lng });
     } catch {
       /* ignore malformed */
     }
   };
+
+  const canConfirm = bootstrapState === "ready" && center !== null;
 
   return (
     <Modal
@@ -175,9 +184,27 @@ export function MapPinPicker({
           </AppText>
 
           <View style={styles.mapWrap}>
-            {!ready ? (
+            {bootstrapState === "loading" ? (
               <View style={styles.loading}>
                 <ActivityIndicator color={ACCENT} />
+              </View>
+            ) : null}
+            {bootstrapState === "failed" ? (
+              <View style={[styles.failure, { backgroundColor: colors.background }]}> 
+                <AppText style={[styles.failureTitle, { color: colors.foreground }]}>
+                  {t("search.mapUnavailableTitle")}
+                </AppText>
+                <AppText
+                  style={[
+                    styles.failureBody,
+                    {
+                      color: colors.mutedForeground,
+                      textAlign: isRTL ? "right" : "left",
+                    },
+                  ]}
+                >
+                  {t("search.mapUnavailableBody")}
+                </AppText>
               </View>
             ) : null}
             {visible ? (
@@ -197,15 +224,15 @@ export function MapPinPicker({
 
           <Pressable
             onPress={() => {
-              if (!center) return;
+              if (!canConfirm || !center) return;
               onConfirm(center);
             }}
-            disabled={!center}
+            disabled={!canConfirm}
             style={[
               styles.confirm,
               {
-                backgroundColor: center ? ACCENT : colors.secondary,
-                opacity: center ? 1 : 0.5,
+                backgroundColor: canConfirm ? ACCENT : colors.secondary,
+                opacity: canConfirm ? 1 : 0.5,
               },
             ]}
             testID="create-map-pin-confirm"
@@ -266,6 +293,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  failure: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 3,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 28,
+  },
+  failureTitle: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+  },
+  failureBody: {
+    maxWidth: 320,
+    fontSize: 13,
+    lineHeight: 19,
   },
   confirm: {
     marginHorizontal: 16,
