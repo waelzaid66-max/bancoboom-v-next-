@@ -8,12 +8,32 @@
 # denominator, in the audit's own instrument.
 #
 # Usage: run-all-packs.sh <package-dir>
+#
+# Correction #54 (2026-08-25): this tool reproduced #52 inside itself. Given a
+# RELATIVE package dir, the `require()` below threw, `mapfile` produced an empty
+# list, the loop body never ran, and `exit $failed` returned 0 — reporting
+# success having executed nothing. Two genuinely failing packs were reported as
+# "0 failed" in a published battery. A runner that can pass without running is
+# the same defect it was built to detect, so the script now resolves the path
+# itself and refuses rather than assuming.
 set -uo pipefail
-dir="$1"
+dir="$(cd "${1:?usage: run-all-packs.sh <package-dir>}" 2>/dev/null && pwd)" || {
+  echo "[REFUSED] not a directory: $1" >&2
+  exit 2
+}
+[ -f "$dir/package.json" ] || { echo "[REFUSED] no package.json in $dir" >&2; exit 2; }
+
 mapfile -t scripts < <(node -e '
   const s = require(process.argv[1] + "/package.json").scripts || {};
   for (const k of Object.keys(s)) if (/^test:/.test(k)) console.log(k);
-' "$dir")
+' "$dir") || { echo "[REFUSED] could not read scripts from $dir" >&2; exit 2; }
+
+# An empty pack list is never a pass. It means the discovery failed.
+if [ "${#scripts[@]}" -eq 0 ]; then
+  echo "[REFUSED] no test:* scripts found in $dir — refusing to report success" >&2
+  exit 2
+fi
+echo "# discovered ${#scripts[@]} test:* scripts in $dir"
 
 failed=0
 for s in "${scripts[@]}"; do
