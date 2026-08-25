@@ -16,6 +16,10 @@
 
 # ---- builder: install the api subtree, build --------------------------------
 FROM node:24-bookworm-slim AS builder
+ARG RELEASE_SHA=
+ENV RELEASE_SHA=$RELEASE_SHA
+LABEL org.opencontainers.image.revision=$RELEASE_SHA
+RUN node -e "if (!/^[0-9a-f]{40}$/i.test(process.env.RELEASE_SHA || '')) { console.error('RELEASE_SHA must be a full 40-hex Git SHA'); process.exit(1) }"
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable
@@ -37,6 +41,8 @@ RUN pnpm --filter @workspace/api-server run build
 
 # ---- runner: copy the built app + its resolved node_modules -----------------
 FROM node:24-bookworm-slim AS runner
+ARG RELEASE_SHA=
+LABEL org.opencontainers.image.revision=$RELEASE_SHA
 ENV NODE_ENV=production
 RUN apt-get update \
  && apt-get install -y --no-install-recommends tini ca-certificates \
@@ -48,12 +54,12 @@ COPY --from=builder /app/artifacts/api-server/node_modules ./artifacts/api-serve
 COPY --from=builder /app/artifacts/api-server/package.json ./artifacts/api-server/package.json
 COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
 
-# Deploy pin for /api/readyz (F1). Coolify compose passes GIT_SHA/BUILD_ID;
-# health.ts also accepts COMMIT_SHA / SOURCE_VERSION / K_REVISION at runtime.
-ARG GIT_SHA=
-ARG BUILD_ID=
-ENV GIT_SHA=$GIT_SHA \
-    BUILD_ID=$BUILD_ID
+# Single deploy identity for /api/readyz and release provenance. Compose supplies
+# mandatory RELEASE_SHA to both the builder/migrate target and this runner.
+ENV RELEASE_SHA=$RELEASE_SHA \
+    GIT_SHA=$RELEASE_SHA \
+    BUILD_ID=$RELEASE_SHA
+RUN node -e "if (!/^[0-9a-f]{40}$/i.test(process.env.RELEASE_SHA || '')) { console.error('RELEASE_SHA must be a full 40-hex Git SHA'); process.exit(1) }"
 
 # Non-root execution.
 RUN useradd -r -u 10001 -g root banco && chown -R banco:root /app

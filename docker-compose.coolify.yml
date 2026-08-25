@@ -1,13 +1,13 @@
 # BANCO — Coolify Docker Compose resource (docker-compose.coolify.yml)
 #
-# ★ START HERE: /COOLIFY_DEPLOY_NOW.md  (foolproof Coolify clicks + name map)
-# SoT repo: waelzaid66-max/bancoboomstor  ·  NEVER a pre-consolidation clone
+# ★ START HERE: /release/production/COOLIFY_RUNBOOK.md  (production authority; detailed clicks in /COOLIFY_DEPLOY_NOW.md)
+# SoT repo: waelzaid66-max/bancoboom-v-next-  ·  NEVER a historical/pre-consolidation clone
 #
 # This is the DEFINITIVE compose file for Coolify Docker Compose deployments on
 # Hostinger VPS. Point Coolify at this path: docker-compose.coolify.yml
 #
 # Quick start on Coolify:
-#   1. New Resource → Docker Compose → repo bancoboomstor
+#   1. New Resource → Docker Compose → repo bancoboom-v-next-
 #      compose file path = docker-compose.coolify.yml
 #   2. Set required env vars (see COOLIFY_DEPLOY_NOW.md) BEFORE first Deploy
 #   3. Map apex domain to service `web` port 80 (recommended single-origin)
@@ -16,15 +16,19 @@
 #   6. Start `api`, then the web surfaces after API readiness
 #
 # ─── Service ↔ Image map (DO NOT CONFUSE THESE NAMES) ────────────────────────
-#   Service          Image                    Role
-#   postgres         postgres:16              DB (internal)
-#   migrate          (profile migrate)        one-off committed migrations
-#   api              banco-api:latest         API · compose health = /api/readyz
-#                                             (Dockerfile HEALTHCHECK = /api/healthz
-#                                              is image liveness only; compose wins)
-#   banco-web        banco-web:latest         Next.js consumer
-#   banco-website    banco-website:latest     Next.js marketing/twin
-#   web              banco-web-static:latest  Nginx SPAs + /.well-known + /api proxy
+#   Service          Image                                  Role
+#   postgres         postgres:16                            DB (internal)
+#   migrate          (profile migrate)                      one-off committed migrations
+#   api              banco-api:${RELEASE_SHA}               API · compose health = /api/readyz
+#                                                           (Dockerfile HEALTHCHECK = /api/healthz
+#                                                            is image liveness only; compose wins)
+#   banco-web        banco-web:${RELEASE_SHA}               Next.js consumer
+#   banco-website    banco-website:${RELEASE_SHA}           Next.js marketing/twin
+#   web              banco-web-static:${RELEASE_SHA}        Nginx SPAs + /.well-known + /api proxy
+#
+# RELEASE_SHA is mandatory for every first-party image and must equal the exact
+# approved source SHA pinned in Coolify. Never reuse a release tag for different
+# image bytes; capture image IDs/RepoDigests per release/production/COOLIFY_RUNBOOK.md.
 #
 # ─── Network ─────────────────────────────────────────────────────────────────
 #   All services share `banco_net`. Inter-service DNS uses the service name
@@ -95,6 +99,8 @@ services:
       context: .
       dockerfile: deploy/coolify/Dockerfile.api
       target: builder
+      args:
+        RELEASE_SHA: ${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
     restart: "no"
     depends_on:
       postgres:
@@ -118,10 +124,9 @@ services:
       context: .
       dockerfile: deploy/coolify/Dockerfile.api
       args:
-        # F1 deploy pin — Coolify often exposes SOURCE_COMMIT; prefer explicit GIT_SHA.
-        GIT_SHA: ${GIT_SHA:-${SOURCE_COMMIT:-}}
-        BUILD_ID: ${BUILD_ID:-${SOURCE_COMMIT:-}}
-    image: banco-api:latest
+        # One release identity for image tag, build metadata and runtime readiness.
+        RELEASE_SHA: ${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
+    image: banco-api:${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
     restart: always
     depends_on:
       postgres:
@@ -172,9 +177,10 @@ services:
       # Coolify markers — objectStorageProvider forbids replit when these are set.
       COOLIFY_URL: ${COOLIFY_URL:-}
       COOLIFY_FQDN: ${COOLIFY_FQDN:-}
-      # Runtime deploy pin (also baked via build args when Coolify supplies them).
-      GIT_SHA: ${GIT_SHA:-${SOURCE_COMMIT:-}}
-      BUILD_ID: ${BUILD_ID:-${SOURCE_COMMIT:-}}
+      # Single runtime release authority. /api/readyz fail-closes on mismatch/malformed identity.
+      RELEASE_SHA: ${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
+      GIT_SHA: ${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
+      BUILD_ID: ${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
       # Observability
       ERROR_ALERT_WEBHOOK: ${ERROR_ALERT_WEBHOOK:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -218,7 +224,7 @@ services:
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
         NEXT_PUBLIC_CLERK_PROXY_URL: ${NEXT_PUBLIC_CLERK_PROXY_URL:-}
         NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
-    image: banco-web:latest
+    image: banco-web:${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
     restart: always
     depends_on:
       api:
@@ -264,7 +270,7 @@ services:
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required}
         NEXT_PUBLIC_CLERK_PROXY_URL: ${NEXT_PUBLIC_CLERK_PROXY_URL:-}
         NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
-    image: banco-website:latest
+    image: banco-website:${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
     restart: always
     depends_on:
       api:
@@ -301,7 +307,7 @@ services:
         VITE_WEB_URL: ${VITE_WEB_URL:-}
         VITE_APP_ANDROID_URL: ${VITE_APP_ANDROID_URL:-}
         VITE_APP_IOS_URL: ${VITE_APP_IOS_URL:-}
-    image: banco-web-static:latest
+    image: banco-web-static:${RELEASE_SHA:?RELEASE_SHA is required and must equal the approved exact source SHA}
     restart: always
     depends_on:
       api:

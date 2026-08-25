@@ -1,7 +1,8 @@
 # Banco — Coolify on Hostinger VPS Deployment Guide
 
-> **Start here for a no-guess deploy:** root file [`COOLIFY_DEPLOY_NOW.md`](../COOLIFY_DEPLOY_NOW.md)
-> **SoT repo only:** `waelzaid66-max/bancoboomstor` · compose `docker-compose.coolify.yml` · mobile `com.bancooom.app`
+> **Production release authority:** [`release/production/COOLIFY_RUNBOOK.md`](../release/production/COOLIFY_RUNBOOK.md)
+> **Detailed click guide:** [`COOLIFY_DEPLOY_NOW.md`](../COOLIFY_DEPLOY_NOW.md)
+> **SoT repo only:** `waelzaid66-max/bancoboom-v-next-` · branch `canonical/vnext-assembly` pinned to the exact approved immutable release SHA · compose `docker-compose.coolify.yml` · mobile `com.bancooom.app`
 
 ## Overview
 
@@ -37,9 +38,10 @@ The Expo mobile app (`artifacts/banco-mobile`) runs on iOS/Android via EAS — i
 
 1. In Coolify dashboard → **New Resource** → **Docker Compose**
 2. Connect your GitHub/GitLab account
-3. Select the `waelzaid66-max/bancoboomstor` repository (SoT monorepo)
-4. Set the **Compose file path** to: `docker-compose.coolify.yml`
-5. Click **Save**
+3. Select the `waelzaid66-max/bancoboom-v-next-` repository (SoT monorepo)
+4. Select branch `canonical/vnext-assembly` and pin the deployment to the exact approved immutable release SHA
+5. Set the **Compose file path** to: `docker-compose.coolify.yml`
+6. Click **Save**
 
 ### 3. Set environment variables
 
@@ -112,10 +114,11 @@ The exact commands and the fresh-vs-existing database decision are below.
 
 ## Environment Variables
 
-### Required (API server will refuse to start without these)
+### Required (API/release will fail closed without these)
 
 | Variable | Description |
 |----------|-------------|
+| `RELEASE_SHA` | Full approved immutable Git SHA; must exactly match the Coolify checkout/source SHA and is required by first-party image tags |
 | `POSTGRES_PASSWORD` | Postgres database password |
 | `CLERK_SECRET_KEY` | Clerk backend secret key (`sk_live_...`) |
 | `SESSION_SECRET` | Random 32+ character string for session signing |
@@ -408,6 +411,7 @@ curl http://<vps-ip>/nginx-health
 Before going live:
 
 - [ ] Set all **required** environment variables (see table above)
+- [ ] Set `RELEASE_SHA` to the same full approved immutable SHA as the pinned Coolify source checkout; stop if they differ
 - [ ] Set `BANCO_WEB_URL`, `BANCO_WEBSITE_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` before first build
 - [ ] Configure domains in Coolify → Traefik issues TLS certificates automatically
 - [ ] Run committed database migrations after Postgres health and before API readiness (`--profile migrate run --rm migrate`)

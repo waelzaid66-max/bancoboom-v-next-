@@ -1,10 +1,11 @@
 # OPS GO-LIVE CHECKLIST — BANCO (post-merge)
 
-**Repo (ONLY):** `https://github.com/waelzaid66-max/bancoboomstor`
-**Branch:** `main`  
+**Repo (ONLY):** `https://github.com/waelzaid66-max/bancoboom-v-next-`
+**Branch:** `canonical/vnext-assembly`, pinned to the exact approved immutable release SHA  
 **Compose:** `docker-compose.coolify.yml`  
 **Mobile package:** `com.bancooom.app`  
-**First Coolify file:** [`COOLIFY_DEPLOY_NOW.md`](./COOLIFY_DEPLOY_NOW.md)
+**Production release authority:** [`release/production/COOLIFY_RUNBOOK.md`](./release/production/COOLIFY_RUNBOOK.md)  
+**Detailed Coolify clicks:** [`COOLIFY_DEPLOY_NOW.md`](./COOLIFY_DEPLOY_NOW.md)
 
 Do these steps **in order**. Do not invent secrets. Tick only what you actually completed.
 
@@ -13,8 +14,8 @@ Do these steps **in order**. Do not invent secrets. Tick only what you actually 
 ## A. Coolify resource
 
 - [ ] New Resource → **Docker Compose** (not Dockerfile / Nixpacks / Static)
-- [ ] Git repo = **`waelzaid66-max/bancoboomstor`**
-- [ ] Branch = **`main`**
+- [ ] Git repo = **`waelzaid66-max/bancoboom-v-next-`**
+- [ ] Branch = **`canonical/vnext-assembly`**, pinned to the exact approved immutable release SHA
 - [ ] Compose path = **`docker-compose.coolify.yml`**
 - [ ] Apex domain mapped to service **`web`** port **`80`**
 
@@ -22,9 +23,10 @@ Do these steps **in order**. Do not invent secrets. Tick only what you actually 
 
 ## B. Coolify environment (names only — fill real values in UI)
 
-### Required (API will refuse to stay healthy without these)
+### Required (API/Compose release contract will fail closed without these)
 
 ```
+RELEASE_SHA=<exact approved 40-character release SHA>
 POSTGRES_PASSWORD=
 CLERK_SECRET_KEY=
 SESSION_SECRET=
@@ -37,6 +39,8 @@ AWS_SECRET_ACCESS_KEY=
 PUBLIC_OBJECT_SEARCH_PATHS=
 PRIVATE_OBJECT_DIR=
 ```
+
+`RELEASE_SHA` must equal the exact approved Git SHA pinned in the Coolify source checkout. Do not use a branch name, short SHA, fallback value, or moving tag.
 
 ### Build-time (set before first Deploy / rebuild after change)
 
@@ -58,6 +62,7 @@ GIT_SHA=
 ```
 
 - [ ] All required vars filled in Coolify
+- [ ] `RELEASE_SHA` exactly equals the approved Git SHA pinned in Coolify
 - [ ] Build-time Clerk keys filled
 
 ### Controlled deployment order
@@ -147,7 +152,7 @@ Edit then redeploy `web`:
 
 - [ ] `deploy/coolify/well-known/apple-app-site-association` — replace `REPLACE_APPLE_TEAM_ID`
 - [ ] `deploy/coolify/well-known/assetlinks.json` — replace `REPLACE_PLAY_APP_SIGNING_SHA256`
-- [ ] Commit on `main` (or Coolify volume override) + redeploy `web`
+- [ ] Commit through a reviewed branch targeting `canonical/vnext-assembly`, certify the resulting exact SHA, then redeploy `web`
 
 ---
 

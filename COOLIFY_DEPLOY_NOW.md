@@ -1,14 +1,14 @@
 # COOLIFY DEPLOY NOW — BANCO (foolproof)
 
-**Read this file first.** It replaces hours of guessing.
+**Read `release/production/COOLIFY_RUNBOOK.md` first for the production release authority.** This file preserves the detailed Coolify clicks and operating notes.
 
 | Field | Exact value |
 |-------|-------------|
-| **ONLY GitHub repo** | `https://github.com/waelzaid66-max/bancoboomstor` |
-| **Do NOT use** | `banco-with-wael`, `bancoo`, `bancoboom`, or any pre-consolidation clone |
+| **ONLY GitHub repo** | `https://github.com/waelzaid66-max/bancoboom-v-next-` |
+| **Do NOT use** | `bancoboomstor`, `banco-with-wael`, `bancoo`, `bancoboom`, or any pre-consolidation/historical clone |
 | **Compose file path** | `docker-compose.coolify.yml` |
 | **Coolify resource type** | **Docker Compose** (not Dockerfile, not Nixpacks, not Static) |
-| **Branch to deploy** | **`main`**, only after CI is green on the exact approved release SHA |
+| **Branch to deploy** | **`canonical/vnext-assembly`**, pinned to the exact approved immutable release SHA; never deploy a moving branch tip |
 | **Live cutover proof** | `pnpm ops:live-cutover` (must exit 0 before Live Production Ready) |
 | **Mobile** | Expo EAS (`com.bancooom.app`) — **not** a Coolify container |
 
@@ -17,9 +17,9 @@
 ## 1. Create the Coolify resource (exact clicks)
 
 1. Coolify → **New Resource** → **Docker Compose**
-2. Connect Git → select **`waelzaid66-max/bancoboomstor`**
+2. Connect Git → select **`waelzaid66-max/bancoboom-v-next-`**
 3. Compose path = **`docker-compose.coolify.yml`**
-4. Branch = **`main`**
+4. Branch = **`canonical/vnext-assembly`**, then pin the deployment to the exact approved immutable release SHA
 5. Save — **do not Deploy yet**
 
 ---
@@ -30,10 +30,12 @@
 |--------------------------|------------------------|---------------------|-------------|
 | `postgres` | `postgres:16` | Database | internal only |
 | `migrate` | (build, profile `migrate`) | One-off committed migrations — **not** auto-started | — |
-| `api` | `banco-api:latest` | Node API | **8080** · health **`/api/readyz`** |
-| `banco-web` | `banco-web:latest` | Frozen Next twin (**profile `legacy-banco-web`**, off by default) | **3000** |
-| `banco-website` | `banco-website:latest` | Canonical Next marketing/consumer | **3001** host |
-| `web` | `banco-web-static:latest` | **Nginx** = landing + `/market/` + `/admin/` + SEO + `/.well-known/` + `/api/` proxy | **80** |
+| `api` | `banco-api:${RELEASE_SHA}` | Node API | **8080** · health **`/api/readyz`** |
+| `banco-web` | `banco-web:${RELEASE_SHA}` | Frozen Next twin (**profile `legacy-banco-web`**, off by default) | **3000** |
+| `banco-website` | `banco-website:${RELEASE_SHA}` | Canonical Next marketing/consumer | **3001** host |
+| `web` | `banco-web-static:${RELEASE_SHA}` | **Nginx** = landing + `/market/` + `/admin/` + SEO + `/.well-known/` + `/api/` proxy | **80** |
+
+`RELEASE_SHA` is the same exact approved 40-character Git SHA pinned in Coolify. There is no `latest` fallback for first-party BANCO images.
 
 **Critical:** service `web` ≠ image name containing “web” in a vague sense.
 `web` = nginx static front. `banco-web` = Next.js. Different things.
@@ -79,9 +81,10 @@ Do **not** start by putting the apex on `banco-website` and `web` on a random st
 
 ## 4. Environment variables (set BEFORE first Deploy)
 
-### Hard-required (API will not stay up without these)
+### Hard-required (Compose/API release contract will fail closed without these)
 
 ```
+RELEASE_SHA=<exact approved 40-character release SHA>
 POSTGRES_PASSWORD=<strong>
 CLERK_SECRET_KEY=sk_live_...
 SESSION_SECRET=<32+ random>
@@ -97,6 +100,7 @@ PRIVATE_OBJECT_DIR=<private prefix path>
 
 Notes:
 
+- `RELEASE_SHA` must exactly equal the immutable Git SHA pinned in Coolify; do not use a branch name, short SHA, moving tag, or fallback.
 - Compose builds `DATABASE_URL` from `POSTGRES_*` — you do **not** need a separate `DATABASE_URL` for this Coolify compose.
 - Never set `OBJECT_STORAGE_PROVIDER=replit` on Coolify (API refuses start).
 
@@ -197,6 +201,7 @@ See `release/EAS_BUILD.md`.
 
 ## 8. Authority
 
-- SoT doc: `docs/DEPLOYMENT_SOURCE_OF_TRUTH.md`
-- Current RC evidence: `audit/reports/RC1-VALIDATION-2026-08-09.md`
+- Production release authority: `release/production/COOLIFY_RUNBOOK.md`
+- Detailed SoT doc: `docs/DEPLOYMENT_SOURCE_OF_TRUTH.md`
+- Historical RC evidence: `audit/reports/RC1-VALIDATION-2026-08-09.md`
 - Pre-consolidation repositories are **not** Coolify SoT.

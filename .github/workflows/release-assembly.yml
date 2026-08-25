@@ -1,0 +1,78 @@
+name: Release Assembly Gate
+
+on:
+  push:
+    branches: [canonical/vnext-assembly]
+    paths:
+      - "release/production/**"
+      - "docker-compose.coolify.yml"
+      - "deploy/coolify/**"
+      - "artifacts/api-server/src/routes/health.ts"
+      - "artifacts/api-server/src/health.test.ts"
+      - "COOLIFY_DEPLOY_NOW.md"
+      - "OPS_GO_LIVE_CHECKLIST.md"
+      - "docs/DEPLOYMENT_SOURCE_OF_TRUTH.md"
+      - "docs/DEPLOY_COOLIFY.md"
+      - "scripts/release-sot-gate.mjs"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  pull_request:
+    paths:
+      - "release/production/**"
+      - "docker-compose.coolify.yml"
+      - "deploy/coolify/**"
+      - "artifacts/api-server/src/routes/health.ts"
+      - "artifacts/api-server/src/health.test.ts"
+      - "COOLIFY_DEPLOY_NOW.md"
+      - "OPS_GO_LIVE_CHECKLIST.md"
+      - "docs/DEPLOYMENT_SOURCE_OF_TRUTH.md"
+      - "docs/DEPLOY_COOLIFY.md"
+      - "scripts/release-sot-gate.mjs"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: release-assembly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify immutable production assembly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Refuse stale release PRs
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          git fetch --no-tags origin canonical/vnext-assembly
+          behind="$(git rev-list --count HEAD..origin/canonical/vnext-assembly)"
+          if [ "$behind" -ne 0 ]; then
+            echo "RELEASE_BRANCH_STALE: head is behind canonical/vnext-assembly by $behind commit(s)"
+            exit 1
+          fi
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Frozen install
+        run: pnpm install --frozen-lockfile
+      - name: Verify workspace identity
+        run: pnpm run workspace:verify
+      - name: Verify release source of truth
+        env:
+          RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BUILD_ID: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: pnpm run release:verify
+      - name: Verify dependency security
+        run: pnpm run security:audit
+      - name: Verify release scripts formatting
+        run: pnpm exec prettier --check release/production scripts/release-sot-gate.mjs
