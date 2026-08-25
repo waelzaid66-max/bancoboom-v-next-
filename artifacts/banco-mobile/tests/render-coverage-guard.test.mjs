@@ -28,6 +28,13 @@ const RENDER_CRITICAL = [
     claim: "body-only chat attempts persist before transport and never cross Clerk identities",
   },
   {
+    source: "context/MessageOutboxContext.tsx",
+    symbol: "MessageOutboxProvider",
+    suite: "tests/render/MessageOutboxProvider.account-delete-terminal-race.red.test.tsx",
+    staticGuard: "tests/account-deletion-terminal-state-guard.test.mjs",
+    claim: "terminal account deletion cannot race a late outbox resume or durable write back into the deleted identity",
+  },
+  {
     source: "context/LanguagePreferenceSync.tsx",
     symbol: "LanguagePreferenceSync",
     suite: "tests/render/LanguagePreferenceSync.render.test.tsx",
@@ -103,6 +110,13 @@ const RENDER_CRITICAL = [
     suite: "tests/render/SearchResultsMap.render.test.tsx",
     staticGuard: "tests/map-bootstrap-fail-closed.test.mjs",
     claim: "the native WebView map fails closed on bootstrap error, reaches ready honestly, and keeps tile failure degraded without reviving failed bootstrap",
+  },
+  {
+    source: "components/search/SearchResultsMap.tsx",
+    symbol: "SearchResultsMap",
+    suite: "tests/render/SearchResultsMap.bootstrap-terminal.red.test.tsx",
+    staticGuard: "tests/map-bootstrap-fail-closed.test.mjs",
+    claim: "the native WebView map keeps bootstrap failure terminal and cannot be revived by a later ready message in the same epoch",
   },
   {
     source: "components/search/maps/MapsHubApp.tsx",
