@@ -98,6 +98,13 @@ const RENDER_CRITICAL = [
     claim: "the web map host consumes draw-area and tile-failure messages while preserving its honestly clipped result set",
   },
   {
+    source: "components/search/SearchResultsMap.tsx",
+    symbol: "SearchResultsMap",
+    suite: "tests/render/SearchResultsMap.render.test.tsx",
+    staticGuard: "tests/map-bootstrap-fail-closed.test.mjs",
+    claim: "the native WebView map fails closed on bootstrap error, reaches ready honestly, and keeps tile failure degraded without reviving failed bootstrap",
+  },
+  {
     source: "components/search/maps/MapsHubApp.tsx",
     symbol: "MapsHubApp",
     suite: "tests/render/MapsHubApp.render.test.tsx",
