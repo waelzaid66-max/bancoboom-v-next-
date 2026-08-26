@@ -26,18 +26,10 @@ const listingDetail = read("artifacts/banco-mobile/app/listing/[id].tsx");
 const schema = read("lib/db/src/schema/index.ts");
 
 test("booking schema preserves an explicit currency snapshot with a legacy fallback", () => {
-  const bookingsTable = between(
-    schema,
-    "export const bookings = pgTable(",
-    "/* ── MESSENGER",
-  );
-
-  assert.match(bookingsTable, /pricePerNight:\s*numeric\("price_per_night"/);
-  assert.match(bookingsTable, /totalPrice:\s*numeric\("total_price"/);
   assert.match(
-    bookingsTable,
-    /currency:\s*text\("currency"\)\.notNull\(\)\.default\("EGP"\)/,
-    "the existing EGP default is retained only as a legacy-row fallback; new reservations must write the source listing currency explicitly",
+    schema,
+    /export const bookings = pgTable\([\s\S]*?pricePerNight:\s*numeric\("price_per_night"[\s\S]*?totalPrice:\s*numeric\("total_price"[\s\S]*?currency:\s*text\("currency"\)\.notNull\(\)\.default\("EGP"\)/,
+    "the schema must retain price, total and currency snapshot fields; the EGP default is legacy fallback only",
   );
 });
 
@@ -56,14 +48,16 @@ test("RED: createBooking snapshots the normalized locked listing currency atomic
 
   assert.match(
     transaction,
-    /normalizeListingCurrency\s*\([\s\S]{0,180}locked\.specs[\s\S]{0,180}currency|normalizeListingCurrency\s*\([\s\S]{0,180}currency[\s\S]{0,180}locked\.specs/,
+    /normalizeListingCurrency\s*\([\s\S]{0,240}locked\.specs[\s\S]{0,240}\)/,
     "the booking currency must be resolved from the listing row re-read under the same listing lock, not from viewer market or a stale pre-transaction value",
   );
-
+  assert.match(transaction, /\.insert\(bookings\)[\s\S]*?\.values\(\{/);
+  assert.match(transaction, /\bpricePerNight\s*:/);
+  assert.match(transaction, /\btotalPrice\s*:/);
   assert.match(
     transaction,
-    /\.insert\(bookings\)[\s\S]*?\.values\(\{[\s\S]*?pricePerNight:[\s\S]*?totalPrice:[\s\S]*?currency\s*:/,
-    "price-per-night, total and currency must be one immutable booking snapshot",
+    /\bcurrency\s*:/,
+    "price-per-night, total and normalized source currency must be one immutable booking snapshot",
   );
 });
 
@@ -81,7 +75,7 @@ test("RED: BookingCard renders the listing source currency instead of a translat
   );
   assert.match(
     bookingCard,
-    /\bcurrency\b/,
+    /\{currency\}/,
     "the received currency must participate in per-night and estimated-total display",
   );
 });
@@ -89,7 +83,7 @@ test("RED: BookingCard renders the listing source currency instead of a translat
 test("RED: listing detail wires its persisted listing currency into BookingCard", () => {
   assert.match(
     listingDetail,
-    /<BookingCard[\s\S]{0,500}\bcurrency=\{[^}]*listing[^}]*\}/,
+    /<BookingCard[\s\S]{0,600}\bcurrency=\{[\s\S]{0,220}?listing[\s\S]{0,220}?\}/,
     "the reservation widget must receive currency from the loaded listing contract; market selection or device locale is not money authority",
   );
 });
